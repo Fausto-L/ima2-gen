@@ -1,24 +1,10 @@
-import { randomBytes } from "node:crypto";
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
-import { atomicWriteJson } from "./atomicWrite.js";
-import { join } from "node:path";
 import { ulid } from "ulid";
-import { embedImageMetadataBestEffort } from "./imageMetadataStore.js";
-import { invalidateHistoryIndex } from "./historyIndex.js";
-import { logEvent } from "./logger.js";
-import { detectImageMimeFromB64 } from "./refs.js";
-import { resolveProviderOptions } from "./providerOptions.js";
-import { generateViaResponses } from "./responsesImageAdapter.js";
-import { generateViaGrok, type GrokReferenceImage } from "./grokImageAdapter.js";
-import { generateViaAgy } from "./agyImageAdapter.js";
-import { generateVideoViaGrok } from "./grokVideoAdapter.js";
-import { parseVideoParams } from "./agentGenerationPlanner.js";
+import { generateAgentImageWithRetry } from "./agentImageVideoGen.js";
+import { runAgentVideoGeneration } from "./agentImageVideoGen.js";
 import {
   appendAgentTurn,
   buildImageContextManifest,
-  getAgentImages,
   getAgentSession,
-  importAgentImage,
   recordAgentWebFinding,
   restartAgentRuntimeSession,
 } from "./agentStore.js";
@@ -31,7 +17,7 @@ import {
 import { errInfo } from "./errInfo.js";
 import { type RuntimeContext } from "./runtimeContext.js";
 
-type AgentRunOptions = {
+export type AgentRunOptions = {
   provider?: string;
   quality?: string;
   size?: string;
@@ -251,290 +237,6 @@ export function isRuntimeRestartableError(error: unknown) {
   );
 }
 
-async function generateAgentImageWithRetry(
-  ctx: RuntimeContext,
-  sessionId: string,
-  prompt: string,
-  manifest: string,
-  webSearchEnabled: boolean,
-  options: AgentRunOptions,
-) {
-  let lastError: unknown = null;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const forcedPrompt = attempt === 0 ? prompt : forceImagePrompt(prompt);
-      const result = await generateAgentImage(ctx, sessionId, forcedPrompt, manifest, webSearchEnabled, options);
-      if (result.image) return result;
-    } catch (error) {
-      lastError = error;
-      if (!isTextOnlyResult(error)) throw error;
-      if (attempt === 1) break;
-      appendAgentTurn({
-        sessionId,
-        role: "tool",
-        text: "ima2.generate_image retry: text-only result rejected",
-        status: "error",
-      });
-    }
-  }
-  throw textOnlyError(lastError);
-}
-
-async function generateAgentImage(
-  ctx: RuntimeContext,
-  sessionId: string,
-  prompt: string,
-  manifest: string,
-  webSearchEnabled: boolean,
-  options: AgentRunOptions,
-) {
-  const requestId = options.requestId ?? `agent_${ulid()}`;
-  const providerOptions = resolveProviderOptions(ctx, {
-    provider: options.provider ?? "oauth",
-    rawModel: options.model,
-    rawReasoningEffort: options.reasoningEffort,
-    rawSize: options.size ?? "1024x1024",
-    rawWebSearchEnabled: webSearchEnabled,
-    searchMode: webSearchEnabled ? "on" : "off",
-  });
-  if (providerOptions.error) {
-    const err = new Error(providerOptions.error) as Error & { code?: string; status?: number };
-    err.code = providerOptions.code;
-    err.status = providerOptions.status;
-    throw err;
-  }
-  const activeProvider = providerOptions.provider;
-  const effectiveModel = activeProvider === "grok" && options.quality === "high"
-    ? "grok-imagine-image-quality"
-    : providerOptions.model;
-  const response = activeProvider === "agy"
-    ? await generateViaAgy(`${manifest}\n\nUser request:\n${prompt}`, {
-        requestId,
-        signal: options.signal ?? undefined,
-      })
-    : activeProvider === "grok"
-    ? await generateViaGrok(`${manifest}\n\nUser request:\n${prompt}`, ctx, {
-        model: effectiveModel,
-        size: providerOptions.size,
-        requestId,
-        signal: options.signal ?? undefined,
-        references: await loadAgentCurrentImageReferences(ctx, sessionId),
-      })
-    : await generateViaResponses(
-        activeProvider,
-        `${manifest}\n\nUser request:\n${prompt}`,
-        options.quality ?? "medium",
-        providerOptions.size,
-        options.moderation ?? "low",
-        [],
-        requestId,
-        "auto",
-        ctx,
-        {
-          model: providerOptions.model,
-          reasoningEffort: providerOptions.reasoningEffort,
-          webSearchEnabled,
-          signal: options.signal,
-        },
-      );
-  const format = activeProvider === "grok" || activeProvider === "agy"
-    ? imageFormatFromMime(("mime" in response ? response.mime : undefined) || detectImageMimeFromB64(response.b64) || "image/jpeg")
-    : options.format ?? "png";
-  const image = await persistAgentImage(ctx, sessionId, prompt, format, requestId, response, {
-    provider: String(activeProvider),
-    model: String(effectiveModel),
-  });
-  const responseText = "text" in response && typeof response.text === "string" ? response.text : null;
-  return { image, webSearchCalls: response.webSearchCalls || 0, text: responseText, provider: activeProvider };
-}
-
-async function loadAgentCurrentImageReferences(ctx: RuntimeContext, sessionId: string): Promise<GrokReferenceImage[]> {
-  const session = getAgentSession(sessionId);
-  const currentImage = session?.lastImageId
-    ? getAgentImages(sessionId).find((image) => image.id === session.lastImageId)
-    : null;
-  if (!currentImage?.filename) return [];
-  try {
-    const b64 = (await readFile(join(ctx.config.storage.generatedDir, currentImage.filename))).toString("base64");
-    const mime = detectImageMimeFromB64(b64);
-    return [{ b64, declaredMime: mime, detectedMime: mime }];
-  } catch (error) {
-    const err = errInfo(error);
-    logEvent("agent", "grok_ref_missing", { sessionId, filename: currentImage.filename, code: err.code, message: err.message });
-    return [];
-  }
-}
-
-function imageFormatFromMime(mime: string | null | undefined): "png" | "jpeg" | "webp" {
-  if (mime === "image/jpeg") return "jpeg";
-  if (mime === "image/webp") return "webp";
-  return "png";
-}
-
-async function persistAgentImage(
-  ctx: RuntimeContext,
-  sessionId: string,
-  prompt: string,
-  format: string,
-  requestId: string,
-  response: { b64: string; revisedPrompt?: string | null; usage?: unknown; webSearchCalls?: number },
-  generation: { provider: string; model: string },
-) {
-  await mkdir(ctx.config.storage.generatedDir, { recursive: true });
-  const rand = randomBytes(ctx.config.ids.generatedHexBytes).toString("hex");
-  const filename = `${Date.now()}_${rand}_agent.${format}`;
-  const meta = {
-    kind: "agent",
-    requestId,
-    sessionId,
-    prompt,
-    userPrompt: prompt,
-    revisedPrompt: response.revisedPrompt ?? null,
-    provider: generation.provider,
-    model: generation.model,
-    createdAt: Date.now(),
-    usage: response.usage ?? null,
-    webSearchCalls: response.webSearchCalls ?? 0,
-  };
-  const embedded = await embedImageMetadataBestEffort(Buffer.from(response.b64, "base64"), format, meta, {
-    version: ctx.packageVersion,
-  });
-  const filePath = join(ctx.config.storage.generatedDir, filename);
-  await writeFile(filePath, embedded.buffer);
-  try {
-    await atomicWriteJson(`${filePath}.json`, meta);
-  } catch (err) {
-    await unlink(filePath).catch(() => {});
-    throw err;
-  }
-  invalidateHistoryIndex();
-  logEvent("agent", "saved", { requestId, sessionId, filename });
-  return importAgentImage(sessionId, {
-    id: `ai_${ulid()}`,
-    filename,
-    url: `/generated/${filename}`,
-    prompt,
-    revisedPrompt: response.revisedPrompt ?? null,
-    createdAt: Date.now(),
-  });
-}
-
-export async function runAgentVideoGeneration(
-  ctx: RuntimeContext,
-  sessionId: string,
-  prompt: string,
-  options: AgentRunOptions & { skipUserTurn?: boolean } = {},
-) {
-  const session = getAgentSession(sessionId);
-  if (!session) throw notFound(sessionId);
-  if (!options.skipUserTurn) {
-    appendAgentTurn({ sessionId, role: "user", text: prompt, status: "complete" });
-  }
-  const requestId = options.requestId ?? `agent_video_${ulid()}`;
-  const startedAt = Date.now();
-
-  // Auto I2V: if session has a last image, use it as source
-  let sourceImage: string | undefined;
-  let mode: "text-to-video" | "image-to-video" = "text-to-video";
-  if (session.lastImageId) {
-    const images = getAgentImages(sessionId);
-    const lastImage = images.find((img) => img.id === session.lastImageId);
-    if (lastImage?.filename && !lastImage.filename.endsWith(".mp4")) {
-      try {
-        const { loadAssetB64 } = await import("./nodeStore.js");
-        sourceImage = await loadAssetB64(ctx.rootDir, lastImage.filename, ctx.config.storage.generatedDir);
-        mode = "image-to-video";
-      } catch { /* fallback to T2V */ }
-    }
-  }
-
-  const videoParams = parseVideoParams(prompt);
-
-  const result = await generateVideoViaGrok(prompt, ctx, {
-    model: "grok-imagine-video",
-    mode,
-    sourceImage,
-    duration: videoParams.duration ?? 5,
-    resolution: videoParams.resolution ?? "480p",
-    aspectRatio: (videoParams.aspectRatio ?? "auto") as "auto" | "1:1" | "16:9" | "9:16" | "4:3" | "3:4" | "3:2" | "2:3",
-    requestId,
-    signal: options.signal ?? undefined,
-  });
-  const video = await persistAgentVideo(ctx, sessionId, prompt, requestId, result);
-  const finishedAt = Date.now();
-  const toolCall: AgentToolCallSummary = {
-    id: `tc_video_${ulid()}`,
-    name: "ima2.generate_video",
-    status: "complete",
-    startedAt,
-    finishedAt,
-    durationMs: finishedAt - startedAt,
-    requestId,
-    inputSummary: prompt,
-    outputSummary: `Generated video ${video.filename}.`,
-    imageIds: [video.id],
-  };
-  appendAgentTurn({
-    sessionId,
-    role: "tool",
-    text: "ima2.generate_video",
-    imageIds: [video.id],
-    status: "complete",
-    raw: { toolCalls: [toolCall] },
-  });
-  const assistantTurn = appendAgentTurn({
-    sessionId,
-    role: "assistant",
-    text: `Generated 1 video artifact. ${result.revisedPrompt}`,
-    imageIds: [video.id],
-    status: "complete",
-  });
-  return { assistantTurn, imageIds: [video.id], webFindingIds: [] };
-}
-
-async function persistAgentVideo(
-  ctx: RuntimeContext,
-  sessionId: string,
-  prompt: string,
-  requestId: string,
-  result: { videoBuffer: Buffer; revisedPrompt: string; usage: Record<string, number> | null; webSearchCalls: number },
-) {
-  await mkdir(ctx.config.storage.generatedDir, { recursive: true });
-  const rand = randomBytes(ctx.config.ids.generatedHexBytes).toString("hex");
-  const filename = `${Date.now()}_${rand}_agent.mp4`;
-  const meta = {
-    kind: "agent",
-    mediaType: "video",
-    requestId,
-    sessionId,
-    prompt,
-    userPrompt: prompt,
-    revisedPrompt: result.revisedPrompt,
-    provider: "grok",
-    model: "grok-imagine-video",
-    createdAt: Date.now(),
-    usage: result.usage,
-    webSearchCalls: result.webSearchCalls,
-  };
-  const filePath = join(ctx.config.storage.generatedDir, filename);
-  await writeFile(filePath, result.videoBuffer);
-  try {
-    await atomicWriteJson(`${filePath}.json`, meta);
-  } catch (err) {
-    await unlink(filePath).catch(() => {});
-    throw err;
-  }
-  invalidateHistoryIndex();
-  logEvent("agent", "video_saved", { requestId, sessionId, filename });
-  return importAgentImage(sessionId, {
-    id: `ai_${ulid()}`,
-    filename,
-    url: `/generated/${filename}`,
-    prompt,
-    revisedPrompt: result.revisedPrompt,
-    createdAt: Date.now(),
-  });
-}
 
 function recordSearchFindings(sessionId: string, prompt: string, count: number, provider: string) {
   if (!count) return [];
@@ -549,7 +251,7 @@ function recordSearchFindings(sessionId: string, prompt: string, count: number, 
   ];
 }
 
-function forceImagePrompt(prompt: string) {
+export function forceImagePrompt(prompt: string) {
   return [
     "The previous turn did not return an image artifact.",
     "Return a final image using ima2.generate_image/image_generation now.",
@@ -557,7 +259,7 @@ function forceImagePrompt(prompt: string) {
   ].join("\n");
 }
 
-function isTextOnlyResult(error: unknown) {
+export function isTextOnlyResult(error: unknown) {
   const err = errInfo(error);
   return [
     "EMPTY_RESPONSE",
@@ -567,7 +269,7 @@ function isTextOnlyResult(error: unknown) {
   ].includes(err.code || "") || err.message.includes("No image data");
 }
 
-function textOnlyError(cause: unknown) {
+export function textOnlyError(cause: unknown) {
   const err = new Error("Agent result did not include an image artifact.") as Error & {
     code?: string;
     status?: number;
@@ -603,7 +305,7 @@ function cleanParallelism(value: unknown) {
   return Math.max(1, Math.min(8, Math.round(numeric)));
 }
 
-function notFound(sessionId: string) {
+export function notFound(sessionId: string) {
   const err = new Error(`Agent session not found: ${sessionId}`) as Error & { code?: string; status?: number };
   err.code = "AGENT_SESSION_NOT_FOUND";
   err.status = 404;
