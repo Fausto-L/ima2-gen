@@ -213,6 +213,8 @@ import {
   compressReferenceSource,
   type MultimodeSequenceState,
   removeImageFromMultimodeSequences,
+  saveInFlight,
+  getCustomSizeConfirmation,
 } from "./storeHelpers";
 import {
   mapSessionToGraph,
@@ -227,21 +229,6 @@ import type { AppState, ToastEntry, ToastState, ErrorCardEntry, TrashPendingStat
 
 const nodeGenerationLocks = new Set<string>();
 
-function saveInFlight(list: PersistedInFlight[]): void {
-  try {
-    localStorage.setItem(IN_FLIGHT_STORAGE_KEY, JSON.stringify(list));
-  } catch (err) {
-    // Quota exceeded or storage disabled. Notify the user once per tab.
-    const w = window as unknown as { __ima2QuotaWarned?: boolean };
-    if (!w.__ima2QuotaWarned) {
-      w.__ima2QuotaWarned = true;
-      console.warn("[ima2] localStorage write failed:", err);
-      try {
-        useAppStore.getState().showToast(t("toast.localStorageFull"), true);
-      } catch {}
-    }
-  }
-}
 
 
 
@@ -320,29 +307,6 @@ function applyMetadataToState(
   return patch;
 }
 
-function getCustomSizeConfirmation(
-  state: AppState,
-  continuation: NonNullable<CustomSizeConfirmState>["continuation"],
-): CustomSizeConfirmState {
-  // GPT-image pixel limits don't apply to Grok/Gemini — they have their own size systems.
-  if (state.provider === "grok" || state.provider === "grok-api" || state.provider === "agy" || state.provider === "gemini-api") return null;
-  if (state.sizePreset !== "custom") return null;
-  const result = normalizeCustomSizePairDetailed(
-    state.customW,
-    state.customH,
-    state.customW,
-    state.customH,
-  );
-  if (!result.adjusted) return null;
-  return {
-    requestedW: result.requestedW,
-    requestedH: result.requestedH,
-    adjustedW: result.w,
-    adjustedH: result.h,
-    reasons: result.reasons,
-    continuation,
-  };
-}
 
 const storedGenerationDefaults = loadGenerationDefaults();
 const storedImageModel = loadImageModel();

@@ -10,11 +10,14 @@ import {
 } from "../lib/api";
 import { compressToBase64 } from "../lib/compress";
 import { IN_FLIGHT_STORAGE_KEY } from "./persistenceRegistry";
+import { normalizeCustomSizePairDetailed } from "../lib/size";
+import { t } from "../i18n";
 import {
   normalizeInsertedPromptArray,
   cloneInsertedPrompts,
 } from "./storePersistence";
 import type {
+  AppState,
   InsertedPrompt,
   PersistedInFlight,
   ServerInFlightJob,
@@ -23,6 +26,7 @@ import type {
   GraphSaveReason,
   GraphSaveResult,
   MultimodeSequenceState,
+  CustomSizeConfirmState,
 } from "./storeTypes";
 
 export type { PersistedInFlight, ServerInFlightJob, ServerTerminalJob, InflightQueryScope, GraphSaveReason, GraphSaveResult, MultimodeSequenceState };
@@ -299,4 +303,39 @@ export function removeImageFromMultimodeSequences(
     };
   }
   return changed ? next : sequences;
+}
+
+export function saveInFlight(list: PersistedInFlight[]): void {
+  try {
+    localStorage.setItem(IN_FLIGHT_STORAGE_KEY, JSON.stringify(list));
+  } catch (err) {
+    const w = window as unknown as { __ima2QuotaWarned?: boolean };
+    if (!w.__ima2QuotaWarned) {
+      w.__ima2QuotaWarned = true;
+      console.warn("[ima2] localStorage write failed:", err);
+    }
+  }
+}
+
+export function getCustomSizeConfirmation(
+  state: AppState,
+  continuation: NonNullable<CustomSizeConfirmState>["continuation"],
+): CustomSizeConfirmState {
+  if (state.provider === "grok" || state.provider === "grok-api" || state.provider === "agy" || state.provider === "gemini-api") return null;
+  if (state.sizePreset !== "custom") return null;
+  const result = normalizeCustomSizePairDetailed(
+    state.customW,
+    state.customH,
+    state.customW,
+    state.customH,
+  );
+  if (!result.adjusted) return null;
+  return {
+    requestedW: result.requestedW,
+    requestedH: result.requestedH,
+    adjustedW: result.w,
+    adjustedH: result.h,
+    reasons: result.reasons,
+    continuation,
+  };
 }
