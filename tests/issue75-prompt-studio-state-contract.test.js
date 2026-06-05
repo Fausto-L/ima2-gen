@@ -4,10 +4,12 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { readStoreBundle } from "./_storeBundle.mjs";
 
 const root = process.cwd();
 
 function readSource(path) {
+  if (path === "ui/src/store/useAppStore.ts") return readStoreBundle();
   return readFileSync(join(root, path), "utf8");
 }
 

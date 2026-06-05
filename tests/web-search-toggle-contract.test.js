@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readStoreBundle } from "./_storeBundle.mjs";
 
 const root = process.cwd();
 
@@ -20,6 +21,7 @@ const OAUTH_PROXY_SOURCES = [
 ];
 
 function readSource(path) {
+  if (path === "ui/src/store/useAppStore.ts") return readStoreBundle();
   if (path === "lib/oauthProxy.ts") {
     return OAUTH_PROXY_SOURCES.map((p) => readFileSync(join(root, p), "utf8")).join("\n");
   }

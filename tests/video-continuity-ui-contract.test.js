@@ -3,13 +3,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readStoreBundle } from "./_storeBundle.mjs";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const read = (rel) => readFileSync(join(ROOT, rel), "utf8");
 
 describe("video continuity UI contracts", () => {
   it("removes weak animateImage fallback and uses active prompt guidance", () => {
-    const store = read("ui/src/store/useAppStore.ts");
+    const store = readStoreBundle();
     assert.doesNotMatch(store, /Animate this image with subtle, natural motion/);
     assert.match(store, /ACTIVE_VIDEO_PROMPT_GUIDANCE/);
     assert.match(store, /setVideoContinuityLineage/);
@@ -36,13 +37,13 @@ describe("video continuity UI contracts", () => {
     const api = read("ui/src/lib/api.ts");
     assert.match(api, /continueFromVideo\?: string/);
     assert.match(api, /continuityLineage\?:/);
-    const store = read("ui/src/store/useAppStore.ts");
+    const store = readStoreBundle();
     assert.match(store, /continueFromVideo,/);
     assert.match(store, /continuityLineage: parentVideoContinuity/);
   });
 
   it("clears pending continuity when its reference or prompt chip is removed", () => {
-    const store = read("ui/src/store/useAppStore.ts");
+    const store = readStoreBundle();
     assert.match(store, /!prompt\.id\.startsWith\("video-continuity:"\)/);
     assert.match(store, /set\(\{ referenceImages: \[\], canvasReferenceImage: null, videoContinuityLineage: null, insertedPrompts \}\)/);
     assert.match(store, /id\.startsWith\("video-continuity:"\)/);

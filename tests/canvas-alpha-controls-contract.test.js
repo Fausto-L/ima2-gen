@@ -3,11 +3,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { readStoreBundle } from "./_storeBundle.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
 const types = readFileSync(join(root, "ui/src/types/canvas.ts"), "utf8");
-const store = readFileSync(join(root, "ui/src/store/useAppStore.ts"), "utf8");
+const store = readStoreBundle();
 const merge = readFileSync(join(root, "ui/src/lib/canvas/mergeRenderer.ts"), "utf8");
 const exportR = readFileSync(join(root, "ui/src/lib/canvas/exportRenderer.ts"), "utf8");
 const canvas = [

@@ -167,6 +167,10 @@ export async function reconcileInflightImpl(
     const now = Date.now();
     const currentLocal = get().inFlight;
     const local = currentLocal.length > 0 ? currentLocal : loadInFlight();
+    // Keep local entries that are either still known to the server,
+    // or started very recently (<10s — request may be in-flight before
+    // /api/inflight registered). Keep out-of-scope entries because this
+    // request only asked the server about the current mode/session.
     const merged = local.flatMap((f) => {
       const serverJob = serverById.get(f.id);
       if (serverJob) {

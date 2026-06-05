@@ -2,10 +2,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readStoreBundle } from "./_storeBundle.mjs";
 
 const root = process.cwd();
 
 function readSource(path) {
+  if (path === "ui/src/store/useAppStore.ts") return readStoreBundle();
   return readFileSync(join(root, path), "utf8");
 }
 
@@ -74,9 +76,9 @@ describe("history permanent delete contract", () => {
 
   it("client delete refuses orphan hidden canvas versions instead of deleting their hidden files", () => {
     const store = readSource("ui/src/store/useAppStore.ts");
-    const trashFn = /trashHistoryItem:\s*async \(item\) => \{[\s\S]*?\n  restorePendingTrash:/.exec(store)?.[0] ?? "";
+    const trashFn = /export async function trashHistoryItemImpl[\s\S]*?\n\}/.exec(store)?.[0] ?? "";
     const permanentFn =
-      /permanentlyDeleteHistoryItemByShortcut:\s*async \(item\) => \{[\s\S]*?\n  removeFromHistory:/.exec(store)?.[0] ?? "";
+      /export async function permanentlyDeleteHistoryItemImpl[\s\S]*?\n\}/.exec(store)?.[0] ?? "";
 
     assert.match(trashFn, /const target = item\.canvasVersion \? resolveVisibleShortcutCurrent\(get\(\)\.history,\s*item\) : item/);
     assert.match(trashFn, /if \(!target \|\| target\.canvasVersion \|\| !target\.filename\)/);

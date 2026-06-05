@@ -1,9 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { readStoreBundle } from "./_storeBundle.mjs";
 
 const layout = readFileSync("ui/src/lib/nodeLayout.ts", "utf-8");
-const store = readFileSync("ui/src/store/useAppStore.ts", "utf-8");
+const store = readStoreBundle();
 
 describe("node layout contract", () => {
   it("uses actual child node positions instead of edge counts", () => {

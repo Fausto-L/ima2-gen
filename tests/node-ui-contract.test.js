@@ -2,10 +2,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readStoreBundle } from "./_storeBundle.mjs";
 
 const root = process.cwd();
 
 function readSource(path) {
+  if (path === "ui/src/store/useAppStore.ts") return readStoreBundle();
   return readFileSync(join(root, path), "utf8");
 }
 
@@ -155,7 +157,7 @@ describe("node UI compact metadata contract", () => {
   it("uses one graph edge serializer for normal and refresh saves", () => {
     const store = readSource("ui/src/store/useAppStore.ts");
 
-    assert.match(store, /type SessionGraphEdge/);
+    assert.match(store, /SessionGraphEdge/);
     assert.match(store, /function serializeGraphEdgesForSave\(graphEdges: GraphEdge\[\]\): SessionGraphEdge\[\]/);
     assert.match(store, /const edges = serializeGraphEdgesForSave\(graphEdges\)/);
     assert.match(store, /const edges = serializeGraphEdgesForSave\(s\.graphEdges\)/);
@@ -189,8 +191,8 @@ describe("node UI compact metadata contract", () => {
 
     assert.match(store, /const DEFAULT_CHILD_SOURCE_HANDLE = "source-right"/);
     assert.match(store, /const DEFAULT_CHILD_TARGET_HANDLE = "target-left"/);
-    assert.match(store, /addChildNode:\s*\(parentClientId\) => \{[\s\S]*?id:\s*newGraphEdgeId\(parentClientId,\s*clientId,\s*DEFAULT_CHILD_SOURCE_HANDLE,\s*DEFAULT_CHILD_TARGET_HANDLE\)/);
-    assert.match(store, /addSiblingNode:\s*\(sourceClientId\) => \{[\s\S]*?id:\s*newGraphEdgeId\(parentClientId,\s*clientId,\s*DEFAULT_CHILD_SOURCE_HANDLE,\s*DEFAULT_CHILD_TARGET_HANDLE\)/);
+    assert.match(store, /function addChildNodeImpl[\s\S]*?newGraphEdgeId\(parentClientId,\s*clientId,\s*DEFAULT_CHILD_SOURCE_HANDLE,\s*DEFAULT_CHILD_TARGET_HANDLE\)/);
+    assert.match(store, /function addSiblingNodeImpl[\s\S]*?newGraphEdgeId\(parentClientId,\s*clientId,\s*DEFAULT_CHILD_SOURCE_HANDLE,\s*DEFAULT_CHILD_TARGET_HANDLE\)/);
     assert.match(store, /sourceHandle:\s*DEFAULT_CHILD_SOURCE_HANDLE/);
     assert.match(store, /targetHandle:\s*DEFAULT_CHILD_TARGET_HANDLE/);
   });
@@ -204,7 +206,7 @@ describe("node UI compact metadata contract", () => {
     assert.match(store, /function normalizeNodeHandleId\(/);
     assert.match(store, /function getOppositeTargetHandle\(sourceHandle\?: string \| null\): string \| null/);
     assert.match(store, /case "source-right":[\s\S]*?return "target-left"/);
-    assert.match(store, /addChildNodeAt:\s*\(parentClientId,\s*position,\s*sourceHandle = DEFAULT_CHILD_SOURCE_HANDLE\) => \{/);
+    assert.match(store, /function addChildNodeAtImpl[\s\S]*?sourceHandle/);
     assert.match(store, /const normalizedSourceHandle =[\s\S]*?normalizeNodeHandleId\(sourceHandle,\s*"source"\) \?\? DEFAULT_CHILD_SOURCE_HANDLE/);
     assert.match(store, /const targetHandle = getOppositeTargetHandle\(normalizedSourceHandle\) \?\? DEFAULT_CHILD_TARGET_HANDLE/);
     assert.match(store, /id:\s*newGraphEdgeId\(parentClientId,\s*clientId,\s*normalizedSourceHandle,\s*targetHandle\)/);

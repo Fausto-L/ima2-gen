@@ -2,10 +2,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readStoreBundle } from "./_storeBundle.mjs";
 
 const root = process.cwd();
 
 function readSource(path) {
+  if (path === "ui/src/store/useAppStore.ts") return readStoreBundle();
   return readFileSync(join(root, path), "utf8");
 }
 
@@ -79,7 +81,7 @@ describe("canvas apply merged contract", () => {
     assert.match(canvas, /imageOverride=\{canvasOpen \? canvasDisplayImage : null\}/);
     assert.match(canvas, /onAfterDeleteFocus=\{onAfterDeleteFocus\}/);
     assert.match(store, /compressReferenceSource\(cur\.image/);
-    assert.match(store, /useImageAsReference: async \(item\)/);
+    assert.match(store, /useImageAsReference.*useImageAsReferenceImpl/);
     assert.match(store, /compressReferenceSource\(item\.image/);
     assert.match(store, /attachCanvasVersionReference/);
     assert.match(store, /compressReferenceSource\(\s*item\.image/);

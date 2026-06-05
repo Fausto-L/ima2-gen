@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readStoreBundle } from "./_storeBundle.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const storePath = join(__dirname, "..", "ui", "src", "store", "useAppStore.ts");
@@ -12,7 +13,7 @@ const enPath = join(__dirname, "..", "ui", "src", "i18n", "en.json");
 const koPath = join(__dirname, "..", "ui", "src", "i18n", "ko.json");
 
 const registryPath = join(__dirname, "..", "ui", "src", "store", "persistenceRegistry.ts");
-const storeSrc = await readFile(storePath, "utf8");
+const storeSrc = readStoreBundle();
 const registrySrc = await readFile(registryPath, "utf8");
 const appSrc = await readFile(appPath, "utf8");
 const apiSrc = await readFile(apiPath, "utf8");

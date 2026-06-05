@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { releaseOrphanedPreview } from "../ui/src/lib/multimodeSequences";
+import { releaseOrphanedPreview } from "../ui/src/lib/multimodeSequences.ts";
 
 // Regression guard for the reload-recoverable gallery hang.
 // Root cause + plan: devlog/_plan/260603_gallery-focus-white-screen-rca/
@@ -68,7 +68,7 @@ for (const f of [
 // --- (E nuance) addHistory must not give videos an <img>-based thumb ----------
 
 test("addHistory leaves video thumb undefined so the placeholder renders", () => {
-  const src = read("ui/src/store/useAppStore.ts");
+  const src = read("ui/src/store/storeGraphSave.ts");
   assert.match(src, /isVideoItem\(item\)\s*\n?\s*\?\s*undefined/);
 });
 
@@ -86,11 +86,11 @@ test("Canvas focused <img> requests high fetch priority", () => {
 // --- (G) selectHistory + showHistorySequence wire the prune helper ------------
 
 test("selectHistory prunes the orphaned preview via releaseOrphanedPreview", () => {
-  const src = read("ui/src/store/useAppStore.ts");
+  const src = read("ui/src/store/storeHistoryImpl.ts");
   assert.match(src, /releaseOrphanedPreview\(state\.multimodeSequences, previewId, Boolean\(isWithinGrid\)\)/);
 });
 
 test("showHistorySequence prunes the previous preview before adding the new one", () => {
-  const src = read("ui/src/store/useAppStore.ts");
+  const src = read("ui/src/store/storeHistoryImpl.ts");
   assert.match(src, /\.\.\.releaseOrphanedPreview\(state\.multimodeSequences, state\.multimodePreviewFlightId, false\)/);
 });

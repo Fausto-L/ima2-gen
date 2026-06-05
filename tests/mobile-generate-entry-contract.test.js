@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { readStoreBundle } from "./_storeBundle.mjs";
 
 const appBar = readFileSync("ui/src/components/MobileAppBar.tsx", "utf8");
 const sheet = readFileSync("ui/src/components/MobileComposeSheet.tsx", "utf8");
-const store = readFileSync("ui/src/store/useAppStore.ts", "utf8");
+const store = readStoreBundle();
 const controls = readFileSync("ui/src/components/GenerationControlsPanel.tsx", "utf8");
 const rightPanel = readFileSync("ui/src/components/RightPanel.tsx", "utf8");
 const css = readFileSync("ui/src/index.css", "utf8");

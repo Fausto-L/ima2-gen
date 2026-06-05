@@ -2,13 +2,14 @@ import { strict as assert } from "node:assert";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readStoreBundle } from "./_storeBundle.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const storePath = join(__dirname, "..", "ui", "src", "store", "useAppStore.ts");
 const historyPath = join(__dirname, "..", "lib", "historyList.ts");
 const nodesRoutePath = join(__dirname, "..", "routes", "nodes.ts");
 
-const storeSrc = await readFile(storePath, "utf8");
+const storeSrc = readStoreBundle();
 const historySrc = await readFile(historyPath, "utf8");
 const nodesRouteSrc = await readFile(nodesRoutePath, "utf8");
 

@@ -2,10 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readStoreBundle } from "./_storeBundle.mjs";
 
 const root = process.cwd();
 
 function readSource(path) {
+  if (path === "ui/src/store/useAppStore.ts") return readStoreBundle();
   return readFileSync(join(root, path), "utf8");
 }
 
@@ -41,7 +43,7 @@ test("UI exposes cancel buttons only through the store cancel action", () => {
 
   assert.match(list, /className="in-flight-cancel"/);
   assert.match(list, /cancelInFlightJob\(f\.id\)/);
-  assert.match(store, /cancelInFlightJob:\s*async/);
+  assert.match(store, /cancelInFlightJob.*cancelInFlightJobImpl/);
   assert.match(store, /await cancelInflight\(requestId\)/);
   assert.match(store, /phase: "canceling"/);
 });

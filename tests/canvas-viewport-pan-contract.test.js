@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { readStoreBundle } from "./_storeBundle.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
@@ -14,7 +15,7 @@ const canvas = [
   "ui/src/components/canvas-mode/useCanvasModePointerHandlers.ts",
   "ui/src/components/canvas-mode/useCanvasModeShortcuts.ts",
 ].map((path) => readFileSync(join(root, path), "utf8")).join("\n");
-const store = readFileSync(join(root, "ui/src/store/useAppStore.ts"), "utf8");
+const store = readStoreBundle();
 const coords = readFileSync(join(root, "ui/src/lib/canvas/coordinates.ts"), "utf8");
 const toolbar = readFileSync(join(root, "ui/src/components/canvas-mode/CanvasToolbar.tsx"), "utf8");
 const zoomControl = readFileSync(join(root, "ui/src/components/canvas-mode/CanvasZoomControl.tsx"), "utf8");

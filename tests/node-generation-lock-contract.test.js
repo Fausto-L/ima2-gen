@@ -1,8 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { readStoreBundle } from "./_storeBundle.mjs";
 
-const store = readFileSync("ui/src/store/useAppStore.ts", "utf-8");
+const store = readStoreBundle();
 
 describe("node generation concurrency lock contract", () => {
   it("declares a module-level lock for node generation calls", () => {
@@ -10,7 +11,7 @@ describe("node generation concurrency lock contract", () => {
   });
 
   it("guards runGenerateNodeInPlace entry against concurrent calls", () => {
-    const fn = /async runGenerateNodeInPlace\(clientId, options = \{\}\) \{[\s\S]{0,400}/.exec(store)?.[0] ?? "";
+    const fn = /async function runGenerateNodeInPlaceImpl[\s\S]{0,600}/.exec(store)?.[0] ?? "";
     assert.match(fn, /if \(nodeGenerationLocks\.has\(clientId\)\) return null;/);
     assert.match(fn, /nodeGenerationLocks\.add\(clientId\);/);
   });

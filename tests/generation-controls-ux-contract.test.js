@@ -2,10 +2,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readStoreBundle } from "./_storeBundle.mjs";
 
 const root = process.cwd();
 
 function readSource(path) {
+  if (path === "ui/src/store/useAppStore.ts") return readStoreBundle();
   return readFileSync(join(root, path), "utf8");
 }
 
@@ -107,8 +109,8 @@ describe("generation controls custom plus UX contract", () => {
     assert.match(store, /function saveGenerationDefaultsPatch\(patch: GenerationDefaults\): void/);
     assert.match(store, /prompt: storedGenerationDefaults\.prompt \?\? ""/);
     assert.match(store, /sizePreset: storedGenerationDefaults\.sizePreset \?\? "1024x1024"/);
-    assert.match(store, /setPrompt: \(prompt\) => \{[\s\S]*?saveGenerationDefaultsPatch\(\{ prompt \}\);/);
-    assert.match(store, /setSizePreset: \(sizePreset\) => \{[\s\S]*?saveGenerationDefaultsPatch\(\{ sizePreset \}\);/);
+    assert.match(store, /setPromptImpl[\s\S]*?saveGenerationDefaultsPatch\(\{ prompt \}\)/);
+    assert.match(store, /setSizePresetImpl[\s\S]*?saveGenerationDefaultsPatch\(\{ sizePreset \}\)/);
     assert.match(store, /saveGenerationDefaultsPatch\(\{ insertedPrompts \}\);/);
   });
 

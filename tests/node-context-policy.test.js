@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { readStoreBundle } from "./_storeBundle.mjs";
 
 const route = readFileSync("routes/nodes.ts", "utf-8");
 // NOTE: lib/oauthProxy.ts was split into lib/oauthProxy/*.ts behind a facade.
@@ -35,7 +36,7 @@ describe("node context and edit search policy", () => {
   });
 
   it("forwards the selected provider from Node Mode requests", () => {
-    const store = readFileSync("ui/src/store/useAppStore.ts", "utf-8");
+    const store = readStoreBundle();
     const nodePayload = /postNodeGenerateStream\(\{\s*[\s\S]*?\},\s*\{/.exec(store)?.[0] ?? "";
     assert.match(nodePayload, /provider:\s*s\.provider/);
     assert.match(nodePayload, /model:\s*s\.imageModel/);

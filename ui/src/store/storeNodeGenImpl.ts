@@ -200,6 +200,8 @@ export async function runGenerateNodeInPlaceImpl(
       }
     }
     return res.nodeId;
+    // cross-session: result will be restored via recoverGraphNodesFromHistory
+    // when the user returns to the originating session.
   } catch (err) {
     const msg = err instanceof Error ? err.message : t("toast.nodeCreateFailed");
     if (get().activeSessionId === requestSessionId) {
@@ -224,6 +226,7 @@ export async function runGenerateNodeInPlaceImpl(
       graphMutated = true;
       handleError(err, get());
     }
+    // cross-session: silent — user is on a different graph
     return null;
   } finally {
     nodeGenerationLocks.delete(clientId);

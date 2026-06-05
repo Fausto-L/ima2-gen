@@ -2,10 +2,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readStoreBundle } from "./_storeBundle.mjs";
 
 const root = process.cwd();
 
 function readSource(path) {
+  if (path === "ui/src/store/useAppStore.ts") return readStoreBundle();
   return readFileSync(join(root, path), "utf8");
 }
 
@@ -78,7 +80,7 @@ describe("canvas version frontend contract", () => {
   it("attaches canvas references as compressed data URLs, not generated URLs", () => {
     const store = readSource("ui/src/store/useAppStore.ts");
     assert.match(store, /canvasReferenceImage/);
-    assert.match(store, /attachCanvasVersionReference: async \(item\)/);
+    assert.match(store, /attachCanvasVersionReference.*attachCanvasVersionReferenceImpl/);
     assert.match(store, /compressReferenceSource\(\s*item\.image/);
     assert.match(store, /withoutPrevious/);
     assert.match(store, /MAX_REFERENCE_IMAGES/);

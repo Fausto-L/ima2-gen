@@ -1,8 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { readStoreBundle } from "./_storeBundle.mjs";
 
-const store = readFileSync("ui/src/store/useAppStore.ts", "utf-8");
+const store = readStoreBundle();
 const api = readFileSync("ui/src/lib/nodeApi.ts", "utf-8");
 const refs = readFileSync("ui/src/lib/nodeRefStorage.ts", "utf-8");
 

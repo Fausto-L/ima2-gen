@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { readStoreBundle } from "./_storeBundle.mjs";
 
-const storeSource = readFileSync("ui/src/store/useAppStore.ts", "utf8");
+const storeSource = readStoreBundle();
 const toastSource = readFileSync("ui/src/components/Toast.tsx", "utf8");
 const errorCardSource = readFileSync("ui/src/components/ErrorCard.tsx", "utf8");
 const cssSource = readFileSync("ui/src/index.css", "utf8");

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { readStoreBundle } from "./_storeBundle.mjs";
 
 test("UI maps proxy and network errors to card surfaces", () => {
   const source = readFileSync("ui/src/lib/errorCodes.ts", "utf-8");
@@ -26,7 +27,7 @@ test("node API preserves status on JSON and SSE errors", () => {
 });
 
 test("UI surfaces server terminal generation errors from inflight polling", () => {
-  const store = readFileSync("ui/src/store/useAppStore.ts", "utf-8");
+  const store = readStoreBundle();
   const api = readFileSync("ui/src/lib/api.ts", "utf-8");
 
   assert.match(api, /No image data returned from the multimode stream/);

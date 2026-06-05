@@ -8,9 +8,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readStoreBundle } from "./_storeBundle.mjs";
 
 const root = process.cwd();
-const readSource = (path) => readFileSync(join(root, path), "utf8");
+const readSource = (path) => path === "ui/src/store/useAppStore.ts" ? readStoreBundle() : readFileSync(join(root, path), "utf8");
 
 test("store does not initialize activeGenerations from loadInFlight().length", () => {
   const store = readSource("ui/src/store/useAppStore.ts");

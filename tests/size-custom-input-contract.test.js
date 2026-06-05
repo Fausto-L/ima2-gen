@@ -2,10 +2,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readStoreBundle } from "./_storeBundle.mjs";
 
 const root = process.cwd();
 
 function readSource(path) {
+  if (path === "ui/src/store/useAppStore.ts") return readStoreBundle();
   return readFileSync(join(root, path), "utf8");
 }
 
@@ -120,8 +122,8 @@ describe("custom size input contract", () => {
   it("keeps requested custom sizes in the store until generation time", () => {
     const source = readSource("ui/src/store/useAppStore.ts");
 
-    assert.match(source, /parseRequestedCustomSide\(w, state\.customW\)/);
-    assert.match(source, /parseRequestedCustomSide\(h, state\.customH\)/);
+    assert.match(source, /parseRequestedCustomSide\(w,.*\.customW\)/);
+    assert.match(source, /parseRequestedCustomSide\(h,.*\.customH\)/);
     assert.doesNotMatch(source, /const next = normalizeCustomSizePair\(w, h, state\.customW, state\.customH\)/);
     assert.doesNotMatch(source, /setCustomSize: \(w, h\) => set\(\{ customW: snap16\(w\)/);
   });
