@@ -26,16 +26,10 @@ import { logEvent, logError } from "../lib/logger.js";
 
 import { errInfo } from "../lib/errInfo.js";
 import { requireRuntimeContext, type RouteRuntimeContext, type RuntimeContext } from "../lib/runtimeContext.js";
+import { validateModeration, imageFormatFromMime } from "../lib/routeHelpers.js";
 
 function asUpstream(e: unknown): UpstreamErr {
   return (e && typeof e === "object" ? e : {}) as UpstreamErr;
-}
-
-function validateModeration(ctx: RuntimeContext, moderation: unknown) {
-  if (typeof moderation !== "string" || !ctx.config.oauth.validModeration.has(moderation)) {
-    return { error: "moderation must be one of: auto, low" };
-  }
-  return { moderation };
 }
 
 function wantsSse(req: Request) {
@@ -76,12 +70,6 @@ function writeNodeError(
 
 function dataUrlFromB64(format: string, b64: string) {
   return `data:image/${format === "jpeg" ? "jpeg" : format};base64,${b64}`;
-}
-
-function imageFormatFromMime(mime: string | null | undefined): "png" | "jpeg" | "webp" {
-  if (mime === "image/jpeg") return "jpeg";
-  if (mime === "image/webp") return "webp";
-  return "png";
 }
 
 async function loadParentNodeB64(ctx: RuntimeContext, nodeId: string) {

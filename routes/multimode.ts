@@ -27,17 +27,11 @@ import {
 } from "../lib/composerSnapshot.js";
 
 import { errInfo } from "../lib/errInfo.js";
-import { requireRuntimeContext, type RouteRuntimeContext, type RuntimeContext } from "../lib/runtimeContext.js";
+import { requireRuntimeContext, type RouteRuntimeContext } from "../lib/runtimeContext.js";
+import { validateModeration, imageFormatFromMime } from "../lib/routeHelpers.js";
 function sendSse(res: Response, event: string, data: unknown) {
   res.write(`event: ${event}\n`);
   res.write(`data: ${JSON.stringify(data)}\n\n`);
-}
-
-function validateModeration(ctx: RuntimeContext, moderation: unknown) {
-  if (typeof moderation !== "string" || !ctx.config.oauth.validModeration.has(moderation)) {
-    return { error: "moderation must be one of: auto, low" };
-  }
-  return { moderation };
 }
 
 function normalizeMaxImages(value: unknown): number {
@@ -54,12 +48,6 @@ interface MultimodeImage {
   b64: string;
   revisedPrompt?: string | null;
   mime?: string | null;
-}
-
-function imageFormatFromMime(mime: string | null | undefined): "png" | "jpeg" | "webp" {
-  if (mime === "image/jpeg") return "jpeg";
-  if (mime === "image/webp") return "webp";
-  return "png";
 }
 
 type MultimodeRouteItem = {

@@ -90,7 +90,8 @@ export async function retryPromptOnlyJsonImage({
           tools: tools(false, { quality, size, moderation }),
           tool_choice: imageToolChoice(true),
           reasoning: { effort: reasoningEffort || "low" },
-          stream: false,
+          // OAuth/Codex proxy returns empty output[] for non-stream image requests; SSE required.
+          stream: true,
         },
       });
     } catch (e) {

@@ -28,19 +28,9 @@ import {
 } from "../lib/composerSnapshot.js";
 
 import { errInfo } from "../lib/errInfo.js";
-import { requireRuntimeContext, type RouteRuntimeContext, type RuntimeContext } from "../lib/runtimeContext.js";
-function validateModeration(ctx: RuntimeContext, moderation: unknown) {
-  if (typeof moderation !== "string" || !ctx.config.oauth.validModeration.has(moderation)) {
-    return { error: "moderation must be one of: auto, low" };
-  }
-  return { moderation };
-}
-
-function imageFormatFromMime(mime: string | null | undefined): "png" | "jpeg" | "webp" {
-  if (mime === "image/jpeg") return "jpeg";
-  if (mime === "image/webp") return "webp";
-  return "png";
-}
+import { requireRuntimeContext, type RouteRuntimeContext } from "../lib/runtimeContext.js";
+import { STORYBOARD_PREFIX } from "../lib/storyboardPrefix.js";
+import { validateModeration, imageFormatFromMime } from "../lib/routeHelpers.js";
 
 export function registerGenerateRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
   const ctx = requireRuntimeContext(ctxRaw);
@@ -70,36 +60,7 @@ export function registerGenerateRoutes(app: Express, ctxRaw: RouteRuntimeContext
         webSearchEnabled: rawWebSearchEnabled = true,
       } = req.body;
       const storyboardActive = req.body?.storyboard === true;
-      const storyboardPrefix = storyboardActive
-        ? [
-          "[STORYBOARD MODE — Video Production Keyframe / Storyboard Grid]",
-          "This image will be used for video production. It may be a single keyframe OR a 3x3 storyboard grid.",
-          "The prompt and all injected instructions MUST be in English.",
-          "",
-          "IF GENERATING A 3x3 STORYBOARD GRID:",
-          "- Panel 1 (top-left) MUST be COMPLETELY SOLID BLACK — no image, no text, just pure black.",
-          "- Panels 2-9 contain the action sequence (8 key moments).",
-          "- Do NOT add timestamp labels or text overlays to any panel — they burn into the video.",
-          "- Maintain identical character designs across all panels.",
-          "- Each panel should look like a cinematic film still, not a sketch.",
-          "",
-          "CHARACTER LOCK:",
-          "- Identify each character by 2-3 VISUAL identifiers (clothing color + physique + position/props). Never by name alone.",
-          "- Copy character descriptions VERBATIM from the reference/prior frame. Do NOT rephrase or drift.",
-          "",
-          "SCENE CONTINUITY:",
-          "- Lock lighting direction, color palette, environment, and art style to prior frames.",
-          "- Change ONLY: action, shot scale, camera angle, or expression.",
-          "- Reference image = canonical anchor. Preserve it faithfully.",
-          "",
-          "VIDEO-READY COMPOSITION:",
-          "- Frame for animation: leave space for motion, avoid static-only poses.",
-          "- Use descriptive caption format: shot type + subject action + environment + technical (lens, lighting) + mood.",
-          "- Specify intended camera movement for the video phase (e.g. 'slow dolly-in', 'static wide').",
-          "- End pose must be stable and suitable for video continuation.",
-          "",
-        ].join("\n") + "\n"
-        : "";
+      const storyboardPrefix = storyboardActive ? STORYBOARD_PREFIX : "";
       const composerPrompt = normalizeComposerPrompt(req.body?.composerPrompt);
       const composerInsertedPrompts = normalizeComposerInsertedPrompts(
         req.body?.composerInsertedPrompts,
