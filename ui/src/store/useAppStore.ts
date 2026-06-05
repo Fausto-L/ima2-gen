@@ -144,403 +144,85 @@ import { resolveWorkspaceSettings } from "../lib/workspaceProfile";
 import { isVideoUrl, isVideoItem, extractLastFrame } from "../lib/videoMedia";
 import { releaseOrphanedPreview } from "../lib/multimodeSequences";
 import { ACTIVE_VIDEO_PROMPT_GUIDANCE, buildVideoContinuityFromItem } from "../lib/videoContinuity";
+import {
+  type InsertedPrompt,
+  composePrompt,
+  normalizeInsertedPrompt,
+  normalizeInsertedPromptArray,
+  cloneInsertedPrompts,
+  getHistoryComposerPatch,
+  loadRightPanelOpen,
+  loadUIMode,
+  loadThemePreference,
+  loadThemeFamily,
+  loadHistoryStripLayout,
+  loadGalleryScope,
+  loadCanvasExportBackground,
+  persistCanvasExportBackground,
+  loadImageModel,
+  saveImageModel,
+  loadReasoningEffort,
+  saveReasoningEffort,
+  loadWebSearchEnabled,
+  saveWebSearchEnabled,
+  type VideoDefaults,
+  loadVideoDefaults,
+  saveVideoDefaults,
+  resolveThemePreference,
+  loadSelectedFilename,
+  saveSelectedFilename,
+  loadActiveSessionId,
+  saveActiveSessionId,
+  formatSize,
+  normalizeCount,
+  SIZE_PRESET_VALUES,
+  parseMetadataSize,
+  isQuality,
+  isFormat,
+  isModeration,
+  isProvider,
+  isPromptMode,
+  isSizePreset,
+  type GenerationDefaults,
+  loadGenerationDefaults,
+  saveGenerationDefaultsPatch,
+} from "./storePersistence";
+import {
+  type PersistedInFlight,
+  INFLIGHT_TTL_MS,
+  type ServerInFlightJob,
+  type ServerTerminalJob,
+  type InflightQueryScope,
+  getInflightQueryScopes,
+  matchesInflightScope,
+  fetchInflightScopes,
+  toPersistedInFlightJob,
+  terminalJobError,
+  isCanceledGenerationError,
+  multimodeImageKey,
+  mergeMultimodeImages,
+  loadInFlight,
+  HISTORY_LIMIT,
+  MAX_REFERENCE_IMAGES,
+  type GraphSaveReason,
+  type GraphSaveResult,
+  narrowGenerateKind,
+  mapHistoryItem,
+  historyKey,
+  withoutHistoryDuplicate,
+  findHistoryDuplicate,
+  preserveHistoryMetadata,
+  mergeHistoryItems,
+  retainHistoryItems,
+  stripDataUrlPrefix,
+  compressReferenceSource,
+  type MultimodeSequenceState,
+  removeImageFromMultimodeSequences,
+} from "./storeHelpers";
 
-export type GalleryScope = "current-session" | "all";
+export type { GalleryScope } from "./storeTypes";
 
-function loadRightPanelOpen(): boolean {
-  try {
-    const raw = localStorage.getItem(RIGHT_PANEL_OPEN_STORAGE_KEY);
-    if (raw === null) return true;
-    return JSON.parse(raw) === true;
-  } catch {
-    return true;
-  }
-}
-
-function loadUIMode(): UIMode {
-  try {
-    const raw = localStorage.getItem(UI_MODE_STORAGE_KEY);
-    if (raw === "agent") return ENABLE_AGENT_MODE ? raw : "classic";
-    if (raw === "card-news") return ENABLE_CARD_NEWS_MODE ? raw : "classic";
-    if (raw === "node") return ENABLE_NODE_MODE ? raw : "classic";
-    if (raw === "classic") return raw;
-  } catch {}
-  return "classic";
-}
-
-function loadThemePreference(): ThemePreference {
-  try {
-    const raw = localStorage.getItem(THEME_STORAGE_KEY);
-    if (raw === "system" || raw === "dark" || raw === "light") return raw;
-  } catch {}
-  return "system";
-}
-
-function loadThemeFamily(): ThemeFamily {
-  try {
-    const raw = localStorage.getItem(THEME_FAMILY_STORAGE_KEY);
-    if (raw && (THEME_FAMILIES as readonly string[]).includes(raw)) {
-      return raw as ThemeFamily;
-    }
-  } catch {}
-  return "default";
-}
-
-function loadHistoryStripLayout(): HistoryStripLayout {
-  try {
-    const raw = localStorage.getItem(HISTORY_STRIP_LAYOUT_STORAGE_KEY);
-    if (raw === "rail" || raw === "horizontal" || raw === "sidebar") return raw;
-  } catch {}
-  return "rail";
-}
-
-function loadGalleryScope(key: string): GalleryScope {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw === "current-session" || raw === "all") return raw;
-  } catch {}
-  return "current-session";
-}
-
-function loadCanvasExportBackground(): { mode: CanvasExportBackground; matteColor: HexColor } {
-  if (typeof window === "undefined") return { mode: "alpha", matteColor: "#ffffff" };
-  try {
-    const raw = window.localStorage.getItem(CANVAS_EXPORT_BG_KEY);
-    if (!raw) return { mode: "alpha", matteColor: "#ffffff" };
-    const parsed = JSON.parse(raw) as Partial<{ mode: CanvasExportBackground; matteColor: string }>;
-    const mode: CanvasExportBackground = parsed.mode === "matte" ? "matte" : "alpha";
-    const matteColor: HexColor =
-      typeof parsed.matteColor === "string" && /^#[0-9a-fA-F]{6}$/.test(parsed.matteColor)
-        ? (parsed.matteColor as HexColor)
-        : "#ffffff";
-    return { mode, matteColor };
-  } catch {
-    return { mode: "alpha", matteColor: "#ffffff" };
-  }
-}
-
-function persistCanvasExportBackground(mode: CanvasExportBackground, matteColor: HexColor): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(CANVAS_EXPORT_BG_KEY, JSON.stringify({ mode, matteColor }));
-  } catch {
-    /* ignore quota / unavailable */
-  }
-}
-
-function loadImageModel(): ImageModel {
-  try {
-    const raw = localStorage.getItem(IMAGE_MODEL_STORAGE_KEY);
-    if (isImageModel(raw)) return raw;
-  } catch {}
-  return DEFAULT_IMAGE_MODEL;
-}
-
-function saveImageModel(model: ImageModel): void {
-  try {
-    localStorage.setItem(IMAGE_MODEL_STORAGE_KEY, model);
-  } catch {}
-}
-
-function loadReasoningEffort(): ReasoningEffort {
-  try {
-    const raw = localStorage.getItem(REASONING_EFFORT_STORAGE_KEY);
-    if (isReasoningEffort(raw)) return raw;
-  } catch {}
-  return DEFAULT_REASONING_EFFORT;
-}
-
-function saveReasoningEffort(effort: ReasoningEffort): void {
-  try {
-    localStorage.setItem(REASONING_EFFORT_STORAGE_KEY, effort);
-  } catch {}
-}
-
-function loadWebSearchEnabled(): boolean {
-  try {
-    const raw = localStorage.getItem(WEB_SEARCH_STORAGE_KEY);
-    if (raw === "false") return false;
-    if (raw === "true") return true;
-  } catch {}
-  return DEFAULT_WEB_SEARCH_ENABLED;
-}
-
-function saveWebSearchEnabled(enabled: boolean): void {
-  try {
-    localStorage.setItem(WEB_SEARCH_STORAGE_KEY, String(enabled));
-  } catch {}
-}
-
-type VideoDefaults = {
-  model: string | false;
-  duration: number;
-  resolution: string;
-  aspectRatio: string;
-};
-
-const VIDEO_DEFAULTS_FALLBACK: VideoDefaults = { model: false, duration: 5, resolution: "480p", aspectRatio: "auto" };
-
-function loadVideoDefaults(): VideoDefaults {
-  try {
-    const raw = localStorage.getItem(VIDEO_DEFAULTS_STORAGE_KEY);
-    if (!raw) return VIDEO_DEFAULTS_FALLBACK;
-    const p = JSON.parse(raw) as Record<string, unknown>;
-    return {
-      model: typeof p.model === "string" ? p.model : false,
-      duration: typeof p.duration === "number" ? p.duration : 5,
-      resolution: p.resolution === "480p" || p.resolution === "720p" ? p.resolution : "480p",
-      aspectRatio: typeof p.aspectRatio === "string" ? p.aspectRatio : "auto",
-    };
-  } catch {
-    return VIDEO_DEFAULTS_FALLBACK;
-  }
-}
-
-function saveVideoDefaults(patch: Partial<VideoDefaults>): void {
-  try {
-    const current = loadVideoDefaults();
-    localStorage.setItem(VIDEO_DEFAULTS_STORAGE_KEY, JSON.stringify({ ...current, ...patch }));
-  } catch {}
-}
-
-function resolveThemePreference(theme: ThemePreference): ResolvedTheme {
-  if (theme === "dark" || theme === "light") return theme;
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-    return "dark";
-  }
-  return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-}
-
-type PersistedInFlight = {
-  id: string;
-  prompt: string;
-  startedAt: number;
-  composerPrompt?: string;
-  composerInsertedPrompts?: InsertedPrompt[];
-  phase?: string;
-  sessionId?: string | null;
-  parentNodeId?: string | null;
-  clientNodeId?: string | null;
-  kind?: "classic" | "node" | "multimode" | "video";
-};
-const INFLIGHT_TTL_MS = 180_000;
-
-// Module-level lock to dedupe concurrent runGenerateNodeInPlace calls for the
-// same clientId. Prevents double-fire from rapid clicks before React's
-// disabled propagation lands, React 18 StrictMode dev re-invocation, or any
-// other path that funnels through runGenerateNodeInPlace twice in one tick.
 const nodeGenerationLocks = new Set<string>();
-
-type ServerInFlightJob = {
-  requestId: string;
-  kind?: string;
-  prompt?: string;
-  startedAt: number;
-  phase?: string;
-  meta?: Record<string, unknown>;
-};
-
-type ServerTerminalJob = ServerInFlightJob & {
-  status?: "completed" | "error" | "canceled";
-  finishedAt?: number;
-  durationMs?: number;
-  httpStatus?: number;
-  errorCode?: string;
-};
-
-type InflightQueryScope = {
-  kind: NonNullable<PersistedInFlight["kind"]>;
-  sessionId?: string;
-};
-
-function getInflightQueryScopes(state: {
-  uiMode: UIMode;
-  activeSessionId?: string | null;
-  inFlight: PersistedInFlight[];
-}): InflightQueryScope[] {
-  const scopes: InflightQueryScope[] = state.uiMode === "node"
-    ? [{ kind: "node", sessionId: state.activeSessionId ?? undefined }]
-    : [{ kind: "classic" }];
-  if (state.inFlight.some((job) => job.kind === "multimode")) {
-    scopes.push({ kind: "multimode" });
-  }
-  scopes.push({ kind: "video" });
-  return scopes;
-}
-
-function matchesInflightScope(job: PersistedInFlight, scopes: InflightQueryScope[]): boolean {
-  const kind = job.kind ?? "classic";
-  return scopes.some((scope) =>
-    kind === scope.kind &&
-    (scope.kind !== "node" || (job.sessionId ?? null) === (scope.sessionId ?? null)),
-  );
-}
-
-async function fetchInflightScopes(scopes: InflightQueryScope[]): Promise<{
-  jobs: ServerInFlightJob[];
-  terminalJobs: ServerTerminalJob[];
-}> {
-  const responses = await Promise.all(scopes.map((scope) =>
-    getInflight({
-      kind: scope.kind,
-      sessionId: scope.sessionId,
-      includeTerminal: true,
-    }),
-  ));
-  return {
-    jobs: responses.flatMap((response) => response.jobs),
-    terminalJobs: responses.flatMap((response) => response.terminalJobs ?? []) as ServerTerminalJob[],
-  };
-}
-
-type InsertedPrompt = {
-  id: string;
-  name: string;
-  text: string;
-  placement?: "before" | "after";
-};
-
-function composePrompt(mainPrompt: string, insertedPrompts: InsertedPrompt[]): string {
-  const before = insertedPrompts.filter((prompt) => prompt.placement !== "after");
-  const after = insertedPrompts.filter((prompt) => prompt.placement === "after");
-  return [
-    ...before.map((prompt) => prompt.text.trim()).filter(Boolean),
-    mainPrompt.trim(),
-    ...after.map((prompt) => prompt.text.trim()).filter(Boolean),
-  ].filter(Boolean).join("\n\n");
-}
-
-function normalizeInsertedPrompt(value: unknown): InsertedPrompt | null {
-  if (!value || typeof value !== "object") return null;
-  const item = value as Record<string, unknown>;
-  if (
-    typeof item.id !== "string" ||
-    typeof item.name !== "string" ||
-    typeof item.text !== "string"
-  ) {
-    return null;
-  }
-  return {
-    id: item.id,
-    name: item.name,
-    text: item.text,
-    placement: item.placement === "after" ? "after" : "before",
-  };
-}
-
-function normalizeInsertedPromptArray(value: unknown): InsertedPrompt[] | null {
-  if (!Array.isArray(value)) return null;
-  const prompts = value.map(normalizeInsertedPrompt);
-  return prompts.every((item): item is InsertedPrompt => item !== null) ? prompts : null;
-}
-
-function cloneInsertedPrompts(
-  prompts: InsertedPrompt[],
-): ComposerInsertedPromptSnapshot[] {
-  return prompts.map((prompt) => ({
-    id: prompt.id,
-    name: prompt.name,
-    text: prompt.text,
-    placement: prompt.placement === "after" ? "after" : "before",
-  }));
-}
-
-function getHistoryComposerPatch(
-  item: GenerateItem,
-): { prompt?: string; insertedPrompts?: InsertedPrompt[] } {
-  const restoredInsertedPrompts = normalizeInsertedPromptArray(item.composerInsertedPrompts);
-  if (typeof item.composerPrompt === "string") {
-    return {
-      prompt: item.composerPrompt,
-      insertedPrompts: restoredInsertedPrompts ?? [],
-    };
-  }
-  if (restoredInsertedPrompts) return { insertedPrompts: restoredInsertedPrompts };
-  return {};
-}
-
-function toPersistedInFlightJob(job: ServerInFlightJob): PersistedInFlight {
-  const meta = job.meta ?? {};
-  const kind =
-    job.kind === "classic" || job.kind === "node" || job.kind === "multimode"
-      ? job.kind
-      : meta.kind === "classic" || meta.kind === "node" || meta.kind === "multimode"
-        ? meta.kind
-        : undefined;
-  return {
-    id: job.requestId,
-    prompt: typeof job.prompt === "string" ? job.prompt : "",
-    startedAt: job.startedAt,
-    composerPrompt: typeof meta.composerPrompt === "string" ? meta.composerPrompt : undefined,
-    composerInsertedPrompts: normalizeInsertedPromptArray(meta.composerInsertedPrompts) ?? undefined,
-    phase: typeof job.phase === "string" ? job.phase : undefined,
-    sessionId: typeof meta.sessionId === "string" ? meta.sessionId : null,
-    parentNodeId: typeof meta.parentNodeId === "string" ? meta.parentNodeId : null,
-    clientNodeId: typeof meta.clientNodeId === "string" ? meta.clientNodeId : null,
-    kind,
-  };
-}
-
-function terminalJobError(job: ServerTerminalJob): Error & { code?: string; status?: number } {
-  const code = typeof job.errorCode === "string" && job.errorCode
-    ? job.errorCode
-    : "UNKNOWN";
-  const e = new Error(code === "EMPTY_RESPONSE"
-    ? "No image data returned from the image backend."
-    : "Generation failed on the server.") as Error & { code?: string; status?: number };
-  e.code = code;
-  e.status = typeof job.httpStatus === "number" ? job.httpStatus : undefined;
-  return e;
-}
-
-function isCanceledGenerationError(err: unknown): boolean {
-  if (!err || typeof err !== "object") return false;
-  const value = err as { code?: unknown; status?: unknown };
-  return value.code === "GENERATION_CANCELED" || value.status === 499;
-}
-
-function multimodeImageKey(item: GenerateItem): string {
-  return item.filename || item.image;
-}
-
-function mergeMultimodeImages(current: GenerateItem[], incoming: GenerateItem[]): GenerateItem[] {
-  const byKey = new Map(current.map((item) => [multimodeImageKey(item), item] as const));
-  for (const item of incoming) byKey.set(multimodeImageKey(item), item);
-  return [...byKey.values()].sort((a, b) =>
-    (a.sequenceIndex ?? Number.MAX_SAFE_INTEGER) -
-    (b.sequenceIndex ?? Number.MAX_SAFE_INTEGER),
-  );
-}
-
-function loadInFlight(): PersistedInFlight[] {
-  try {
-    const raw = localStorage.getItem(IN_FLIGHT_STORAGE_KEY);
-    if (!raw) return [];
-    const arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) return [];
-    const now = Date.now();
-    return arr
-      .filter(
-        (x) =>
-          x && typeof x.id === "string" && typeof x.prompt === "string" &&
-          typeof x.startedAt === "number" && now - x.startedAt < INFLIGHT_TTL_MS,
-      )
-      .map((x) => ({
-        id: x.id,
-        prompt: x.prompt,
-        startedAt: x.startedAt,
-        composerPrompt: typeof x.composerPrompt === "string" ? x.composerPrompt : undefined,
-        composerInsertedPrompts: normalizeInsertedPromptArray(x.composerInsertedPrompts) ?? undefined,
-        phase: typeof x.phase === "string" ? x.phase : undefined,
-        sessionId: typeof x.sessionId === "string" ? x.sessionId : null,
-        parentNodeId: typeof x.parentNodeId === "string" ? x.parentNodeId : null,
-        clientNodeId: typeof x.clientNodeId === "string" ? x.clientNodeId : null,
-        kind: x.kind === "classic" || x.kind === "node" || x.kind === "multimode" || x.kind === "video" ? x.kind : undefined,
-      }));
-  } catch {
-    return [];
-  }
-}
 
 function saveInFlight(list: PersistedInFlight[]): void {
   try {
@@ -558,178 +240,7 @@ function saveInFlight(list: PersistedInFlight[]): void {
   }
 }
 
-function loadSelectedFilename(): string | null {
-  try {
-    const raw = localStorage.getItem(SELECTED_FILENAME_STORAGE_KEY);
-    return typeof raw === "string" && raw.length > 0 ? raw : null;
-  } catch {
-    return null;
-  }
-}
 
-function saveSelectedFilename(filename: string | null): void {
-  try {
-    if (filename) localStorage.setItem(SELECTED_FILENAME_STORAGE_KEY, filename);
-    else localStorage.removeItem(SELECTED_FILENAME_STORAGE_KEY);
-  } catch {}
-}
-
-function loadActiveSessionId(): string | null {
-  try {
-    const raw = localStorage.getItem(ACTIVE_SESSION_ID_STORAGE_KEY);
-    return typeof raw === "string" && raw.length > 0 ? raw : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveActiveSessionId(id: string | null): void {
-  try {
-    if (id) localStorage.setItem(ACTIVE_SESSION_ID_STORAGE_KEY, id);
-    else localStorage.removeItem(ACTIVE_SESSION_ID_STORAGE_KEY);
-  } catch {}
-}
-
-const HISTORY_LIMIT = 500;
-const MAX_REFERENCE_IMAGES = 5;
-
-type GraphSaveReason =
-  | "debounced"
-  | "manual"
-  | "switch-session"
-  | "recovery"
-  | "beforeunload"
-  | "queued"
-  | "edge-disconnect"
-  | "node-complete"
-  | "video-node-complete";
-type GraphSaveResult = "saved" | "skipped" | "conflict" | "failed";
-
-function narrowGenerateKind(k?: string | null): GenerateItem["kind"] {
-  return k === "classic" || k === "edit" || k === "generate" ||
-    k === "card-news-card" || k === "card-news-set" ? k : null;
-}
-
-function mapHistoryItem(it: Awaited<ReturnType<typeof getHistory>>["items"][number]): GenerateItem {
-  const composerInsertedPrompts = normalizeInsertedPromptArray(it.composerInsertedPrompts);
-  const isVideo = it.mediaType === "video" || /\.(mp4|webm|mov)$/i.test(it.filename ?? "");
-  return {
-    image: it.url,
-    url: it.url,
-    mediaType: it.mediaType,
-    video: it.video ?? null,
-    videoSeries: it.videoSeries ?? null,
-    videoContinuity: it.videoContinuity ?? null,
-    filename: it.filename,
-    // Use the server-generated thumbnail. For videos, never fall back to the
-    // raw url — an <img src=*.mp4> can't render. Leaving thumb undefined lets
-    // the UI fall back to a real <video> element. Images can safely use the
-    // original as a last resort.
-    thumb: it.thumb ?? (isVideo ? undefined : it.url),
-    prompt: it.prompt ?? undefined,
-    userPrompt: it.userPrompt ?? null,
-    revisedPrompt: it.revisedPrompt ?? null,
-    promptMode: it.promptMode ?? null,
-    composerPrompt: it.composerPrompt ?? null,
-    composerInsertedPrompts: composerInsertedPrompts
-      ? cloneInsertedPrompts(composerInsertedPrompts)
-      : null,
-    size: it.size ?? undefined,
-    quality: it.quality ?? undefined,
-    format: it.format as Format | undefined,
-    model: it.model ?? undefined,
-    reasoningEffort: (it.reasoningEffort as GenerateItem["reasoningEffort"]) ?? undefined,
-    elapsed: it.elapsed ?? undefined,
-    provider: it.provider,
-    usage: (it.usage as GenerateItem["usage"]) ?? undefined,
-    createdAt: it.createdAt,
-    sessionId: it.sessionId ?? null,
-    nodeId: it.nodeId ?? null,
-    clientNodeId: it.clientNodeId ?? null,
-    requestId: it.requestId ?? null,
-    kind: narrowGenerateKind(it.kind),
-    canvasVersion: Boolean(it.canvasVersion),
-    canvasSourceFilename: it.canvasSourceFilename ?? null,
-    canvasEditableFilename: it.canvasEditableFilename ?? null,
-    canvasMergedAt: it.canvasMergedAt ?? undefined,
-    setId: it.setId ?? null,
-    cardId: it.cardId ?? null,
-    cardOrder: it.cardOrder ?? null,
-    headline: it.headline ?? null,
-    body: it.body ?? null,
-    cards: it.cards,
-    refsCount: it.refsCount ?? 0,
-    isFavorite: it.isFavorite ?? false,
-    sequenceId: it.sequenceId ?? null,
-    sequenceIndex: it.sequenceIndex ?? null,
-    sequenceTotalRequested: it.sequenceTotalRequested ?? null,
-    sequenceTotalReturned: it.sequenceTotalReturned ?? null,
-    sequenceStatus: it.sequenceStatus ?? null,
-  };
-}
-
-function historyKey(item: Pick<GenerateItem, "filename" | "image">): string {
-  return item.filename ?? item.image;
-}
-
-function withoutHistoryDuplicate(
-  history: GenerateItem[],
-  item: Pick<GenerateItem, "filename" | "image">,
-): GenerateItem[] {
-  const key = historyKey(item);
-  return history.filter((existing) => historyKey(existing) !== key);
-}
-
-function findHistoryDuplicate(
-  history: GenerateItem[],
-  item: Pick<GenerateItem, "filename" | "image">,
-): GenerateItem | undefined {
-  const key = historyKey(item);
-  return history.find((existing) => historyKey(existing) === key);
-}
-
-function preserveHistoryMetadata(incoming: GenerateItem, existing?: GenerateItem): GenerateItem {
-  if (!existing) return incoming;
-  return {
-    ...existing,
-    ...incoming,
-    createdAt: incoming.createdAt ?? existing.createdAt,
-    requestId: incoming.requestId ?? existing.requestId,
-    sessionId: incoming.sessionId ?? existing.sessionId,
-    kind: incoming.kind ?? existing.kind,
-    refsCount: incoming.refsCount ?? existing.refsCount,
-    isFavorite: incoming.isFavorite ?? existing.isFavorite,
-  };
-}
-
-function mergeHistoryItems(current: GenerateItem[], incoming: GenerateItem[]): GenerateItem[] {
-  const byKey = new Map(current.map((item) => [historyKey(item), item]));
-  for (const item of incoming) byKey.set(historyKey(item), item);
-  return [
-    ...current.map((item) => byKey.get(historyKey(item)) ?? item),
-    ...incoming.filter((item) => !current.some((h) => historyKey(h) === historyKey(item))),
-  ];
-}
-
-function retainHistoryItems(items: GenerateItem[], limit: number): GenerateItem[] {
-  return items.slice(0, Math.max(HISTORY_LIMIT, limit));
-}
-
-function stripDataUrlPrefix(dataUrl: string): string {
-  return dataUrl.replace(/^data:[^;]+;base64,/, "");
-}
-
-async function compressReferenceSource(src: string, filename = "reference.png"): Promise<string> {
-  const resp = await fetch(src);
-  if (!resp.ok) throw new Error(`reference fetch failed: ${resp.status}`);
-  const blob = await resp.blob();
-  const file = new File([blob], filename, { type: blob.type || "image/png" });
-  return compressToBase64(file, {
-    // Generated PNGs can exceed the server's base64 reference cap. For i2i
-    // references, a flattened JPEG is the intended upload format.
-    preserveTransparency: false,
-  });
-}
 
 export type ImageNodeStatus =
   | "empty"
@@ -895,45 +406,6 @@ type MetadataRestoreState = {
   source: "xmp" | "png-comment" | string;
   targetNodeId?: ClientNodeId | null;
 } | null;
-
-export type MultimodeSequenceState = {
-  sequenceId: string;
-  requestId: string;
-  requested: number;
-  returned: number;
-  images: GenerateItem[];
-  partials: Array<{ image: string; index?: number | null }>;
-  status: MultimodeSequenceStatus;
-  elapsed?: string;
-  error?: string | null;
-};
-
-function removeImageFromMultimodeSequences(
-  sequences: Record<string, MultimodeSequenceState>,
-  filename: string,
-): Record<string, MultimodeSequenceState> {
-  let changed = false;
-  const next: Record<string, MultimodeSequenceState> = {};
-  for (const [id, sequence] of Object.entries(sequences)) {
-    const images = sequence.images.filter((image) => image.filename !== filename);
-    if (images.length === sequence.images.length) {
-      next[id] = sequence;
-      continue;
-    }
-    changed = true;
-    if (images.length === 0) continue;
-    next[id] = {
-      ...sequence,
-      images,
-      returned: images.length,
-      status:
-        sequence.status === "complete" && images.length < sequence.requested
-          ? "partial"
-          : sequence.status,
-    };
-  }
-  return changed ? next : sequences;
-}
 
 function getActiveSidebarSequenceId(
   state: Pick<AppState, "multimodePreviewFlightId" | "multimodeSequences">,
@@ -1216,124 +688,6 @@ type AppState = {
   setCanvasExportBackground: (mode: CanvasExportBackground) => void;
   setCanvasExportMatteColor: (color: HexColor) => void;
 };
-
-function formatSize(w: number, h: number): string {
-  return `${w}x${h}`;
-}
-
-function normalizeCount(value: number): Count {
-  return Math.min(8, Math.max(1, Math.trunc(value || 1)));
-}
-
-const SIZE_PRESET_VALUES = new Set<SizePreset>([
-  "1024x1024",
-  "1536x1024",
-  "1024x1536",
-  "1360x1024",
-  "1024x1360",
-  "1824x1024",
-  "1024x1824",
-  "2048x2048",
-  "2048x1152",
-  "1152x2048",
-  "3840x2160",
-  "2160x3840",
-  "auto",
-  "custom",
-]);
-
-function parseMetadataSize(size?: string | null): { preset?: SizePreset; w?: number; h?: number } {
-  if (typeof size !== "string") return {};
-  if (SIZE_PRESET_VALUES.has(size as SizePreset)) return { preset: size as SizePreset };
-  const match = /^(\d+)x(\d+)$/.exec(size);
-  if (!match) return {};
-  const w = Number(match[1]);
-  const h = Number(match[2]);
-  if (!Number.isFinite(w) || !Number.isFinite(h)) return {};
-  return { preset: "custom", w, h };
-}
-
-function isQuality(value: unknown): value is Quality {
-  return value === "low" || value === "medium" || value === "high";
-}
-
-function isFormat(value: unknown): value is Format {
-  return value === "png" || value === "jpeg" || value === "webp";
-}
-
-function isModeration(value: unknown): value is Moderation {
-  return value === "low" || value === "auto";
-}
-
-function isProvider(value: unknown): value is Provider {
-  return value === "oauth" || value === "api" || value === "grok" || value === "grok-api" || value === "agy" || value === "gemini-api";
-}
-
-function isPromptMode(value: unknown): value is "auto" | "direct" {
-  return value === "auto" || value === "direct";
-}
-
-function isSizePreset(value: unknown): value is SizePreset {
-  return typeof value === "string" && SIZE_PRESET_VALUES.has(value as SizePreset);
-}
-
-type GenerationDefaults = Partial<{
-  provider: Provider;
-  quality: Quality;
-  sizePreset: SizePreset;
-  customW: number;
-  customH: number;
-  format: Format;
-  moderation: Moderation;
-  count: Count;
-  multimode: boolean;
-  multimodeMaxImages: Count;
-  promptMode: "auto" | "direct";
-  prompt: string;
-  insertedPrompts: InsertedPrompt[];
-}>;
-
-function loadGenerationDefaults(): GenerationDefaults {
-  try {
-    const raw = localStorage.getItem(GENERATION_DEFAULTS_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const out: GenerationDefaults = {};
-    if (isProvider(parsed.provider)) out.provider = parsed.provider;
-    if (isQuality(parsed.quality)) out.quality = parsed.quality;
-    if (isSizePreset(parsed.sizePreset)) out.sizePreset = parsed.sizePreset;
-    if (typeof parsed.customW === "number" && Number.isFinite(parsed.customW)) {
-      out.customW = parseRequestedCustomSide(parsed.customW, 1920);
-    }
-    if (typeof parsed.customH === "number" && Number.isFinite(parsed.customH)) {
-      out.customH = parseRequestedCustomSide(parsed.customH, 1088);
-    }
-    if (isFormat(parsed.format)) out.format = parsed.format;
-    if (isModeration(parsed.moderation)) out.moderation = parsed.moderation;
-    if (typeof parsed.count === "number") out.count = normalizeCount(parsed.count);
-    if (typeof parsed.multimode === "boolean") out.multimode = parsed.multimode;
-    if (typeof parsed.multimodeMaxImages === "number") {
-      out.multimodeMaxImages = normalizeCount(parsed.multimodeMaxImages);
-    }
-    if (isPromptMode(parsed.promptMode)) out.promptMode = parsed.promptMode;
-    if (typeof parsed.prompt === "string") out.prompt = parsed.prompt;
-    const insertedPrompts = normalizeInsertedPromptArray(parsed.insertedPrompts);
-    if (insertedPrompts) out.insertedPrompts = insertedPrompts;
-    return out;
-  } catch {
-    return {};
-  }
-}
-
-function saveGenerationDefaultsPatch(patch: GenerationDefaults): void {
-  try {
-    const current = loadGenerationDefaults();
-    localStorage.setItem(
-      GENERATION_DEFAULTS_STORAGE_KEY,
-      JSON.stringify({ ...current, ...patch }),
-    );
-  } catch {}
-}
 
 function applyMetadataToState(
   state: AppState,
