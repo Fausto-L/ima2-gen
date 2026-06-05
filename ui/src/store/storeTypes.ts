@@ -456,3 +456,6 @@ export type AppState = {
   setCanvasExportBackground: (mode: CanvasExportBackground) => void;
   setCanvasExportMatteColor: (color: HexColor) => void;
 };
+
+export type StoreSet = (p: Partial<AppState> | ((s: AppState) => Partial<AppState>)) => void;
+export type StoreGet = () => AppState;
