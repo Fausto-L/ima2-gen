@@ -5,13 +5,11 @@
 import { create } from "zustand";
 import type {
   GenerateItem,
-  EmbeddedGenerationMetadata,
   MultimodeSequenceStatus,
   VideoResolutionUI,
 } from "../types";
 import {
   cancelInflight,
-  readImageMetadata,
   getBrowserId,
   getPromptLibrary,
   createPrompt,
@@ -20,14 +18,11 @@ import {
   toggleGalleryFavorite,
   importPromptLibrary,
 } from "../lib/api";
-import { readFileAsDataURL } from "../lib/image";
-import { compressToBase64, isHeic, hasAlphaChannel } from "../lib/compress";
 import { parseRequestedCustomSide } from "../lib/size";
 import {
   DEFAULT_IMAGE_MODEL,
   isGrokImageModel,
   isGeminiImageModel,
-  isImageModel,
 } from "../lib/imageModels";
 import {
   GALLERY_DEFAULT_SCOPE_STORAGE_KEY,
@@ -77,10 +72,6 @@ import {
   saveSelectedFilename,
   formatSize,
   normalizeCount,
-  parseMetadataSize,
-  isQuality,
-  isFormat,
-  isModeration,
   loadGenerationDefaults,
   saveGenerationDefaultsPatch,
 } from "./storePersistence";
@@ -89,7 +80,6 @@ import {
   HISTORY_LIMIT,
   MAX_REFERENCE_IMAGES,
   retainHistoryItems,
-  compressReferenceSource,
   saveInFlight,
   getCustomSizeConfirmation,
 } from "./storeHelpers";
@@ -155,39 +145,20 @@ import {
   renameCurrentSessionImpl,
   deleteSessionByIdImpl,
 } from "./storeSessionImpl";
+import {
+  addReferencesImpl,
+  readDroppedImageMetadataImpl,
+  applyMetadataRestoreImpl,
+  removeReferenceImpl,
+  clearReferencesImpl,
+  attachCanvasVersionReferenceImpl,
+  useCurrentAsReferenceImpl,
+  useImageAsReferenceImpl,
+} from "./storeReferenceImpl";
 
 export type { GalleryScope, ComposeSheetTab, ImageNodeStatus, ImageNodeData, GraphNode, GraphEdge, MultimodeSequenceState } from "./storeTypes";
 export { flushGraphSaveBeacon, selectCurrentSessionId } from "./storeGraphSave";
 import type { AppState, GraphNode, GraphEdge } from "./storeTypes";
-
-
-
-function applyMetadataToState(
-  state: AppState,
-  metadata: EmbeddedGenerationMetadata,
-): Partial<AppState> {
-  const patch: Partial<AppState> = {};
-  const prompt = metadata.userPrompt || metadata.prompt;
-  if (typeof prompt === "string") patch.prompt = prompt;
-  if (isQuality(metadata.quality)) patch.quality = metadata.quality;
-  if (isFormat(metadata.format)) patch.format = metadata.format;
-  if (isModeration(metadata.moderation)) patch.moderation = metadata.moderation;
-  if (metadata.promptMode === "auto" || metadata.promptMode === "direct") {
-    patch.promptMode = metadata.promptMode;
-  }
-  if (metadata.model && isImageModel(metadata.model)) {
-    patch.imageModel = metadata.model;
-  }
-  const size = parseMetadataSize(metadata.size);
-  if (size.preset) patch.sizePreset = size.preset;
-  if (size.preset === "custom" && size.w && size.h) {
-    patch.customW = parseRequestedCustomSide(size.w, state.customW);
-    patch.customH = parseRequestedCustomSide(size.h, state.customH);
-  }
-  return patch;
-}
-
-
 const storedGenerationDefaults = loadGenerationDefaults();
 const storedImageModel = loadImageModel();
 const storedVideoDefaults = loadVideoDefaults();
@@ -241,38 +212,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   canvasExportBackground: loadCanvasExportBackground().mode,
   canvasExportMatteColor: loadCanvasExportBackground().matteColor,
 
-  addReferences: async (files) => {
-    const allowed = MAX_REFERENCE_IMAGES - get().referenceImages.length;
-    const toAdd = files.slice(0, Math.max(0, allowed));
-    const heicSkipped = toAdd.filter(isHeic);
-    const usable = toAdd.filter((f) => !isHeic(f));
-    const results = await Promise.all(
-      usable.map(async (f) => {
-        try {
-          return await compressToBase64(f, {
-            preserveTransparency: hasAlphaChannel(f),
-          });
-        } catch (err) {
-          console.warn("[addReferences] compress failed", err);
-          return null;
-        }
-      }),
-    );
-    const valid = results.filter((x): x is string => !!x);
-    set((s) => ({
-      referenceImages: [...s.referenceImages, ...valid].slice(0, MAX_REFERENCE_IMAGES),
-    }));
-    if (heicSkipped.length > 0) {
-      get().showToast(t("toast.refHeicUnsupported"), true);
-    }
-    const failedCount = usable.length - valid.length;
-    if (failedCount > 0) {
-      get().showToast(t("toast.refTooLarge"), true);
-    }
-    if (files.length > allowed) {
-      get().showToast(t("toast.refLimitExceeded"), true);
-    }
-  },
+  addReferences: (files) => addReferencesImpl(files, set, get),
   addReferenceDataUrl: (dataUrl) => {
     set((s) =>
       s.referenceImages.length >= MAX_REFERENCE_IMAGES
@@ -281,50 +221,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     );
   },
   metadataRestore: null,
-  readDroppedImageMetadata: async (file, targetNodeId = null) => {
-    if (!file.type.startsWith("image/")) return false;
-    let dataUrl = "";
-    try {
-      dataUrl = await readFileAsDataURL(file);
-      const result = await readImageMetadata({ filename: file.name, dataUrl });
-      if (!result.metadata) return false;
-      set({
-        metadataRestore: {
-          filename: file.name,
-          image: dataUrl,
-          metadata: result.metadata,
-          source: result.source ?? "xmp",
-          targetNodeId,
-        },
-      });
-      return true;
-    } catch {
-      get().showToast(t("metadata.readFailed"), true);
-      return false;
-    }
-  },
-  applyMetadataRestore: () => {
-    const pending = get().metadataRestore;
-    if (!pending) return;
-    const patch = applyMetadataToState(get(), pending.metadata);
-    if (patch.imageModel) saveImageModel(patch.imageModel);
-    if (pending.targetNodeId && typeof patch.prompt === "string") {
-      const prompt = patch.prompt;
-      set({
-        ...patch,
-        metadataRestore: null,
-        graphNodes: get().graphNodes.map((n) =>
-          n.id === pending.targetNodeId
-            ? { ...n, data: { ...n.data, prompt } }
-            : n,
-        ),
-      });
-      get().scheduleGraphSave();
-    } else {
-      set({ ...patch, metadataRestore: null });
-    }
-    get().showToast(t("metadata.applied"));
-  },
+  readDroppedImageMetadata: (file, targetNodeId = null) => readDroppedImageMetadataImpl(file, targetNodeId, set, get),
+  applyMetadataRestore: () => applyMetadataRestoreImpl(set, get),
   cancelMetadataRestore: () => set({ metadataRestore: null }),
   addMetadataRestoreAsReference: () => {
     const pending = get().metadataRestore;
@@ -336,94 +234,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     set({ metadataRestore: null });
   },
-  removeReference: (index) => {
-    set((s) => {
-      const referenceImages = s.referenceImages.filter((_, i) => i !== index);
-      const clearContinuity = referenceImages.length === 0;
-      const insertedPrompts = clearContinuity
-        ? s.insertedPrompts.filter((prompt) => !prompt.id.startsWith("video-continuity:"))
-        : s.insertedPrompts;
-      if (insertedPrompts.length !== s.insertedPrompts.length) {
-        saveGenerationDefaultsPatch({ insertedPrompts });
-      }
-      return {
-        referenceImages,
-        insertedPrompts,
-        videoContinuityLineage: clearContinuity ? null : s.videoContinuityLineage,
-        canvasReferenceImage:
-          s.referenceImages[index] === s.canvasReferenceImage ? null : s.canvasReferenceImage,
-      };
-    });
-  },
-  clearReferences: () => {
-    const insertedPrompts = get().insertedPrompts.filter((prompt) => !prompt.id.startsWith("video-continuity:"));
-    if (insertedPrompts.length !== get().insertedPrompts.length) {
-      saveGenerationDefaultsPatch({ insertedPrompts });
-    }
-    set({ referenceImages: [], canvasReferenceImage: null, videoContinuityLineage: null, insertedPrompts });
-  },
-  attachCanvasVersionReference: async (item) => {
-    let dataUrl: string;
-    try {
-      dataUrl = await compressReferenceSource(
-        item.image,
-        item.filename || "canvas-version-reference.png",
-      );
-    } catch {
-      get().showToast(t("toast.currentImageLoadFailed"), true);
-      throw new Error("canvas_reference_attach_failed");
-    }
-    set((s) => {
-      const withoutPrevious = s.canvasReferenceImage
-        ? s.referenceImages.filter((ref) => ref !== s.canvasReferenceImage)
-        : s.referenceImages;
-      const withoutDuplicate = withoutPrevious.filter((ref) => ref !== dataUrl);
-      return {
-        canvasReferenceImage: dataUrl,
-        referenceImages: [dataUrl, ...withoutDuplicate].slice(0, MAX_REFERENCE_IMAGES),
-      };
-    });
-    get().showToast(t("canvas.version.usingAsReference"));
-  },
-  useCurrentAsReference: async () => {
-    const cur = get().currentImage;
-    if (!cur) {
-      get().showToast(t("toast.noCurrentImageForRef"), true);
-      return;
-    }
-    if (get().referenceImages.length >= MAX_REFERENCE_IMAGES) {
-      get().showToast(t("toast.refSlotFull"), true);
-      return;
-    }
-    let dataUrl: string;
-    try {
-      dataUrl = await compressReferenceSource(cur.image, cur.filename || "current-reference.png");
-    } catch {
-      get().showToast(t("toast.currentImageLoadFailed"), true);
-      return;
-    }
-    set((s) => ({
-      referenceImages: [...s.referenceImages, dataUrl].slice(0, MAX_REFERENCE_IMAGES),
-    }));
-    get().showToast(t("toast.addedCurrentAsRef"));
-  },
-  useImageAsReference: async (item) => {
-    if (get().referenceImages.length >= MAX_REFERENCE_IMAGES) {
-      get().showToast(t("toast.refSlotFull"), true);
-      return;
-    }
-    let dataUrl: string;
-    try {
-      dataUrl = await compressReferenceSource(item.image, item.filename || "canvas-reference.png");
-    } catch {
-      get().showToast(t("toast.currentImageLoadFailed"), true);
-      return;
-    }
-    set((s) => ({
-      referenceImages: [...s.referenceImages, dataUrl].slice(0, MAX_REFERENCE_IMAGES),
-    }));
-    get().showToast(t("toast.addedCurrentAsRef"));
-  },
+  removeReference: (index) => removeReferenceImpl(index, set, get),
+  clearReferences: () => clearReferencesImpl(set, get),
+  attachCanvasVersionReference: (item) => attachCanvasVersionReferenceImpl(item, set, get),
+  useCurrentAsReference: () => useCurrentAsReferenceImpl(set, get),
+  useImageAsReference: (item) => useImageAsReferenceImpl(item, set, get),
   activeGenerations: 0,
   unseenGeneratedCount: 0,
   inFlight: [],
