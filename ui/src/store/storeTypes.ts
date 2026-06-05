@@ -2,7 +2,6 @@ import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
 import type { CanvasExportBackground, HexColor } from "../types/canvas";
 import type {
   Count,
-  ComposerInsertedPromptSnapshot,
   Format,
   GenerateItem,
   EmbeddedGenerationMetadata,

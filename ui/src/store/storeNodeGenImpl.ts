@@ -17,7 +17,6 @@ import { t } from "../i18n";
 import {
   type PersistedInFlight,
   stripDataUrlPrefix,
-  saveInFlight,
 } from "./storeHelpers";
 import type { AppState } from "./storeTypes";
 

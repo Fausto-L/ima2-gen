@@ -3,39 +3,21 @@
 // tests/settings-persistence-contract.test.js enforces this invariant.
 // Legacy generation-controls contract: GENERATION_DEFAULTS_STORAGE_KEY = "ima2.generationDefaults".
 import { create } from "zustand";
-import type { CanvasExportBackground, HexColor } from "../types/canvas";
 import type {
-  Count,
-  ComposerInsertedPromptSnapshot,
-  Format,
   GenerateItem,
-  HistoryStripLayout,
   EmbeddedGenerationMetadata,
-  ImageModel,
-  Moderation,
   MultimodeSequenceStatus,
-  Provider,
-  Quality,
-  ResolvedTheme,
-  SettingsSection,
-  SizePreset,
-  ThemeFamily,
-  ThemePreference,
-  UIMode,
   VideoResolutionUI,
 } from "../types";
-import { THEME_FAMILIES } from "../types";
 import {
   getHistory,
   getInflight,
   cancelInflight,
-  postNodeGenerateStream,
   listSessions as apiListSessions,
   createSession as apiCreateSession,
   getSession as apiGetSession,
   renameSession as apiRenameSession,
   deleteSession as apiDeleteSession,
-  saveSessionGraph,
   readImageMetadata,
   getBrowserId,
   deleteHistoryItem,
@@ -48,16 +30,11 @@ import {
   toggleGalleryFavorite,
   importPromptLibrary,
   importLocalImage,
-  type HistoryCursor,
   type SessionSummary,
 } from "../lib/api";
 import { readFileAsDataURL } from "../lib/image";
 import { compressToBase64, isHeic, hasAlphaChannel } from "../lib/compress";
-import {
-  normalizeCustomSizePairDetailed,
-  parseRequestedCustomSide,
-  type CustomSizeAdjustmentReason,
-} from "../lib/size";
+import { parseRequestedCustomSide } from "../lib/size";
 import {
   DEFAULT_IMAGE_MODEL,
   isGrokImageModel,
@@ -65,30 +42,13 @@ import {
   isImageModel,
 } from "../lib/imageModels";
 import {
-  DEFAULT_REASONING_EFFORT,
-  isReasoningEffort,
-  type ReasoningEffort,
-} from "../lib/reasoning";
-import {
-  DEFAULT_WEB_SEARCH_ENABLED,
-} from "../lib/webSearch";
-import {
-  ACTIVE_SESSION_ID_STORAGE_KEY,
-  CANVAS_EXPORT_BG_KEY,
   GALLERY_DEFAULT_SCOPE_STORAGE_KEY,
   GALLERY_SCOPE_STORAGE_KEY,
-  GENERATION_DEFAULTS_STORAGE_KEY,
   HISTORY_STRIP_LAYOUT_STORAGE_KEY,
-  IMAGE_MODEL_STORAGE_KEY,
-  IN_FLIGHT_STORAGE_KEY,
-  REASONING_EFFORT_STORAGE_KEY,
   RIGHT_PANEL_OPEN_STORAGE_KEY,
-  SELECTED_FILENAME_STORAGE_KEY,
   THEME_FAMILY_STORAGE_KEY,
   THEME_STORAGE_KEY,
   UI_MODE_STORAGE_KEY,
-  VIDEO_DEFAULTS_STORAGE_KEY,
-  WEB_SEARCH_STORAGE_KEY,
 } from "./persistenceRegistry";
 import { newClientNodeId, type ClientNodeId } from "../lib/graph";
 import {
@@ -105,25 +65,13 @@ import {
   applySelectedNodeIds,
   getSelectedNodeIds,
 } from "../lib/nodeSelection";
-import {
-  getDirectUnselectedChildren,
-  getUnselectedDownstreamIds,
-  nodeHasImage,
-  topologicalSortSelected,
-  validateBatchDependencies,
-  type NodeBatchMode,
-} from "../lib/nodeBatch";
-import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
-import { t, loadLocale, saveLocale, type Locale } from "../i18n";
-import type { ImaErrorCode } from "../lib/errorCodes";
-import { handleError } from "../lib/errorHandler";
+import { t, loadLocale, saveLocale } from "../i18n";
 import { ENABLE_AGENT_MODE, ENABLE_CARD_NEWS_MODE, ENABLE_NODE_MODE } from "../lib/devMode";
 import {
   getNeighborAfterRemoval,
   getShortcutTarget,
   getVisibleGalleryItems,
   resolveVisibleShortcutCurrent,
-  type GalleryShortcutAction,
 } from "../lib/galleryShortcuts";
 import { compareSequenceItems, getSidebarHistoryShortcutTarget } from "../lib/history/sidebarHistory";
 import { resolveWorkspaceSettings } from "../lib/workspaceProfile";
@@ -132,9 +80,6 @@ import { releaseOrphanedPreview } from "../lib/multimodeSequences";
 import {
   type InsertedPrompt,
   composePrompt,
-  normalizeInsertedPrompt,
-  normalizeInsertedPromptArray,
-  cloneInsertedPrompts,
   getHistoryComposerPatch,
   loadRightPanelOpen,
   loadUIMode,
@@ -150,7 +95,6 @@ import {
   saveReasoningEffort,
   loadWebSearchEnabled,
   saveWebSearchEnabled,
-  type VideoDefaults,
   loadVideoDefaults,
   saveVideoDefaults,
   resolveThemePreference,
@@ -160,36 +104,24 @@ import {
   saveActiveSessionId,
   formatSize,
   normalizeCount,
-  SIZE_PRESET_VALUES,
   parseMetadataSize,
   isQuality,
   isFormat,
   isModeration,
-  isProvider,
-  isPromptMode,
-  isSizePreset,
-  type GenerationDefaults,
   loadGenerationDefaults,
   saveGenerationDefaultsPatch,
 } from "./storePersistence";
 import {
-  type PersistedInFlight,
   loadInFlight,
   HISTORY_LIMIT,
   MAX_REFERENCE_IMAGES,
-  type GraphSaveReason,
-  type GraphSaveResult,
-  narrowGenerateKind,
   mapHistoryItem,
-  historyKey,
   withoutHistoryDuplicate,
   findHistoryDuplicate,
   preserveHistoryMetadata,
   mergeHistoryItems,
   retainHistoryItems,
-  stripDataUrlPrefix,
   compressReferenceSource,
-  type MultimodeSequenceState,
   removeImageFromMultimodeSequences,
   saveInFlight,
   getCustomSizeConfirmation,
@@ -199,6 +131,7 @@ import {
   scheduleGraphSaveImpl,
   flushGraphSaveImpl,
   addHistory,
+  recoverGraphNodesFromHistory,
 } from "./storeGraphSave";
 import {
   runGenerateNodeInPlaceImpl,
@@ -219,12 +152,7 @@ import {
 
 export type { GalleryScope, ComposeSheetTab, ImageNodeStatus, ImageNodeData, GraphNode, GraphEdge, MultimodeSequenceState } from "./storeTypes";
 export { flushGraphSaveBeacon, selectCurrentSessionId } from "./storeGraphSave";
-import type { AppState, ToastEntry, ToastState, ErrorCardEntry, TrashPendingState, CustomSizeConfirmState, MetadataRestoreState, ComposeSheetTab } from "./storeTypes";
-
-
-
-
-import type { ImageNodeStatus, ImageNodeData, GraphNode, GraphEdge } from "./storeTypes";
+import type { AppState, GraphNode, GraphEdge } from "./storeTypes";
 
 const DEFAULT_CHILD_SOURCE_HANDLE = "source-right";
 const DEFAULT_CHILD_TARGET_HANDLE = "target-left";

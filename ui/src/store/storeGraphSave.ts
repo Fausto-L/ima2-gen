@@ -138,7 +138,7 @@ function serializeGraphEdgesForSave(graphEdges: GraphEdge[]): SessionGraphEdge[]
   }));
 }
 
-async function recoverGraphNodesFromHistory(
+export async function recoverGraphNodesFromHistory(
   get: () => AppState,
   set: (patch: Partial<AppState>) => void,
 ): Promise<void> {

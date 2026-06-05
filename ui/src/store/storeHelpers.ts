@@ -1,7 +1,6 @@
 import type {
   Format,
   GenerateItem,
-  MultimodeSequenceStatus,
   UIMode,
 } from "../types";
 import {
@@ -11,14 +10,12 @@ import {
 import { compressToBase64 } from "../lib/compress";
 import { IN_FLIGHT_STORAGE_KEY } from "./persistenceRegistry";
 import { normalizeCustomSizePairDetailed } from "../lib/size";
-import { t } from "../i18n";
 import {
   normalizeInsertedPromptArray,
   cloneInsertedPrompts,
 } from "./storePersistence";
 import type {
   AppState,
-  InsertedPrompt,
   PersistedInFlight,
   ServerInFlightJob,
   ServerTerminalJob,

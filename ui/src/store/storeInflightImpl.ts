@@ -2,8 +2,6 @@ import type { GenerateItem } from "../types";
 import { getHistory } from "../lib/api";
 import { handleError } from "../lib/errorHandler";
 import {
-  type PersistedInFlight,
-  type ServerInFlightJob,
   type ServerTerminalJob,
   INFLIGHT_TTL_MS,
   getInflightQueryScopes,
