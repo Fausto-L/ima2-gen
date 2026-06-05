@@ -57,10 +57,8 @@ import {
   importLocalImage,
   type HistoryCursor,
   type SessionSummary,
-  type SessionFull,
-  type SessionGraphEdge,
 } from "../lib/api";
-import { compressImage, readFileAsDataURL } from "../lib/image";
+import { readFileAsDataURL } from "../lib/image";
 import { compressToBase64, isHeic, hasAlphaChannel } from "../lib/compress";
 import {
   normalizeCustomSizePairDetailed,
@@ -89,7 +87,6 @@ import {
   GALLERY_DEFAULT_SCOPE_STORAGE_KEY,
   GALLERY_SCOPE_STORAGE_KEY,
   GENERATION_DEFAULTS_STORAGE_KEY,
-  GRAPH_TAB_ID_KEY,
   HISTORY_STRIP_LAYOUT_STORAGE_KEY,
   IMAGE_MODEL_STORAGE_KEY,
   IN_FLIGHT_STORAGE_KEY,
@@ -110,8 +107,6 @@ import {
 import { getNextChildPosition, getNextRootPosition } from "../lib/nodeLayout";
 import {
   clearNodeRefs as clearStoredNodeRefs,
-  loadNodeRefs,
-  pruneNodeRefs,
   saveNodeRefs,
 } from "../lib/nodeRefStorage";
 import {
@@ -141,7 +136,7 @@ import {
 } from "../lib/galleryShortcuts";
 import { compareSequenceItems, getSidebarHistoryShortcutTarget } from "../lib/history/sidebarHistory";
 import { resolveWorkspaceSettings } from "../lib/workspaceProfile";
-import { isVideoUrl, isVideoItem, extractLastFrame } from "../lib/videoMedia";
+import { isVideoUrl, extractLastFrame } from "../lib/videoMedia";
 import { releaseOrphanedPreview } from "../lib/multimodeSequences";
 import { ACTIVE_VIDEO_PROMPT_GUIDANCE, buildVideoContinuityFromItem } from "../lib/videoContinuity";
 import {
@@ -219,8 +214,15 @@ import {
   type MultimodeSequenceState,
   removeImageFromMultimodeSequences,
 } from "./storeHelpers";
+import {
+  mapSessionToGraph,
+  scheduleGraphSaveImpl,
+  flushGraphSaveImpl,
+  addHistory,
+} from "./storeGraphSave";
 
 export type { GalleryScope, ComposeSheetTab, ImageNodeStatus, ImageNodeData, GraphNode, GraphEdge, MultimodeSequenceState } from "./storeTypes";
+export { flushGraphSaveBeacon, selectCurrentSessionId } from "./storeGraphSave";
 import type { AppState, ToastEntry, ToastState, ErrorCardEntry, TrashPendingState, CustomSizeConfirmState, MetadataRestoreState, ComposeSheetTab } from "./storeTypes";
 
 const nodeGenerationLocks = new Set<string>();
@@ -282,65 +284,6 @@ function getOppositeTargetHandle(sourceHandle?: string | null): string | null {
   }
 }
 
-function mapSessionToGraph(session: SessionFull): {
-  graphNodes: GraphNode[];
-  graphEdges: GraphEdge[];
-  graphVersion: number;
-} {
-  const graphNodes: GraphNode[] = session.nodes.map((n) => {
-    const d = (n.data ?? {}) as Partial<ImageNodeData>;
-    const explicitImageUrl =
-      typeof d.imageUrl === "string" && d.imageUrl.length > 0 ? d.imageUrl : null;
-    const fallbackImageUrl =
-      typeof d.serverNodeId === "string" && d.serverNodeId.length > 0
-        ? `/generated/${d.serverNodeId}.png`
-        : null;
-    const imageUrl = explicitImageUrl ?? fallbackImageUrl;
-    const data: ImageNodeData = {
-      clientId: n.id as ClientNodeId,
-      serverNodeId: (d.serverNodeId ?? null) as string | null,
-      parentServerNodeId: (d.parentServerNodeId ?? null) as string | null,
-      prompt: typeof d.prompt === "string" ? d.prompt : "",
-      imageUrl,
-      status: (d.status ?? (imageUrl ? "ready" : "empty")) as ImageNodeStatus,
-      pendingRequestId: (d.pendingRequestId ?? null) as string | null,
-      recoveryRequestId: (d.recoveryRequestId ?? null) as string | null,
-      pendingPhase: (d.pendingPhase ?? null) as string | null,
-      pendingStartedAt:
-        typeof d.pendingStartedAt === "number" ? d.pendingStartedAt : null,
-      partialImageUrl: null,
-      error: d.error as string | undefined,
-      elapsed: d.elapsed as number | undefined,
-      reasoningEffort: d.reasoningEffort as ImageNodeData["reasoningEffort"] | undefined,
-      webSearchCalls: d.webSearchCalls as number | undefined,
-      model: (d.model ?? null) as string | null,
-      size: (d.size ?? null) as string | null,
-      referenceImages: loadNodeRefs(session.id, n.id),
-      video: (d.video ?? null) as ImageNodeData["video"],
-    };
-    return {
-      id: n.id,
-      type: "imageNode",
-      position: { x: n.x, y: n.y },
-      data,
-    };
-  });
-  const graphEdges: GraphEdge[] = session.edges.map((e) => {
-    const data = (e.data ?? {}) as Record<string, unknown>;
-    return {
-      id: e.id,
-      source: e.source,
-      target: e.target,
-      sourceHandle: typeof data.sourceHandle === "string" ? data.sourceHandle : null,
-      targetHandle: typeof data.targetHandle === "string" ? data.targetHandle : null,
-    };
-  });
-  return {
-    graphNodes: deriveParentServerNodeIds(graphNodes, graphEdges),
-    graphEdges,
-    graphVersion: session.graphVersion,
-  };
-}
 
 function getActiveSidebarSequenceId(
   state: Pick<AppState, "multimodePreviewFlightId" | "multimodeSequences">,
@@ -3355,344 +3298,3 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 }));
 
-// ── Graph autosave (module-level debounce) ──
-const SAVE_DEBOUNCE_MS = 800;
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
-let isSavingGraph = false;
-let needsGraphSave = false;
-let activeGraphSavePromise: Promise<void> | null = null;
-let graphSaveSeq = 0;
-
-function getGraphTabId(): string {
-  try {
-    const existing = sessionStorage.getItem(GRAPH_TAB_ID_KEY);
-    if (existing) return existing;
-    const next = `tab_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-    sessionStorage.setItem(GRAPH_TAB_ID_KEY, next);
-    return next;
-  } catch {
-    return "tab_unavailable";
-  }
-}
-
-// Sanitize a node's data for PUT /api/sessions/:id/graph payload.
-// pending / reconciling states are *transient* — persisting them to disk
-// makes reloaded graphs look like aborted work and trips reconcileGraphPending.
-// This function is payload-only: the in-memory `graphNodes` is NOT touched.
-function sanitizeForSave(d: ImageNodeData): Record<string, unknown> {
-  const safe = { ...(d as unknown as Record<string, unknown>) };
-  delete safe.referenceImages;
-  delete safe.partialImageUrl;
-  const shouldSanitize = d.status === "pending" || d.status === "reconciling";
-  if (!shouldSanitize) return safe;
-  return {
-    ...safe,
-    status: "empty",
-    pendingRequestId: null,
-    recoveryRequestId: d.pendingRequestId ?? d.recoveryRequestId ?? null,
-    pendingPhase: null,
-    pendingStartedAt: null,
-    error: undefined,
-  };
-}
-
-function serializeGraphEdgesForSave(graphEdges: GraphEdge[]): SessionGraphEdge[] {
-  return graphEdges.map((e) => ({
-    id: e.id,
-    source: e.source,
-    target: e.target,
-    data: {
-      sourceHandle: e.sourceHandle ?? null,
-      targetHandle: e.targetHandle ?? null,
-    },
-  }));
-}
-
-// Recover nodes whose asset lives on disk (via /api/history) but whose
-// client-side state was lost (A sanitize, reload, HMR, conflict reload).
-// Candidate = node with neither imageUrl nor serverNodeId. Match requestId
-// first, then fall back to (sessionId, clientNodeId, createdAt) so stale
-// retry assets do not overwrite a newer pending node.
-async function recoverGraphNodesFromHistory(
-  get: () => AppState,
-  set: (patch: Partial<AppState>) => void,
-): Promise<void> {
-  const sid = get().activeSessionId;
-  if (!sid) return;
-  const candidates = get().graphNodes.filter(
-    (n) => !n.data.imageUrl && !n.data.serverNodeId,
-  );
-  if (candidates.length === 0) return;
-
-  let items: Array<{
-    url: string;
-    createdAt: number;
-    size?: string | null;
-    elapsed?: number | null;
-    reasoningEffort?: string | null;
-    sessionId?: string | null;
-    nodeId?: string | null;
-    clientNodeId?: string | null;
-    requestId?: string | null;
-  }> = [];
-  try {
-    const res = await getHistory({ sessionId: sid, limit: HISTORY_LIMIT });
-    items = res.items;
-  } catch {
-    // History fetch failure is non-fatal — leave nodes as they are.
-    return;
-  }
-
-  let changed = false;
-  const next = get().graphNodes.map((n) => {
-    if (n.data.imageUrl || n.data.serverNodeId) return n;
-    const startedAt = n.data.pendingStartedAt ?? 0;
-    const requestKey = n.data.pendingRequestId ?? n.data.recoveryRequestId ?? null;
-    const byRequest = requestKey
-      ? items.find(
-          (h) =>
-            (h.sessionId ?? null) === sid &&
-            (h.requestId ?? null) === requestKey,
-        )
-      : null;
-    const recovered = byRequest ?? items.find(
-      (h) =>
-        (h.sessionId ?? null) === sid &&
-        (h.clientNodeId ?? null) === n.id &&
-        (!startedAt || (h.createdAt ?? 0) >= startedAt),
-    );
-    if (!recovered) return n;
-    changed = true;
-    return {
-      ...n,
-      data: {
-        ...n.data,
-        status: "ready" as const,
-        imageUrl: recovered.url, // canonical — jpeg/webp all covered
-        serverNodeId: recovered.nodeId ?? n.data.serverNodeId,
-        size: recovered.size ?? n.data.size ?? null,
-        elapsed: recovered.elapsed ?? n.data.elapsed,
-        reasoningEffort: (recovered.reasoningEffort as ImageNodeData["reasoningEffort"]) ?? n.data.reasoningEffort,
-        video: (recovered as any).video ?? n.data.video ?? null,
-        pendingRequestId: null,
-        recoveryRequestId: null,
-        pendingPhase: null,
-        pendingStartedAt: null,
-        partialImageUrl: null,
-        error: undefined,
-      },
-    };
-  });
-
-  if (!changed) return;
-  set({ graphNodes: next });
-  // Persist the recovered imageUrl so future reloads don't need to re-recover.
-  scheduleGraphSaveImpl(get, set, "recovery");
-}
-
-async function reloadSessionAfterConflict(
-  get: () => AppState,
-  set: (patch: Partial<AppState>) => void,
-): Promise<void> {
-  const id = get().activeSessionId;
-  if (!id) return;
-  const { session } = await apiGetSession(id);
-  const { graphNodes, graphEdges, graphVersion } = mapSessionToGraph(session);
-  set({
-    graphNodes,
-    graphEdges,
-    activeSessionGraphVersion: graphVersion,
-  });
-  get().showToast(t("toast.sessionReloadedElsewhere"), true);
-  // A graph version conflict only proves the client saved against an older
-  // version. Reload first, then repair node assets from requestId history.
-  await recoverGraphNodesFromHistory(get, set).catch(() => {});
-}
-
-async function doSave(
-  get: () => AppState,
-  set: (patch: Partial<AppState>) => void,
-  reason: GraphSaveReason,
-): Promise<GraphSaveResult> {
-  const id = get().activeSessionId;
-  const graphVersion = get().activeSessionGraphVersion;
-  if (!id) return "skipped";
-  if (graphVersion == null) return "skipped";
-  const { graphNodes, graphEdges, sessionLoading } = get();
-  if (sessionLoading) return "skipped";
-  if (graphNodes.length === 0 && graphVersion > 0) return "skipped";
-  const nodes = graphNodes.map((n) => ({
-    id: n.id,
-    x: n.position.x,
-    y: n.position.y,
-    data: sanitizeForSave(n.data),
-  }));
-  const edges = serializeGraphEdgesForSave(graphEdges);
-  const saveId = `gs_${Date.now().toString(36)}_${++graphSaveSeq}`;
-  try {
-    const res = await saveSessionGraph(id, graphVersion, nodes, edges, {
-      saveId,
-      saveReason: reason,
-      tabId: getGraphTabId(),
-    });
-    if (get().activeSessionId !== id) return "skipped";
-    pruneNodeRefs(id, get().graphNodes.map((n) => n.id));
-    set({ activeSessionGraphVersion: res.graphVersion });
-    return "saved";
-  } catch (err) {
-    if ((err as { status?: number }).status === 409) {
-      await reloadSessionAfterConflict(get, set);
-      return "conflict";
-    }
-    console.warn("[sessions] save failed:", err);
-    return "failed";
-  }
-}
-
-async function runGraphSaveQueue(
-  get: () => AppState,
-  set: (patch: Partial<AppState>) => void,
-  reason: GraphSaveReason,
-): Promise<void> {
-  if (isSavingGraph) {
-    needsGraphSave = true;
-    if (activeGraphSavePromise) await activeGraphSavePromise;
-    return;
-  }
-
-  isSavingGraph = true;
-  activeGraphSavePromise = (async () => {
-    let nextReason = reason;
-    do {
-      needsGraphSave = false;
-      const result = await doSave(get, set, nextReason);
-      if (result === "conflict" || result === "failed") break;
-      nextReason = "queued";
-    } while (needsGraphSave);
-  })().finally(() => {
-    isSavingGraph = false;
-    activeGraphSavePromise = null;
-  });
-
-  await activeGraphSavePromise;
-}
-
-function scheduleGraphSaveImpl(
-  get: () => AppState,
-  set: (patch: Partial<AppState>) => void,
-  reason: GraphSaveReason = "debounced",
-) {
-  const s = get();
-  if (!s.activeSessionId) return;
-  if (s.sessionLoading) return;
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    saveTimer = null;
-    void runGraphSaveQueue(get, set, reason);
-  }, SAVE_DEBOUNCE_MS);
-}
-
-async function flushGraphSaveImpl(
-  get: () => AppState,
-  set: (patch: Partial<AppState>) => void,
-  reason: GraphSaveReason = "manual",
-) {
-  let shouldSaveNow = false;
-  if (saveTimer) {
-    clearTimeout(saveTimer);
-    saveTimer = null;
-    shouldSaveNow = true;
-  }
-  if (isSavingGraph) {
-    needsGraphSave = true;
-    if (activeGraphSavePromise) await activeGraphSavePromise;
-    return;
-  }
-  if (shouldSaveNow) {
-    await runGraphSaveQueue(get, set, reason);
-  }
-}
-
-// Synchronous-ish save on page unload via sendBeacon
-// (fetch in beforeunload is not reliable in modern browsers).
-export function flushGraphSaveBeacon(get: () => AppState): void {
-  const s = get();
-  if (!s.activeSessionId) return;
-  if (s.activeSessionGraphVersion == null) return;
-  if (s.sessionLoading) return;
-  if (s.graphNodes.length === 0 && s.activeSessionGraphVersion > 0) return;
-  if (saveTimer) {
-    clearTimeout(saveTimer);
-    saveTimer = null;
-  }
-  const nodes = s.graphNodes.map((n) => ({
-    id: n.id,
-    x: n.position.x,
-    y: n.position.y,
-    data: sanitizeForSave(n.data),
-  }));
-  const edges = serializeGraphEdgesForSave(s.graphEdges);
-  const url = `/api/sessions/${encodeURIComponent(s.activeSessionId)}/graph`;
-  const body = JSON.stringify({ nodes, edges });
-  try {
-    void fetch(url, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        "If-Match": String(s.activeSessionGraphVersion),
-        "X-Ima2-Graph-Save-Id": `gs_${Date.now().toString(36)}_${++graphSaveSeq}`,
-        "X-Ima2-Graph-Save-Reason": "beforeunload",
-        "X-Ima2-Tab-Id": getGraphTabId(),
-      },
-      body,
-      keepalive: true,
-    });
-  } catch {}
-}
-
-async function addHistory(
-  item: GenerateItem,
-  set: (p: Partial<AppState>) => void,
-  get: () => AppState,
-): Promise<void> {
-  // Videos must not get an <img>-based thumb: compressImage loads the mp4 into
-  // an <img>, fails, and resolves to the raw url, which then both bypasses the
-  // <video> placeholder and fires a broken lazy <img src=*.mp4> (RCA 01 Defect
-  // E nuance). Leave thumb undefined so the UI renders the static placeholder
-  // until the server backfills a real thumbnail.
-  const thumb = isVideoItem(item)
-    ? undefined
-    : await compressImage(item.image).catch(() => item.image);
-  const url = item.filename ? `/generated/${item.filename}` : item.image;
-  const withThumb: GenerateItem = {
-    ...item,
-    thumb,
-    url,
-    createdAt: item.createdAt || Date.now(),
-  };
-  const state = get();
-  const existing = findHistoryDuplicate(state.history, withThumb);
-  const merged = preserveHistoryMetadata(withThumb, existing);
-  const historyWithoutDuplicate = withoutHistoryDuplicate(state.history, merged);
-  const history = retainHistoryItems(
-    [merged, ...historyWithoutDuplicate],
-    state.loadedHistoryRetainLimit + 1,
-  );
-  saveSelectedFilename(merged.filename ?? null);
-  set({
-    history,
-    currentImage: merged,
-    loadedHistoryRetainLimit: Math.max(
-      state.loadedHistoryRetainLimit,
-      Math.min(state.history.length + 1, state.loadedHistoryRetainLimit + 1),
-    ),
-    unseenGeneratedCount: get().unseenGeneratedCount + 1,
-  });
-}
-
-export function selectCurrentSessionId(state: AppState): string | null {
-  for (const item of state.history) {
-    if (item.sessionId) return item.sessionId;
-  }
-  return null;
-}
