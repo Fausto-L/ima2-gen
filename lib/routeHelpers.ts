@@ -1,3 +1,4 @@
+import type { Response } from "express";
 import { type RuntimeContext } from "./runtimeContext.js";
 
 export function validateModeration(ctx: RuntimeContext, moderation: unknown) {
@@ -11,4 +12,38 @@ export function imageFormatFromMime(mime: string | null | undefined): "png" | "j
   if (mime === "image/jpeg") return "jpeg";
   if (mime === "image/webp") return "webp";
   return "png";
+}
+
+export function writeSse(res: Response, event: string, data: unknown) {
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+export function dataUrlFromB64(format: string, b64: string) {
+  return `data:image/${format === "jpeg" ? "jpeg" : format};base64,${b64}`;
+}
+
+export function upstreamErrorFields(src: Record<string, unknown>) {
+  return {
+    upstreamCode: src.upstreamCode || null,
+    upstreamType: src.upstreamType || null,
+    upstreamParam: src.upstreamParam || null,
+    diagnosticReason: src.diagnosticReason || null,
+    retryKind: src.retryKind || null,
+    initialEventCount: src.initialEventCount ?? null,
+    initialEventTypes: src.initialEventTypes || null,
+    referencesDroppedOnRetry: src.referencesDroppedOnRetry ?? null,
+    developerPromptDroppedOnRetry: src.developerPromptDroppedOnRetry ?? null,
+    webSearchDroppedOnRetry: src.webSearchDroppedOnRetry ?? null,
+    fallbackEventCount: src.fallbackEventCount ?? null,
+    fallbackEventTypes: src.fallbackEventTypes || null,
+    fallbackImageCallSeen: src.fallbackImageCallSeen ?? null,
+    fallbackImageResultCount: src.fallbackImageResultCount ?? null,
+    errorEventCount: src.eventCount ?? null,
+    eventTypes: src.eventTypes || null,
+    webSearchCalls: src.webSearchCalls ?? null,
+    responseDiagnostics: src.responseDiagnostics || null,
+    toolTypes: src.toolTypes || null,
+    toolChoiceKind: src.toolChoiceKind || null,
+  };
 }

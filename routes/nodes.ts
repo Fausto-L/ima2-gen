@@ -3,7 +3,6 @@ import { mkdir } from "fs/promises";
 import {
   newNodeId,
   saveNode,
-  loadNodeB64,
   loadNodeMeta,
   loadAssetB64,
 } from "../lib/nodeStore.js";
@@ -18,100 +17,23 @@ import { classifyUpstreamError } from "../lib/errorClassify.js";
 import { normalizeOAuthParams } from "../lib/oauthNormalize.js";
 import { resolveProviderOptions } from "../lib/providerOptions.js";
 import { generateViaResponses, editViaResponses } from "../lib/responsesImageAdapter.js";
-import { generateViaGrok, type GrokReferenceImage } from "../lib/grokImageAdapter.js";
+import { generateViaGrok } from "../lib/grokImageAdapter.js";
 import { generateViaAgy } from "../lib/agyImageAdapter.js";
 import { generateViaGeminiApi } from "../lib/geminiApiImageAdapter.js";
 import { isNonRetryableGenerationError, normalizeGenerationFailure, type UpstreamErr } from "../lib/generationErrors.js";
 import { logEvent, logError } from "../lib/logger.js";
-
 import { errInfo } from "../lib/errInfo.js";
-import { requireRuntimeContext, type RouteRuntimeContext, type RuntimeContext } from "../lib/runtimeContext.js";
-import { validateModeration, imageFormatFromMime } from "../lib/routeHelpers.js";
-
-function asUpstream(e: unknown): UpstreamErr {
-  return (e && typeof e === "object" ? e : {}) as UpstreamErr;
-}
-
-function wantsSse(req: Request) {
-  const accept = typeof req.headers.accept === "string" ? req.headers.accept : "";
-  return accept.includes("text/event-stream");
-}
-
-function writeSse(res: Response, event: string, data: unknown) {
-  res.write(`event: ${event}\n`);
-  res.write(`data: ${JSON.stringify(data)}\n\n`);
-}
-
-function writeNodeError(
-  res: Response,
-  status: number,
-  code: string,
-  message: string,
-  parentNodeId: string | null,
-  details: Record<string, unknown> = {},
-) {
-  if (res.headersSent) {
-    writeSse(res, "error", {
-      error: { code, message },
-      parentNodeId,
-      status,
-      ...details,
-    });
-    res.end();
-    return;
-  }
-  res.status(status).json({
-    error: { code, message },
-    parentNodeId,
-    status,
-    ...details,
-  });
-}
-
-function dataUrlFromB64(format: string, b64: string) {
-  return `data:image/${format === "jpeg" ? "jpeg" : format};base64,${b64}`;
-}
-
-async function loadParentNodeB64(ctx: RuntimeContext, nodeId: string) {
-  for (const ext of ["png", "jpeg", "webp"] as const) {
-    const meta = await loadNodeMeta(ctx.rootDir, nodeId, ext, ctx.config.storage.generatedDir);
-    if (meta) return loadNodeB64(ctx.rootDir, `${nodeId}.${ext}`, ctx.config.storage.generatedDir);
-  }
-  return loadNodeB64(ctx.rootDir, `${nodeId}.png`, ctx.config.storage.generatedDir);
-}
-
-function toGrokReferences(parentB64: string | null, refs: Array<GrokReferenceImage | string>): GrokReferenceImage[] {
-  const parentMime = parentB64 ? detectImageMimeFromB64(parentB64) : null;
-  const parentRefs = parentB64
-    ? [{ b64: parentB64, declaredMime: parentMime, detectedMime: parentMime }]
-    : [];
-  const normalizedRefs = refs.map((ref) => typeof ref === "string" ? { b64: ref } : ref);
-  return [...parentRefs, ...normalizedRefs];
-}
+import { requireRuntimeContext, type RouteRuntimeContext } from "../lib/runtimeContext.js";
+import { validateModeration, imageFormatFromMime, writeSse, dataUrlFromB64 } from "../lib/routeHelpers.js";
+import {
+  type NodeGenerateBody, asUpstream, wantsSse, writeNodeError,
+  loadParentNodeB64, toGrokReferences, nodeErrorDetails,
+} from "../lib/nodeHelpers.js";
 
 export function registerNodeRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
   const ctx = requireRuntimeContext(ctxRaw);
   app.post("/api/node/generate", async (req: Request, res: Response) => {
-    const body = (req.body ?? {}) as {
-      prompt?: string;
-      parentNodeId?: string;
-      requestId?: string;
-      sessionId?: string;
-      clientNodeId?: string;
-      references?: unknown;
-      quality?: string;
-      size?: string;
-      format?: string;
-      moderation?: string;
-      externalSrc?: string | null;
-      mode?: string;
-      contextMode?: string;
-      searchMode?: string;
-      model?: string;
-      reasoningEffort?: string;
-      provider?: string;
-      webSearchEnabled?: boolean;
-    };
+    const body = (req.body ?? {}) as NodeGenerateBody;
     const streamResponse = wantsSse(req);
     const parentNodeId = (typeof body.parentNodeId === "string" ? body.parentNodeId : null);
     const requestId = typeof body.requestId === "string" ? body.requestId : (req.id ?? "");
@@ -435,18 +357,7 @@ export function registerNodeRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
           finishErrorCode ?? "NODE_GEN_FAILED",
           finalErr.message,
           parentNodeId,
-          {
-            upstreamCode: lastErr?.upstreamCode || lastErr?.code || null,
-            upstreamType: lastErr?.upstreamType || null,
-            upstreamParam: lastErr?.upstreamParam || null,
-            errorEventType: lastErr?.eventType || null,
-            errorEventCount: lastErr?.eventCount ?? null,
-            diagnosticReason: finalErr.diagnosticReason || lastErr?.diagnosticReason || null,
-            retryKind: finalErr.retryKind || lastErr?.retryKind || null,
-            referencesDroppedOnRetry: finalErr.referencesDroppedOnRetry ?? lastErr?.referencesDroppedOnRetry ?? null,
-            refsCount: finalErr.refsCount ?? lastErr?.refsCount ?? null,
-            inputImageCount: finalErr.inputImageCount ?? lastErr?.inputImageCount ?? null,
-          },
+          nodeErrorDetails(finalErr, lastErr),
         );
       }
 

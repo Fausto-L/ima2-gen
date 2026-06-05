@@ -30,7 +30,7 @@ import {
 import { errInfo } from "../lib/errInfo.js";
 import { requireRuntimeContext, type RouteRuntimeContext } from "../lib/runtimeContext.js";
 import { STORYBOARD_PREFIX } from "../lib/storyboardPrefix.js";
-import { validateModeration, imageFormatFromMime } from "../lib/routeHelpers.js";
+import { validateModeration, imageFormatFromMime, upstreamErrorFields } from "../lib/routeHelpers.js";
 
 export function registerGenerateRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
   const ctx = requireRuntimeContext(ctxRaw);
@@ -377,26 +377,7 @@ export function registerGenerateRoutes(app: Express, ctxRaw: RouteRuntimeContext
           return res.status(status).json({
             error: firstErr.message,
             code: firstErr.code,
-            upstreamCode: firstErr.upstreamCode || null,
-            upstreamType: firstErr.upstreamType || null,
-            upstreamParam: firstErr.upstreamParam || null,
-            diagnosticReason: firstErr.diagnosticReason || null,
-            retryKind: firstErr.retryKind || null,
-            initialEventCount: firstErr.initialEventCount ?? null,
-            initialEventTypes: firstErr.initialEventTypes || null,
-            referencesDroppedOnRetry: firstErr.referencesDroppedOnRetry ?? null,
-            developerPromptDroppedOnRetry: firstErr.developerPromptDroppedOnRetry ?? null,
-            webSearchDroppedOnRetry: firstErr.webSearchDroppedOnRetry ?? null,
-            fallbackEventCount: firstErr.fallbackEventCount ?? null,
-            fallbackEventTypes: firstErr.fallbackEventTypes || null,
-            fallbackImageCallSeen: firstErr.fallbackImageCallSeen ?? null,
-            fallbackImageResultCount: firstErr.fallbackImageResultCount ?? null,
-            errorEventCount: firstErr.eventCount ?? null,
-            eventTypes: firstErr.eventTypes || null,
-            webSearchCalls: firstErr.webSearchCalls ?? null,
-            responseDiagnostics: firstErr.responseDiagnostics || null,
-            toolTypes: firstErr.toolTypes || null,
-            toolChoiceKind: firstErr.toolChoiceKind || null,
+            ...upstreamErrorFields(firstErr),
             requestId,
           });
         }
@@ -481,26 +462,7 @@ export function registerGenerateRoutes(app: Express, ctxRaw: RouteRuntimeContext
       res.status(err.status || 500).json({
         error: err.message,
         code: fallbackCode,
-        upstreamCode: ext.upstreamCode || null,
-        upstreamType: ext.upstreamType || null,
-        upstreamParam: ext.upstreamParam || null,
-        diagnosticReason: ext.diagnosticReason || null,
-        retryKind: ext.retryKind || null,
-        initialEventCount: ext.initialEventCount ?? null,
-        initialEventTypes: ext.initialEventTypes || null,
-        referencesDroppedOnRetry: ext.referencesDroppedOnRetry ?? null,
-        developerPromptDroppedOnRetry: ext.developerPromptDroppedOnRetry ?? null,
-        webSearchDroppedOnRetry: ext.webSearchDroppedOnRetry ?? null,
-        fallbackEventCount: ext.fallbackEventCount ?? null,
-        fallbackEventTypes: ext.fallbackEventTypes || null,
-        fallbackImageCallSeen: ext.fallbackImageCallSeen ?? null,
-        fallbackImageResultCount: ext.fallbackImageResultCount ?? null,
-        errorEventCount: ext.eventCount ?? null,
-        eventTypes: ext.eventTypes || null,
-        webSearchCalls: ext.webSearchCalls ?? null,
-        responseDiagnostics: ext.responseDiagnostics || null,
-        toolTypes: ext.toolTypes || null,
-        toolChoiceKind: ext.toolChoiceKind || null,
+        ...upstreamErrorFields(ext),
         requestId,
       });
     } finally {
