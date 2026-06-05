@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { selectCurrentSessionId, useAppStore } from "../store/useAppStore";
-import { useCardNewsStore } from "../store/cardNewsStore";
 import type { GenerateItem } from "../types";
 import {
   getHistoryGrouped,
@@ -8,10 +7,10 @@ import {
   openGeneratedDir,
   type StorageStatus,
 } from "../lib/api";
-import { cardNewsManifestDownloadUrl } from "../lib/cardNewsApi";
 import { dateBucket } from "../lib/galleryUtils";
 import { getGalleryItemKey, isGalleryVisibleItem, uniqueGalleryItems } from "../lib/galleryNavigation";
 import { useI18n } from "../i18n";
+import { useCardNewsActions } from "./gallery/useCardNewsActions";
 import { CardNewsGalleryTile } from "./CardNewsGalleryTile";
 import { GalleryImageTile } from "./GalleryImageTile";
 import { GalleryDateGrid } from "./gallery/GalleryDateGrid";
@@ -250,34 +249,8 @@ export function GalleryModal() {
     } catch { showToast(t("toast.openGeneratedDirFailed"), true); }
   }
 
-  async function handleOpenCardNewsSet(item: GenerateItem) {
-    if (!item.setId) return;
-    try {
-      await useCardNewsStore.getState().loadSet(item.setId);
-      useAppStore.getState().setUIMode("card-news");
-      close();
-    } catch {
-      showToast(t("gallery.openCardNewsSetFailed"), true);
-    }
-  }
-
-  async function handleCopyCardNewsSetPath(item: GenerateItem, e: MouseEvent<HTMLButtonElement>) {
-    e.stopPropagation();
-    if (!item.setId) return;
-    const path = `generated/cardnews/${item.setId}`;
-    try {
-      await navigator.clipboard?.writeText(path);
-      showToast(t("gallery.cardNewsPathCopied"));
-    } catch {
-      showToast(t("toast.copyFailed"), true);
-    }
-  }
-
-  function handleDownloadCardNewsManifest(item: GenerateItem, e: MouseEvent<HTMLButtonElement>) {
-    e.stopPropagation();
-    if (!item.setId) return;
-    window.open(cardNewsManifestDownloadUrl(item.setId), "_blank", "noopener,noreferrer");
-  }
+  const { handleOpenCardNewsSet, handleCopyCardNewsSetPath, handleDownloadCardNewsManifest } =
+    useCardNewsActions(close, showToast, t);
 
   function dismissStorageNotice() {
     setStorageDismissed(true);
