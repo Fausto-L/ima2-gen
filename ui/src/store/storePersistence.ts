@@ -44,14 +44,9 @@ import {
   VIDEO_DEFAULTS_STORAGE_KEY,
   WEB_SEARCH_STORAGE_KEY,
 } from "./persistenceRegistry";
-import type { GalleryScope } from "./storeTypes";
+import type { GalleryScope, InsertedPrompt } from "./storeTypes";
 
-export type InsertedPrompt = {
-  id: string;
-  name: string;
-  text: string;
-  placement?: "before" | "after";
-};
+export type { InsertedPrompt } from "./storeTypes";
 
 export function composePrompt(mainPrompt: string, insertedPrompts: InsertedPrompt[]): string {
   const before = insertedPrompts.filter((prompt) => prompt.placement !== "after");
@@ -236,12 +231,8 @@ export function saveWebSearchEnabled(enabled: boolean): void {
   } catch {}
 }
 
-export type VideoDefaults = {
-  model: string | false;
-  duration: number;
-  resolution: string;
-  aspectRatio: string;
-};
+export type { VideoDefaults } from "./storeTypes";
+import type { VideoDefaults } from "./storeTypes";
 
 export const VIDEO_DEFAULTS_FALLBACK: VideoDefaults = { model: false, duration: 5, resolution: "480p", aspectRatio: "auto" };
 
@@ -368,21 +359,8 @@ export function isSizePreset(value: unknown): value is SizePreset {
   return typeof value === "string" && SIZE_PRESET_VALUES.has(value as SizePreset);
 }
 
-export type GenerationDefaults = Partial<{
-  provider: Provider;
-  quality: Quality;
-  sizePreset: SizePreset;
-  customW: number;
-  customH: number;
-  format: Format;
-  moderation: Moderation;
-  count: Count;
-  multimode: boolean;
-  multimodeMaxImages: Count;
-  promptMode: "auto" | "direct";
-  prompt: string;
-  insertedPrompts: InsertedPrompt[];
-}>;
+export type { GenerationDefaults } from "./storeTypes";
+import type { GenerationDefaults } from "./storeTypes";
 
 export function loadGenerationDefaults(): GenerationDefaults {
   try {

@@ -13,44 +13,20 @@ import { IN_FLIGHT_STORAGE_KEY } from "./persistenceRegistry";
 import {
   normalizeInsertedPromptArray,
   cloneInsertedPrompts,
-  type InsertedPrompt,
 } from "./storePersistence";
+import type {
+  InsertedPrompt,
+  PersistedInFlight,
+  ServerInFlightJob,
+  ServerTerminalJob,
+  InflightQueryScope,
+  GraphSaveReason,
+  GraphSaveResult,
+  MultimodeSequenceState,
+} from "./storeTypes";
 
-export type PersistedInFlight = {
-  id: string;
-  prompt: string;
-  startedAt: number;
-  composerPrompt?: string;
-  composerInsertedPrompts?: InsertedPrompt[];
-  phase?: string;
-  sessionId?: string | null;
-  parentNodeId?: string | null;
-  clientNodeId?: string | null;
-  kind?: "classic" | "node" | "multimode" | "video";
-};
+export type { PersistedInFlight, ServerInFlightJob, ServerTerminalJob, InflightQueryScope, GraphSaveReason, GraphSaveResult, MultimodeSequenceState };
 export const INFLIGHT_TTL_MS = 180_000;
-
-export type ServerInFlightJob = {
-  requestId: string;
-  kind?: string;
-  prompt?: string;
-  startedAt: number;
-  phase?: string;
-  meta?: Record<string, unknown>;
-};
-
-export type ServerTerminalJob = ServerInFlightJob & {
-  status?: "completed" | "error" | "canceled";
-  finishedAt?: number;
-  durationMs?: number;
-  httpStatus?: number;
-  errorCode?: string;
-};
-
-export type InflightQueryScope = {
-  kind: NonNullable<PersistedInFlight["kind"]>;
-  sessionId?: string;
-};
 
 export function getInflightQueryScopes(state: {
   uiMode: UIMode;
@@ -178,18 +154,6 @@ export function loadInFlight(): PersistedInFlight[] {
 export const HISTORY_LIMIT = 500;
 export const MAX_REFERENCE_IMAGES = 5;
 
-export type GraphSaveReason =
-  | "debounced"
-  | "manual"
-  | "switch-session"
-  | "recovery"
-  | "beforeunload"
-  | "queued"
-  | "edge-disconnect"
-  | "node-complete"
-  | "video-node-complete";
-export type GraphSaveResult = "saved" | "skipped" | "conflict" | "failed";
-
 export function narrowGenerateKind(k?: string | null): GenerateItem["kind"] {
   return k === "classic" || k === "edit" || k === "generate" ||
     k === "card-news-card" || k === "card-news-set" ? k : null;
@@ -309,18 +273,6 @@ export async function compressReferenceSource(src: string, filename = "reference
     preserveTransparency: false,
   });
 }
-
-export type MultimodeSequenceState = {
-  sequenceId: string;
-  requestId: string;
-  requested: number;
-  returned: number;
-  images: GenerateItem[];
-  partials: Array<{ image: string; index?: number | null }>;
-  status: MultimodeSequenceStatus;
-  elapsed?: string;
-  error?: string | null;
-};
 
 export function removeImageFromMultimodeSequences(
   sequences: Record<string, MultimodeSequenceState>,
