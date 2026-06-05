@@ -63,15 +63,15 @@ import {
   addChildNodeAtImpl,
   duplicateBranchRootImpl,
   updateNodePromptImpl,
-  addNodeReferencesImpl,
-  addNodeReferenceDataUrlImpl,
-  removeNodeReferenceImpl,
-  clearNodeReferencesImpl,
   deleteNodeImpl,
   deleteNodesImpl,
   disconnectEdgesImpl,
   connectNodesImpl,
 } from "./storeGraphNodeImpl";
+import {
+  addNodeReferencesImpl, addNodeReferenceDataUrlImpl,
+  removeNodeReferenceImpl, clearNodeReferencesImpl,
+} from "./storeNodeRefImpl";
 import {
   loadOlderHistoryImpl,
   loadFavoriteHistoryImpl,
