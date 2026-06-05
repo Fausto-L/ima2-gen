@@ -4,35 +4,16 @@
 // Legacy generation-controls contract: GENERATION_DEFAULTS_STORAGE_KEY = "ima2.generationDefaults".
 import { create } from "zustand";
 import type { VideoResolutionUI } from "../types";
-import {
-  cancelInflight,
-  getBrowserId,
-} from "../lib/api";
+import { getBrowserId } from "../lib/api";
 import {
   isGrokImageModel,
 } from "../lib/imageModels";
 import {
   GALLERY_DEFAULT_SCOPE_STORAGE_KEY,
   GALLERY_SCOPE_STORAGE_KEY,
-  HISTORY_STRIP_LAYOUT_STORAGE_KEY,
-  RIGHT_PANEL_OPEN_STORAGE_KEY,
-  THEME_FAMILY_STORAGE_KEY,
-  THEME_STORAGE_KEY,
-  UI_MODE_STORAGE_KEY,
 } from "./persistenceRegistry";
-import {
-  deriveParentServerNodeIds,
-} from "../lib/nodeGraph";
-import {
-  applyComponentSelection,
-  applySelectedNodeIds,
-} from "../lib/nodeSelection";
+import { applySelectedNodeIds } from "../lib/nodeSelection";
 import { t, loadLocale, saveLocale } from "../i18n";
-import { ENABLE_AGENT_MODE, ENABLE_CARD_NEWS_MODE, ENABLE_NODE_MODE } from "../lib/devMode";
-import {
-  getVisibleGalleryItems,
-  resolveVisibleShortcutCurrent,
-} from "../lib/galleryShortcuts";
 import {
   loadRightPanelOpen,
   loadUIMode,
@@ -41,21 +22,16 @@ import {
   loadHistoryStripLayout,
   loadGalleryScope,
   loadCanvasExportBackground,
-  persistCanvasExportBackground,
   loadImageModel,
   loadReasoningEffort,
   loadWebSearchEnabled,
   loadVideoDefaults,
   saveVideoDefaults,
   resolveThemePreference,
-  loadSelectedFilename,
   loadGenerationDefaults,
 } from "./storePersistence";
 import {
-  loadInFlight,
   HISTORY_LIMIT,
-  MAX_REFERENCE_IMAGES,
-  retainHistoryItems,
   saveInFlight,
 } from "./storeHelpers";
 import {
@@ -149,6 +125,16 @@ import {
   generateNodeImpl, generateNodeInPlaceImpl, generateNodeVariationImpl,
   runGenerateNodeImpl,
 } from "./storeGenerateEntryImpl";
+import {
+  cancelInFlightJobImpl, syncFromStorageImpl, applyMergedCanvasImageImpl,
+  addReferenceDataUrlImpl, addMetadataRestoreAsReferenceImpl,
+  toggleRightPanelImpl, setGalleryScopeImpl, setGalleryDefaultScopeImpl,
+  setUIModeImpl, setThemeImpl, setThemeFamilyImpl, setHistoryStripLayoutImpl,
+  showToastImpl, dismissToastImpl, showErrorCardImpl, dismissErrorCardImpl,
+  setGraphNodesImpl, setGraphEdgesImpl, toggleNodeSelectionModeImpl,
+  selectNodeGraphImpl, cancelNodeBatchImpl, setCanvasPanImpl,
+  setCanvasExportBackgroundImpl, setCanvasExportMatteColorImpl,
+} from "./storeUIImpl";
 
 export type { GalleryScope, ComposeSheetTab, ImageNodeStatus, ImageNodeData, GraphNode, GraphEdge, MultimodeSequenceState } from "./storeTypes";
 export { flushGraphSaveBeacon, selectCurrentSessionId } from "./storeGraphSave";
@@ -207,27 +193,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   canvasExportMatteColor: loadCanvasExportBackground().matteColor,
 
   addReferences: (files) => addReferencesImpl(files, set, get),
-  addReferenceDataUrl: (dataUrl) => {
-    set((s) =>
-      s.referenceImages.length >= MAX_REFERENCE_IMAGES
-        ? s
-        : { referenceImages: [...s.referenceImages, dataUrl] },
-    );
-  },
+  addReferenceDataUrl: (dataUrl) => addReferenceDataUrlImpl(dataUrl, set),
   metadataRestore: null,
   readDroppedImageMetadata: (file, targetNodeId = null) => readDroppedImageMetadataImpl(file, targetNodeId, set, get),
   applyMetadataRestore: () => applyMetadataRestoreImpl(set, get),
   cancelMetadataRestore: () => set({ metadataRestore: null }),
-  addMetadataRestoreAsReference: () => {
-    const pending = get().metadataRestore;
-    if (!pending) return;
-    if (pending.targetNodeId) {
-      get().addNodeReferenceDataUrl(pending.targetNodeId, pending.image);
-    } else {
-      get().addReferenceDataUrl(pending.image);
-    }
-    set({ metadataRestore: null });
-  },
+  addMetadataRestoreAsReference: () => addMetadataRestoreAsReferenceImpl(set, get),
   removeReference: (index) => removeReferenceImpl(index, set, get),
   clearReferences: () => clearReferencesImpl(set, get),
   attachCanvasVersionReference: (item) => attachCanvasVersionReferenceImpl(item, set, get),
@@ -236,74 +207,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeGenerations: 0,
   unseenGeneratedCount: 0,
   inFlight: [],
-  cancelInFlightJob: async (requestId) => {
-    if (!requestId) return;
-    set((s) => {
-      const next = s.inFlight.map((job) =>
-        job.id === requestId ? { ...job, phase: "canceling" } : job,
-      );
-      saveInFlight(next);
-      return { inFlight: next };
-    });
-    try {
-      await cancelInflight(requestId);
-      get().startInFlightPolling();
-    } catch {
-      get().showToast(t("toast.cancelFailed"), true);
-    }
-  },
+  cancelInFlightJob: (requestId) => cancelInFlightJobImpl(requestId, set, get),
   startInFlightPolling: () => {
     startInFlightPollingImpl(set, get);
   },
   reconcileInflight: async () => {
     await reconcileInflightImpl(set, get);
   },
-  syncFromStorage: () => {
-    const nextInflight = loadInFlight();
-    const nextSelected = loadSelectedFilename();
-    const nextImageModel = loadImageModel();
-    const nextVideo = loadVideoDefaults();
-    set((s) => {
-      const matched = nextSelected
-        ? s.history.find((h) => h.filename === nextSelected) ?? null
-        : null;
-      const normalized = matched
-        ? resolveVisibleShortcutCurrent(s.history, matched)
-        : null;
-      const visibleFallback = getVisibleGalleryItems(s.history)[0] ?? null;
-      const currentImage = s.currentImage?.canvasVersion
-        ? resolveVisibleShortcutCurrent(s.history, s.currentImage) ?? visibleFallback
-        : s.currentImage;
-      return {
-        inFlight: nextInflight,
-        activeGenerations: nextInflight.length,
-        imageModel: nextImageModel,
-        videoModelSelected: nextVideo.model,
-        videoDuration: nextVideo.duration,
-        videoResolution: nextVideo.resolution as VideoResolutionUI,
-        videoAspectRatio: nextVideo.aspectRatio,
-        currentImage:
-          nextSelected && currentImage?.filename !== nextSelected
-            ? normalized ?? currentImage
-            : currentImage,
-      };
-    });
-    if (nextInflight.length > 0) get().startInFlightPolling();
-  },
+  syncFromStorage: () => syncFromStorageImpl(set, get),
   currentImage: null,
-  applyMergedCanvasImage: (item) => {
-    set((s) => ({
-      history: item.filename
-        ? s.history.some((h) => h.filename === item.filename)
-          ? s.history.map((h) => (h.filename === item.filename ? item : h))
-          : retainHistoryItems([item, ...s.history], s.loadedHistoryRetainLimit + 1)
-        : s.history,
-      loadedHistoryRetainLimit: Math.max(
-        s.loadedHistoryRetainLimit,
-        Math.min(s.history.length + 1, s.loadedHistoryRetainLimit + 1),
-      ),
-    }));
-  },
+  applyMergedCanvasImage: (item) => applyMergedCanvasImageImpl(item, set),
   addGeneratedHistoryItem: async (item) => {
     await addHistory(item, set, get);
   },
@@ -323,14 +236,7 @@ trashPending: null,
   errorCard: null,
   errorCardLog: [],
   rightPanelOpen: loadRightPanelOpen(),
-  toggleRightPanel: () =>
-    set((s) => {
-      const next = !s.rightPanelOpen;
-      try {
-        localStorage.setItem(RIGHT_PANEL_OPEN_STORAGE_KEY, JSON.stringify(next));
-      } catch {}
-      return { rightPanelOpen: next };
-    }),
+  toggleRightPanel: () => toggleRightPanelImpl(set, get),
   composeSheetOpen: false,
   composeSheetTab: "prompt",
   openComposeSheet: (tab = "prompt") => set({ composeSheetOpen: true, composeSheetTab: tab }),
@@ -342,19 +248,8 @@ trashPending: null,
   closeGallery: () => set({ galleryOpen: false }),
   galleryScope: loadGalleryScope(GALLERY_SCOPE_STORAGE_KEY),
   galleryDefaultScope: loadGalleryScope(GALLERY_DEFAULT_SCOPE_STORAGE_KEY),
-  setGalleryScope: (scope) => {
-    try {
-      localStorage.setItem(GALLERY_SCOPE_STORAGE_KEY, scope);
-    } catch {}
-    set({ galleryScope: scope });
-  },
-  setGalleryDefaultScope: (scope) => {
-    try {
-      localStorage.setItem(GALLERY_DEFAULT_SCOPE_STORAGE_KEY, scope);
-      localStorage.setItem(GALLERY_SCOPE_STORAGE_KEY, scope);
-    } catch {}
-    set({ galleryDefaultScope: scope, galleryScope: scope });
-  },
+  setGalleryScope: (scope) => setGalleryScopeImpl(scope, set),
+  setGalleryDefaultScope: (scope) => setGalleryDefaultScopeImpl(scope, set),
 
   imageModel: storedImageModel,
   reasoningEffort: loadReasoningEffort(),
@@ -366,48 +261,21 @@ trashPending: null,
   openSettings: (section = "account") =>
     set({ settingsOpen: true, activeSettingsSection: section }),
   closeSettings: () => set({ settingsOpen: false }),
-  toggleSettings: () =>
-    set((s) => ({
-      settingsOpen: !s.settingsOpen,
-      activeSettingsSection: s.settingsOpen ? s.activeSettingsSection : "account",
-    })),
+  toggleSettings: () => set((s) => ({ settingsOpen: !s.settingsOpen, activeSettingsSection: s.settingsOpen ? s.activeSettingsSection : "account" })),
   setActiveSettingsSection: (section) => set({ activeSettingsSection: section }),
   openReadinessPopup: () => set({ readinessPopupOpen: true }),
   closeReadinessPopup: () => set({ readinessPopupOpen: false }),
 
   uiMode: loadUIMode(),
-  setUIMode: (m) => {
-    const next =
-      m === "agent" && !ENABLE_AGENT_MODE ? "classic" :
-        m === "card-news" && !ENABLE_CARD_NEWS_MODE ? "classic" :
-        m === "node" && !ENABLE_NODE_MODE ? "classic" :
-          m;
-    try { localStorage.setItem(UI_MODE_STORAGE_KEY, next); } catch {}
-    set({ uiMode: next });
-  },
+  setUIMode: (m) => setUIModeImpl(m, set),
 
   theme: loadThemePreference(),
   resolvedTheme: resolveThemePreference(loadThemePreference()),
   themeFamily: loadThemeFamily(),
   historyStripLayout: loadHistoryStripLayout(),
-  setTheme: (theme) => {
-    try {
-      localStorage.setItem(THEME_STORAGE_KEY, theme);
-    } catch {}
-    set({ theme, resolvedTheme: resolveThemePreference(theme) });
-  },
-  setThemeFamily: (family) => {
-    try {
-      localStorage.setItem(THEME_FAMILY_STORAGE_KEY, family);
-    } catch {}
-    set({ themeFamily: family });
-  },
-  setHistoryStripLayout: (layout) => {
-    try {
-      localStorage.setItem(HISTORY_STRIP_LAYOUT_STORAGE_KEY, layout);
-    } catch {}
-    set({ historyStripLayout: layout });
-  },
+  setTheme: (theme) => setThemeImpl(theme, set),
+  setThemeFamily: (family) => setThemeFamilyImpl(family, set),
+  setHistoryStripLayout: (layout) => setHistoryStripLayoutImpl(layout, set),
   syncThemeFromStorage: () => {
     const theme = loadThemePreference();
     set({ theme, resolvedTheme: resolveThemePreference(theme) });
@@ -427,14 +295,8 @@ trashPending: null,
 
   graphNodes: [],
   graphEdges: [],
-  setGraphNodes: (graphNodes) => {
-    set({ graphNodes: deriveParentServerNodeIds(graphNodes, get().graphEdges) });
-    get().scheduleGraphSave();
-  },
-  setGraphEdges: (graphEdges) => {
-    set({ graphEdges, graphNodes: deriveParentServerNodeIds(get().graphNodes, graphEdges) });
-    get().scheduleGraphSave();
-  },
+  setGraphNodes: (graphNodes) => setGraphNodesImpl(graphNodes, set, get),
+  setGraphEdges: (graphEdges) => setGraphEdgesImpl(graphEdges, set, get),
   disconnectEdge: (edgeId) => {
     get().disconnectEdges([edgeId]);
   },
@@ -442,29 +304,15 @@ trashPending: null,
   nodeSelectionMode: false,
   nodeBatchRunning: false,
   nodeBatchStopping: false,
-  toggleNodeSelectionMode: () => {
-    const next = !get().nodeSelectionMode;
-    set({
-      nodeSelectionMode: next,
-      ...(next ? {} : { graphNodes: applySelectedNodeIds(get().graphNodes, []) }),
-    });
-  },
+  toggleNodeSelectionMode: () => toggleNodeSelectionModeImpl(set, get),
   selectAllGraphNodes: () => {
     set({ graphNodes: applySelectedNodeIds(get().graphNodes, get().graphNodes.map((n) => n.id)) });
   },
-  selectNodeGraph: (clientId, additive) => {
-    set({
-      graphNodes: applyComponentSelection(get().graphNodes, get().graphEdges, clientId, additive),
-    });
-  },
+  selectNodeGraph: (clientId, additive) => selectNodeGraphImpl(clientId, additive, set, get),
   clearNodeSelection: () => {
     set({ graphNodes: applySelectedNodeIds(get().graphNodes, []) });
   },
-  cancelNodeBatch: () => {
-    if (!get().nodeBatchRunning) return;
-    set({ nodeBatchStopping: true });
-    get().showToast(t("nodeBatch.stopQueued"));
-  },
+  cancelNodeBatch: () => cancelNodeBatchImpl(set, get),
 
   sessions: [],
   activeSessionId: null,
@@ -601,35 +449,10 @@ importLocalImageToHistory: async (file) => importLocalImageToHistoryImpl(file, s
     hydrateHistoryImpl(set, get);
   },
 
-showToast(message, error = false) {
-    const createdAt = Date.now();
-    const entry = { message, error, id: createdAt + Math.random(), createdAt };
-    set((s) => ({ toast: entry, toastLog: [...s.toastLog, entry].slice(-50) }));
-  },
-  dismissToast(id) {
-    set((s) => {
-      const toastLog = s.toastLog.filter((toast) => toast.id !== id);
-      return {
-        toastLog,
-        toast: s.toast?.id === id ? toastLog[toastLog.length - 1] ?? null : s.toast,
-      };
-    });
-  },
-  showErrorCard(code, params) {
-    const createdAt = Date.now();
-    const entry = { code, fallbackMessage: params?.fallbackMessage, id: createdAt + Math.random(), createdAt };
-    set((s) => ({ errorCard: entry, errorCardLog: [...s.errorCardLog, entry] }));
-  },
-  dismissErrorCard(id) {
-    set((s) => {
-      if (id == null) return { errorCard: null, errorCardLog: [] };
-      const errorCardLog = s.errorCardLog.filter((card) => card.id !== id);
-      return {
-        errorCardLog,
-        errorCard: s.errorCard?.id === id ? errorCardLog[errorCardLog.length - 1] ?? null : s.errorCard,
-      };
-    });
-  },
+  showToast: (message, error = false) => showToastImpl(message, error, set),
+  dismissToast: (id) => dismissToastImpl(id, set),
+  showErrorCard: (code, params) => showErrorCardImpl(code, params, set),
+  dismissErrorCard: (id) => dismissErrorCardImpl(id, set),
 
   // ── Workspace Profile actions ──
   setWorkspaceProfile(profile) {
@@ -668,21 +491,9 @@ showToast(message, error = false) {
   closeCanvas: () => set({ canvasOpen: false }),
   setCanvasZoom: (zoom) => set({ canvasZoom: Math.max(0.5, Math.min(3, zoom)) }),
   resetCanvasZoom: () => set({ canvasZoom: 1, canvasPanX: 0, canvasPanY: 0 }),
-  setCanvasPan: (x, y) => {
-    const cap = 4000;
-    set({
-      canvasPanX: Math.max(-cap, Math.min(cap, x)),
-      canvasPanY: Math.max(-cap, Math.min(cap, y)),
-    });
-  },
+  setCanvasPan: (x, y) => setCanvasPanImpl(x, y, set),
   resetCanvasPan: () => set({ canvasPanX: 0, canvasPanY: 0 }),
-  setCanvasExportBackground: (mode) => {
-    set({ canvasExportBackground: mode });
-    persistCanvasExportBackground(mode, get().canvasExportMatteColor);
-  },
-  setCanvasExportMatteColor: (color) => {
-    set({ canvasExportMatteColor: color });
-    persistCanvasExportBackground(get().canvasExportBackground, color);
-  },
+  setCanvasExportBackground: (mode) => setCanvasExportBackgroundImpl(mode, set, get),
+  setCanvasExportMatteColor: (color) => setCanvasExportMatteColorImpl(color, set, get),
 }));
 
