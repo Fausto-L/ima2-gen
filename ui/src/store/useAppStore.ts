@@ -10,14 +10,7 @@ import type {
   VideoResolutionUI,
 } from "../types";
 import {
-  getHistory,
-  getInflight,
   cancelInflight,
-  listSessions as apiListSessions,
-  createSession as apiCreateSession,
-  getSession as apiGetSession,
-  renameSession as apiRenameSession,
-  deleteSession as apiDeleteSession,
   readImageMetadata,
   getBrowserId,
   getPromptLibrary,
@@ -26,7 +19,6 @@ import {
   togglePromptFavorite,
   toggleGalleryFavorite,
   importPromptLibrary,
-  type SessionSummary,
 } from "../lib/api";
 import { readFileAsDataURL } from "../lib/image";
 import { compressToBase64, isHeic, hasAlphaChannel } from "../lib/compress";
@@ -83,8 +75,6 @@ import {
   resolveThemePreference,
   loadSelectedFilename,
   saveSelectedFilename,
-  loadActiveSessionId,
-  saveActiveSessionId,
   formatSize,
   normalizeCount,
   parseMetadataSize,
@@ -104,11 +94,9 @@ import {
   getCustomSizeConfirmation,
 } from "./storeHelpers";
 import {
-  mapSessionToGraph,
   scheduleGraphSaveImpl,
   flushGraphSaveImpl,
   addHistory,
-  recoverGraphNodesFromHistory,
 } from "./storeGraphSave";
 import {
   runGenerateNodeInPlaceImpl,
@@ -159,6 +147,14 @@ import {
   importLocalImageToHistoryImpl,
   hydrateHistoryImpl,
 } from "./storeHistoryImpl";
+import {
+  loadSessionsImpl,
+  switchSessionImpl,
+  reconcileGraphPendingImpl,
+  createAndSwitchSessionImpl,
+  renameCurrentSessionImpl,
+  deleteSessionByIdImpl,
+} from "./storeSessionImpl";
 
 export type { GalleryScope, ComposeSheetTab, ImageNodeStatus, ImageNodeData, GraphNode, GraphEdge, MultimodeSequenceState } from "./storeTypes";
 export { flushGraphSaveBeacon, selectCurrentSessionId } from "./storeGraphSave";
@@ -666,170 +662,13 @@ trashPending: null,
   activeSessionGraphVersion: null,
   sessionLoading: false,
 
-  async loadSessions() {
-    try {
-      const { sessions } = await apiListSessions();
-      set({ sessions });
-      const current = get().activeSessionId;
-      if (!current) {
-        const savedId = loadActiveSessionId();
-        const savedExists = savedId ? sessions.some((s) => s.id === savedId) : false;
-        if (savedId && savedExists) {
-          await get().switchSession(savedId);
-        } else {
-          await get().createAndSwitchSession(t("session.firstGraph"));
-        }
-      }
-    } catch (err) {
-      console.warn("[sessions] load failed:", err);
-    }
-  },
-
-  async switchSession(id) {
-    set({ sessionLoading: true });
-    await get().flushGraphSave("switch-session");
-    try {
-      const { session } = await apiGetSession(id);
-      const { graphNodes, graphEdges, graphVersion } = mapSessionToGraph(session);
-      set({
-        activeSessionId: id,
-        activeSessionGraphVersion: graphVersion,
-        graphNodes,
-        graphEdges,
-        sessionLoading: false,
-      });
-      saveActiveSessionId(id);
-      // Serialize reconcile and recovery so the two async writers don't race.
-      // reconcileGraphPending already calls recoverGraphNodesFromHistory at the
-      // end, but we await it explicitly here so any subsequent tick sees the
-      // recovered state.
-      await get().reconcileGraphPending().catch(() => {});
-    } catch (err) {
-      console.warn("[sessions] switch failed:", err);
-      set({ sessionLoading: false });
-      get().showToast(t("toast.sessionLoadFailed"), true);
-    }
-  },
-
-  async reconcileGraphPending() {
-    const sid = get().activeSessionId;
-    if (!sid) return;
-    const pendingNodes = get().graphNodes.filter(
-      (n) => n.data?.pendingRequestId && (n.data.status === "pending" || n.data.status === "reconciling"),
-    );
-    if (pendingNodes.length > 0) {
-      let jobs: Array<{ requestId: string; phase?: string }> = [];
-      try {
-        const res = await getInflight({ kind: "node", sessionId: sid });
-        jobs = res.jobs;
-      } catch {
-        // If inflight cannot be queried, skip pending transition but still
-        // attempt orphan recovery below.
-        jobs = [];
-      }
-      const byId = new Map(jobs.map((j) => [j.requestId, j.phase] as const));
-      const now = Date.now();
-      const GRACE_MS = 10_000;
-      const next = get().graphNodes.map((n) => {
-        const reqId = n.data?.pendingRequestId;
-        if (!reqId) return n;
-        if (n.data.status !== "pending" && n.data.status !== "reconciling") return n;
-        if (byId.has(reqId)) {
-          const phase = byId.get(reqId) ?? null;
-          return {
-            ...n,
-            data: { ...n.data, status: "reconciling" as const, pendingPhase: phase },
-          };
-        }
-        // Not in-flight anymore. Apply B grace window if we know when it started —
-        // the server may have just finished and the response is still en route.
-        const startedAt = n.data.pendingStartedAt ?? 0;
-        if (startedAt && now - startedAt < GRACE_MS) {
-          return {
-            ...n,
-            data: { ...n.data, status: "reconciling" as const },
-          };
-        }
-        // Image may have landed, or job was lost.
-        const hasAsset = !!n.data.imageUrl || !!n.data.serverNodeId;
-        return {
-          ...n,
-          data: {
-            ...n.data,
-            pendingRequestId: null,
-            pendingPhase: null,
-            pendingStartedAt: null,
-            partialImageUrl: null,
-            status: hasAsset ? ("ready" as const) : ("stale" as const),
-            error: hasAsset ? undefined : t("session.assetAbortedError"),
-          },
-        };
-      });
-      set({ graphNodes: next });
-    }
-    // Always attempt orphan recovery: covers A-sanitized empty nodes and
-    // cross-session completions that never landed in this graph.
-    await recoverGraphNodesFromHistory(get, set).catch(() => {});
-  },
-
-  async createAndSwitchSession(title?: string) {
-    if (title == null) title = t("session.untitled");
-    try {
-      const { session } = await apiCreateSession(title);
-      set({
-        sessions: [session as SessionSummary, ...get().sessions],
-        activeSessionId: session.id,
-        activeSessionGraphVersion: session.graphVersion,
-        graphNodes: [],
-        graphEdges: [],
-      });
-      saveActiveSessionId(session.id);
-    } catch (err) {
-      console.warn("[sessions] create failed:", err);
-      get().showToast(t("toast.sessionCreateFailed"), true);
-    }
-  },
-
-  async renameCurrentSession(title) {
-    const id = get().activeSessionId;
-    if (!id) return;
-    try {
-      await apiRenameSession(id, title);
-      set({
-        sessions: get().sessions.map((s) =>
-          s.id === id ? { ...s, title, updatedAt: Date.now() } : s,
-        ),
-      });
-    } catch (err) {
-      get().showToast(t("toast.sessionRenameFailed"), true);
-    }
-  },
-
-  async deleteSessionById(id) {
-    try {
-      await apiDeleteSession(id);
-      const remaining = get().sessions.filter((s) => s.id !== id);
-      set({ sessions: remaining });
-      if (get().activeSessionId === id) {
-        set({
-          activeSessionId: null,
-          activeSessionGraphVersion: null,
-          graphNodes: [],
-          graphEdges: [],
-        });
-        saveActiveSessionId(null);
-        if (remaining.length > 0) {
-          await get().switchSession(remaining[0].id);
-        } else {
-          await get().createAndSwitchSession(t("session.firstGraph"));
-        }
-      }
-    } catch (err) {
-      get().showToast(t("toast.sessionDeleteFailed"), true);
-    }
-  },
-
-  scheduleGraphSave() {
+  async loadSessions() { await loadSessionsImpl(set, get); },
+async switchSession(id) { await switchSessionImpl(id, set, get); },
+async reconcileGraphPending() { await reconcileGraphPendingImpl(set, get); },
+async createAndSwitchSession(title?: string) { await createAndSwitchSessionImpl(title, set, get); },
+async renameCurrentSession(title) { await renameCurrentSessionImpl(title, set, get); },
+async deleteSessionById(id) { await deleteSessionByIdImpl(id, set, get); },
+scheduleGraphSave() {
     scheduleGraphSaveImpl(get, set);
   },
 
