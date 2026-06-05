@@ -3,26 +3,13 @@
 // tests/settings-persistence-contract.test.js enforces this invariant.
 // Legacy generation-controls contract: GENERATION_DEFAULTS_STORAGE_KEY = "ima2.generationDefaults".
 import { create } from "zustand";
-import type {
-  GenerateItem,
-  MultimodeSequenceStatus,
-  VideoResolutionUI,
-} from "../types";
+import type { VideoResolutionUI } from "../types";
 import {
   cancelInflight,
   getBrowserId,
-  getPromptLibrary,
-  createPrompt,
-  deletePrompt,
-  togglePromptFavorite,
-  toggleGalleryFavorite,
-  importPromptLibrary,
 } from "../lib/api";
-import { parseRequestedCustomSide } from "../lib/size";
 import {
-  DEFAULT_IMAGE_MODEL,
   isGrokImageModel,
-  isGeminiImageModel,
 } from "../lib/imageModels";
 import {
   GALLERY_DEFAULT_SCOPE_STORAGE_KEY,
@@ -33,14 +20,12 @@ import {
   THEME_STORAGE_KEY,
   UI_MODE_STORAGE_KEY,
 } from "./persistenceRegistry";
-import type { ClientNodeId } from "../lib/graph";
 import {
   deriveParentServerNodeIds,
 } from "../lib/nodeGraph";
 import {
   applyComponentSelection,
   applySelectedNodeIds,
-  getSelectedNodeIds,
 } from "../lib/nodeSelection";
 import { t, loadLocale, saveLocale } from "../i18n";
 import { ENABLE_AGENT_MODE, ENABLE_CARD_NEWS_MODE, ENABLE_NODE_MODE } from "../lib/devMode";
@@ -49,8 +34,6 @@ import {
   resolveVisibleShortcutCurrent,
 } from "../lib/galleryShortcuts";
 import {
-  type InsertedPrompt,
-  composePrompt,
   loadRightPanelOpen,
   loadUIMode,
   loadThemePreference,
@@ -60,20 +43,13 @@ import {
   loadCanvasExportBackground,
   persistCanvasExportBackground,
   loadImageModel,
-  saveImageModel,
   loadReasoningEffort,
-  saveReasoningEffort,
   loadWebSearchEnabled,
-  saveWebSearchEnabled,
   loadVideoDefaults,
   saveVideoDefaults,
   resolveThemePreference,
   loadSelectedFilename,
-  saveSelectedFilename,
-  formatSize,
-  normalizeCount,
   loadGenerationDefaults,
-  saveGenerationDefaultsPatch,
 } from "./storePersistence";
 import {
   loadInFlight,
@@ -81,7 +57,6 @@ import {
   MAX_REFERENCE_IMAGES,
   retainHistoryItems,
   saveInFlight,
-  getCustomSizeConfirmation,
 } from "./storeHelpers";
 import {
   scheduleGraphSaveImpl,
@@ -155,6 +130,25 @@ import {
   useCurrentAsReferenceImpl,
   useImageAsReferenceImpl,
 } from "./storeReferenceImpl";
+import {
+  setProviderImpl, setQualityImpl, setSizePresetImpl, setCustomSizeImpl,
+  setGrokAspectRatioImpl, setGrokResolutionImpl, setFormatImpl, setModerationImpl,
+  setImageModelImpl, selectVideoModelImpl, activeVideoRefCountImpl,
+  setReasoningEffortImpl, setWebSearchEnabledImpl, setCountImpl,
+  setMultimodeImpl, setMultimodeMaxImagesImpl, setPromptModeImpl, setPromptImpl,
+  getResolvedSizeImpl,
+} from "./storeSettingsImpl";
+import {
+  insertPromptToComposerImpl, removeInsertedPromptFromComposerImpl,
+  moveInsertedPromptInComposerImpl, clearInsertedPromptsImpl,
+  loadPromptLibraryImpl, savePromptToLibraryImpl, deletePromptFromLibraryImpl,
+  togglePromptFavoriteImpl, importPromptsToLibraryImpl, toggleGalleryFavoriteImpl,
+} from "./storePromptImpl";
+import {
+  generateImpl, cancelMultimodeImpl, confirmCustomSizeAdjustmentImpl,
+  generateNodeImpl, generateNodeInPlaceImpl, generateNodeVariationImpl,
+  runGenerateNodeImpl,
+} from "./storeGenerateEntryImpl";
 
 export type { GalleryScope, ComposeSheetTab, ImageNodeStatus, ImageNodeData, GraphNode, GraphEdge, MultimodeSequenceState } from "./storeTypes";
 export { flushGraphSaveBeacon, selectCurrentSessionId } from "./storeGraphSave";
@@ -504,68 +498,13 @@ removeNodeReference: (clientId, index) => removeNodeReferenceImpl(clientId, inde
 clearNodeReferences: (clientId) => clearNodeReferencesImpl(clientId, set, get),
 duplicateBranchRoot: (sourceClientId) => duplicateBranchRootImpl(sourceClientId, set, get),
 
-  async generateNode(clientId) {
-    const node = get().graphNodes.find((n) => n.id === clientId);
-    if (!node) return;
-    const { prompt } = node.data;
-    if (!prompt.trim()) {
-      get().showToast(t("toast.promptRequired"), true);
-      return;
-    }
-    if (get().videoModelSelected) return get().runVideoGenerate(clientId);
-    const pending = getCustomSizeConfirmation(get(), { kind: "node", clientId });
-    if (pending) {
-      set({ customSizeConfirm: pending });
-      return;
-    }
-    await get().runGenerateNode(clientId);
-  },
+  generateNode: (clientId) => generateNodeImpl(clientId, set, get),
 
-  async generateNodeInPlace(clientId) {
-    const node = get().graphNodes.find((n) => n.id === clientId);
-    if (!node) return;
-    if (!node.data.prompt.trim()) {
-      get().showToast(t("toast.promptRequired"), true);
-      return;
-    }
-    if (get().videoModelSelected) return get().runVideoGenerate(clientId);
-    const pending = getCustomSizeConfirmation(get(), { kind: "node-in-place", clientId });
-    if (pending) {
-      set({ customSizeConfirm: pending });
-      return;
-    }
-    await get().runGenerateNodeInPlace(clientId);
-  },
+  generateNodeInPlace: (clientId) => generateNodeInPlaceImpl(clientId, set, get),
 
-  async generateNodeVariation(clientId, sizeOverride) {
-    const source = get().graphNodes.find((n) => n.id === clientId);
-    if (!source) return;
-    if (!source.data.prompt.trim()) {
-      get().showToast(t("toast.promptRequired"), true);
-      return;
-    }
-    if (get().videoModelSelected) {
-      const targetClientId = get().addSiblingNode(clientId);
-      return get().runVideoGenerate(targetClientId);
-    }
-    if (!sizeOverride) {
-      const pending = getCustomSizeConfirmation(get(), { kind: "node-variation", clientId });
-      if (pending) {
-        set({ customSizeConfirm: pending });
-        return;
-      }
-    }
-    const targetClientId = get().addSiblingNode(clientId);
-    await get().runGenerateNodeInPlace(targetClientId, { sizeOverride });
-  },
+  generateNodeVariation: (clientId, sizeOverride) => generateNodeVariationImpl(clientId, sizeOverride, set, get),
 
-  async runGenerateNode(clientId, sizeOverride) {
-    const requestedNode = get().graphNodes.find((n) => n.id === clientId);
-    const targetClientId = requestedNode?.data.status === "ready"
-      ? get().addSiblingNode(clientId)
-      : clientId;
-    await get().runGenerateNodeInPlace(targetClientId, { sizeOverride });
-  },
+  runGenerateNode: (clientId, sizeOverride) => runGenerateNodeImpl(clientId, sizeOverride, set, get),
 
   async runGenerateNodeInPlace(clientId, options = {}) {
     return runGenerateNodeInPlaceImpl(clientId, options, set, get, saveInFlight);
@@ -580,86 +519,15 @@ deleteNodes: (clientIds) => deleteNodesImpl(clientIds, set, get),
 addChildNodeAt: (parentClientId, position, sourceHandle) => addChildNodeAtImpl(parentClientId, position, sourceHandle, set, get),
 
   connectNodes: (sourceClientId, targetClientId, sourceHandle, targetHandle) => connectNodesImpl(sourceClientId, targetClientId, sourceHandle, targetHandle, set, get),
-setProvider: (provider) => {
-    saveGenerationDefaultsPatch({ provider });
-    const currentModel = get().imageModel;
-    const supportsVideo = provider === "grok" || provider === "grok-api";
-    if (!supportsVideo && get().videoModelSelected) {
-      set({ videoModelSelected: false });
-      saveVideoDefaults({ model: false });
-    }
-    if ((provider === "grok" || provider === "grok-api") && !isGrokImageModel(currentModel)) {
-      const grokModel = "grok-imagine-image";
-      saveImageModel(grokModel);
-      set({ provider, imageModel: grokModel });
-    } else if ((provider === "agy" || provider === "gemini-api") && !isGeminiImageModel(currentModel)) {
-      const geminiModel = provider === "gemini-api" ? "nano-banana-pro" : "nano-banana-2";
-      saveImageModel(geminiModel);
-      set({ provider, imageModel: geminiModel });
-    } else if (provider !== "grok" && provider !== "grok-api" && provider !== "agy" && provider !== "gemini-api" && (isGrokImageModel(currentModel) || isGeminiImageModel(currentModel))) {
-      set({ provider, imageModel: DEFAULT_IMAGE_MODEL });
-      saveImageModel(DEFAULT_IMAGE_MODEL);
-    } else {
-      set({ provider });
-    }
-  },
-  setQuality: (quality) => {
-    saveGenerationDefaultsPatch({ quality });
-    set({ quality });
-  },
-  setSizePreset: (sizePreset) => {
-    saveGenerationDefaultsPatch({ sizePreset });
-    set({ sizePreset });
-  },
-  setCustomSize: (w, h) =>
-    set((state) => {
-      const customW = parseRequestedCustomSide(w, state.customW);
-      const customH = parseRequestedCustomSide(h, state.customH);
-      saveGenerationDefaultsPatch({ customW, customH });
-      return { customW, customH };
-    }),
-  setGrokAspectRatio: (grokAspectRatio) => {
-    saveGenerationDefaultsPatch({ grokAspectRatio } as any);
-    set({ grokAspectRatio });
-  },
-  setGrokResolution: (grokResolution) => {
-    saveGenerationDefaultsPatch({ grokResolution } as any);
-    set({ grokResolution });
-  },
-  setFormat: (format) => {
-    saveGenerationDefaultsPatch({ format });
-    set({ format });
-  },
-  setModeration: (moderation) => {
-    saveGenerationDefaultsPatch({ moderation });
-    set({ moderation });
-  },
-  setImageModel: (imageModel) => {
-    saveImageModel(imageModel);
-    set({ videoModelSelected: false });
-    saveVideoDefaults({ model: false });
-    if (isGrokImageModel(imageModel)) {
-      saveGenerationDefaultsPatch({ provider: "grok" });
-      set({ provider: "grok", imageModel });
-      return;
-    }
-    if (isGeminiImageModel(imageModel)) {
-      const current = get().provider;
-      if (current !== "agy" && current !== "gemini-api") {
-        saveGenerationDefaultsPatch({ provider: "agy" });
-        set({ provider: "agy", imageModel });
-      } else {
-        set({ imageModel });
-      }
-      return;
-    }
-    if (get().provider === "grok" || get().provider === "agy" || get().provider === "gemini-api") {
-      saveGenerationDefaultsPatch({ provider: "oauth" });
-      set({ provider: "oauth", imageModel });
-      return;
-    }
-    set({ imageModel });
-  },
+  setProvider: (provider) => setProviderImpl(provider, set, get),
+  setQuality: (quality) => setQualityImpl(quality, set),
+  setSizePreset: (sizePreset) => setSizePresetImpl(sizePreset, set),
+  setCustomSize: (w, h) => setCustomSizeImpl(w, h, set, get),
+  setGrokAspectRatio: (grokAspectRatio) => setGrokAspectRatioImpl(grokAspectRatio, set),
+  setGrokResolution: (grokResolution) => setGrokResolutionImpl(grokResolution, set),
+  setFormat: (format) => setFormatImpl(format, set),
+  setModeration: (moderation) => setModerationImpl(moderation, set),
+  setImageModel: (imageModel) => setImageModelImpl(imageModel, set, get),
   videoModelSelected: storedVideoDefaults.model,
   videoDuration: storedVideoDefaults.duration,
   videoResolution: storedVideoDefaults.resolution as VideoResolutionUI,
@@ -667,125 +535,30 @@ setProvider: (provider) => {
   videoTopic: "",
   videoContinuityLineage: null,
   videoProgress: null,
-  selectVideoModel: (model) => {
-    const m = model || "grok-imagine-video";
-    set({ videoModelSelected: m });
-    saveVideoDefaults({ model: m });
-    if (get().provider !== "grok") get().setProvider("grok");
-  },
+  selectVideoModel: (model) => selectVideoModelImpl(model, set, get),
   setVideoDuration: (videoDuration) => { set({ videoDuration }); saveVideoDefaults({ duration: videoDuration }); },
   setVideoResolution: (videoResolution) => { set({ videoResolution }); saveVideoDefaults({ resolution: videoResolution }); },
   setVideoAspectRatio: (videoAspectRatio) => { set({ videoAspectRatio }); saveVideoDefaults({ aspectRatio: videoAspectRatio }); },
   setVideoTopic: (videoTopic) => set({ videoTopic }),
   setVideoContinuityLineage: (videoContinuityLineage) => set({ videoContinuityLineage }),
-  activeVideoRefCount: () => {
-    const s = get();
-    if (s.uiMode === "node") {
-      const id = getSelectedNodeIds(s.graphNodes)[0];
-      const node = s.graphNodes.find((n) => n.id === id);
-      return node?.data.referenceImages?.length ?? 0;
-    }
-    return s.referenceImages.length;
-  },
+  activeVideoRefCount: () => activeVideoRefCountImpl(get),
   runVideoGenerate: async (nodeId) => {
     await runVideoGenerateImpl(nodeId, set, get);
   },
   animateImage: async (filename, prompt) => {
     await animateImageImpl(filename, prompt, set, get);
   },
-  setReasoningEffort: (reasoningEffort) => {
-    saveReasoningEffort(reasoningEffort);
-    set({ reasoningEffort });
-  },
-  setWebSearchEnabled: (webSearchEnabled) => {
-    saveWebSearchEnabled(webSearchEnabled);
-    set({ webSearchEnabled });
-  },
-  setCount: (count) => {
-    const next = normalizeCount(count);
-    saveGenerationDefaultsPatch({ count: next });
-    set({ count: next });
-  },
-  setMultimode: (enabled) => {
-    if (enabled && get().uiMode !== "classic") return;
-    saveGenerationDefaultsPatch({ multimode: enabled });
-    const s = get();
-    set({
-      multimode: enabled,
-      multimodeSequences: enabled ? s.multimodeSequences : {},
-      multimodePreviewFlightId: enabled ? s.multimodePreviewFlightId : null,
-    });
-  },
-  setMultimodeMaxImages: (count) => {
-    const next = normalizeCount(count);
-    saveGenerationDefaultsPatch({ multimodeMaxImages: next });
-    set({ multimodeMaxImages: next });
-  },
-  setPromptMode: (promptMode) => {
-    saveGenerationDefaultsPatch({ promptMode });
-    set({ promptMode });
-  },
-  setPrompt: (prompt) => {
-    saveGenerationDefaultsPatch({ prompt });
-    set({ prompt });
-  },
-  insertPromptToComposer: (prompt) =>
-    set((state) => {
-      const exists = state.insertedPrompts.some((item) => item.id === prompt.id);
-      const nextPrompt: InsertedPrompt = {
-        ...prompt,
-        placement: prompt.placement === "after" ? "after" : "before",
-      };
-      const insertedPrompts = exists
-        ? state.insertedPrompts
-        : [...state.insertedPrompts, nextPrompt];
-      saveGenerationDefaultsPatch({ insertedPrompts });
-      return {
-        insertedPrompts,
-      };
-    }),
-  removeInsertedPromptFromComposer: (id) =>
-    set((state) => {
-      const insertedPrompts = state.insertedPrompts.filter((prompt) => prompt.id !== id);
-      saveGenerationDefaultsPatch({ insertedPrompts });
-      return {
-        insertedPrompts,
-        videoContinuityLineage: id.startsWith("video-continuity:")
-          ? null
-          : state.videoContinuityLineage,
-      };
-    }),
-  moveInsertedPromptInComposer: (id, direction) =>
-    set((state) => {
-      const before = state.insertedPrompts.filter((prompt) => prompt.placement !== "after");
-      const after = state.insertedPrompts.filter((prompt) => prompt.placement === "after");
-      const visualOrder = [
-        ...before.map((prompt) => ({ kind: "prompt" as const, prompt })),
-        { kind: "main" as const },
-        ...after.map((prompt) => ({ kind: "prompt" as const, prompt })),
-      ];
-      const sourceIndex = visualOrder.findIndex(
-        (item) => item.kind === "prompt" && item.prompt.id === id,
-      );
-      if (sourceIndex < 0) return {};
-      const targetIndex = direction === "up" ? sourceIndex - 1 : sourceIndex + 1;
-      if (targetIndex < 0 || targetIndex >= visualOrder.length) return {};
-      const [moving] = visualOrder.splice(sourceIndex, 1);
-      visualOrder.splice(targetIndex, 0, moving);
-      const mainIndex = visualOrder.findIndex((item) => item.kind === "main");
-      const insertedPrompts = visualOrder
-        .filter((item): item is { kind: "prompt"; prompt: InsertedPrompt } => item.kind === "prompt")
-        .map((item, index): InsertedPrompt => ({
-          ...item.prompt,
-          placement: index < mainIndex ? "before" : "after",
-        }));
-      saveGenerationDefaultsPatch({ insertedPrompts });
-      return { insertedPrompts };
-    }),
-  clearInsertedPrompts: () => {
-    saveGenerationDefaultsPatch({ insertedPrompts: [] });
-    set({ insertedPrompts: [], videoContinuityLineage: null });
-  },
+  setReasoningEffort: (reasoningEffort) => setReasoningEffortImpl(reasoningEffort, set),
+  setWebSearchEnabled: (webSearchEnabled) => setWebSearchEnabledImpl(webSearchEnabled, set),
+  setCount: (count) => setCountImpl(count, set),
+  setMultimode: (enabled) => setMultimodeImpl(enabled, set, get),
+  setMultimodeMaxImages: (count) => setMultimodeMaxImagesImpl(count, set),
+  setPromptMode: (promptMode) => setPromptModeImpl(promptMode, set),
+  setPrompt: (prompt) => setPromptImpl(prompt, set),
+  insertPromptToComposer: (prompt) => insertPromptToComposerImpl(prompt, set),
+  removeInsertedPromptFromComposer: (id) => removeInsertedPromptFromComposerImpl(id, set),
+  moveInsertedPromptInComposer: (id, direction) => moveInsertedPromptInComposerImpl(id, direction, set),
+  clearInsertedPrompts: () => clearInsertedPromptsImpl(set),
 
   selectHistory: (item) => selectHistoryImpl(item, set, get),
 showHistorySequence: (sequenceId) => showHistorySequenceImpl(sequenceId, set, get),
@@ -806,89 +579,21 @@ removeFromHistory: (filename) => removeFromHistoryImpl(filename, set, get),
 addHistoryItem: (item) => addHistoryItemImpl(item, set, get),
 importLocalImageToHistory: async (file) => importLocalImageToHistoryImpl(file, set, get),
 
-  getResolvedSize: () => {
-    const { provider, sizePreset, customW, customH, grokAspectRatio, grokResolution } = get();
-    if (provider === "grok" || provider === "grok-api") {
-      return `grok:${grokAspectRatio}:${grokResolution}`;
-    }
-    return sizePreset === "custom" ? `${customW}x${customH}` : sizePreset;
-  },
+  getResolvedSize: () => getResolvedSizeImpl(get),
 
-  async generate() {
-    const s = get();
-    const prompt = composePrompt(s.prompt, s.insertedPrompts);
-    if (!prompt) return;
-    if (s.videoModelSelected) return get().runVideoGenerate();
-    const useMultimode = s.uiMode === "classic" && s.multimode;
-    const pending = getCustomSizeConfirmation(s, { kind: useMultimode ? "multimode" : "classic" });
-    if (pending) {
-      set({ customSizeConfirm: pending });
-      return;
-    }
-    if (useMultimode) {
-      await get().generateMultimode();
-      return;
-    }
-    await get().runGenerate();
-  },
+  generate: () => generateImpl(set, get),
 
   async generateMultimode(sizeOverride) {
     await generateMultimodeImpl(sizeOverride, set, get);
   },
 
-  cancelMultimode: () => {
-    const flightId = get().multimodePreviewFlightId;
-    if (!flightId) return;
-    get().multimodeAbortControllers[flightId]?.abort();
-    void get().cancelInFlightJob(flightId);
-    set((state) => {
-      const current = state.multimodeSequences[flightId];
-      if (!current) return {};
-      return {
-        multimodeSequences: {
-          ...state.multimodeSequences,
-          [flightId]: {
-            ...current,
-            status: "canceled",
-          },
-        },
-      };
-    });
-  },
+  cancelMultimode: () => cancelMultimodeImpl(set, get),
 
   async runGenerate(sizeOverride) {
     await runGenerateImpl(sizeOverride, set, get);
   },
 
-  async confirmCustomSizeAdjustment() {
-    const pending = get().customSizeConfirm;
-    if (!pending) return;
-    const adjustedSize = formatSize(pending.adjustedW, pending.adjustedH);
-    set({
-      customW: pending.adjustedW,
-      customH: pending.adjustedH,
-      customSizeConfirm: null,
-    });
-    if (pending.continuation.kind === "classic") {
-      await get().runGenerate(adjustedSize);
-      return;
-    }
-    if (pending.continuation.kind === "multimode") {
-      await get().generateMultimode(adjustedSize);
-      return;
-    }
-    if (pending.continuation.kind === "node-in-place") {
-      await get().runGenerateNodeInPlace(pending.continuation.clientId, {
-        sizeOverride: adjustedSize,
-      });
-      return;
-    }
-    if (pending.continuation.kind === "node-variation") {
-      await get().generateNodeVariation(pending.continuation.clientId, adjustedSize);
-      return;
-    }
-    await get().runGenerateNode(pending.continuation.clientId, adjustedSize);
-  },
+  confirmCustomSizeAdjustment: () => confirmCustomSizeAdjustmentImpl(set, get),
 
   cancelCustomSizeAdjustment: () => set({ customSizeConfirm: null }),
 
@@ -946,88 +651,17 @@ showToast(message, error = false) {
     set((s) => ({ promptLibraryOpen: !s.promptLibraryOpen }));
   },
 
-  async loadPromptLibrary() {
-    set({ promptLibraryLoading: true });
-    try {
-      const data = await getPromptLibrary();
-      set({ promptLibrary: { prompts: data.prompts, folders: data.folders }, promptLibraryLoading: false });
-    } catch (err) {
-      console.error("[PromptLibrary] load failed", err);
-      set({ promptLibraryLoading: false });
-    }
-  },
+  loadPromptLibrary: () => loadPromptLibraryImpl(set),
 
-  async savePromptToLibrary(payload) {
-    try {
-      await createPrompt(payload);
-      await get().loadPromptLibrary();
-      get().showToast(t("promptLibrary.saved"));
-    } catch (err) {
-      console.error("[PromptLibrary] save failed", err);
-      get().showToast(t("promptLibrary.saveFailed"), true);
-    }
-  },
+  savePromptToLibrary: (payload) => savePromptToLibraryImpl(payload, set, get),
 
-  async deletePromptFromLibrary(id) {
-    try {
-      await deletePrompt(id);
-      await get().loadPromptLibrary();
-    } catch (err) {
-      console.error("[PromptLibrary] delete failed", err);
-    }
-  },
+  deletePromptFromLibrary: (id) => deletePromptFromLibraryImpl(id, set, get),
 
-  async togglePromptFavorite(id) {
-    try {
-      await togglePromptFavorite(id);
-      await get().loadPromptLibrary();
-    } catch (err) {
-      console.error("[PromptLibrary] favorite toggle failed", err);
-    }
-  },
+  togglePromptFavorite: (id) => togglePromptFavoriteImpl(id, set, get),
 
-  async importPromptsToLibrary(files) {
-    try {
-      const prompts: Array<{ name: string; text: string; tags: string[] }> = [];
-      for (const file of files) {
-        if (!/\.(txt|md|markdown)$/i.test(file.name)) continue;
-        const text = await file.text();
-        if (!text.trim()) continue;
-        const name = file.name.replace(/\.(txt|md|markdown)$/i, "");
-        prompts.push({ name: name.trim() || t("promptLibrary.untitled"), text: text.trim(), tags: [] });
-      }
-      if (prompts.length === 0) {
-        get().showToast(t("promptLibrary.importNoValidFiles"), true);
-        return;
-      }
-      const result = await importPromptLibrary({ prompts });
-      await get().loadPromptLibrary();
-      get().showToast(t("promptLibrary.imported", { count: result.promptsImported }));
-    } catch (err) {
-      console.error("[PromptLibrary] import failed", err);
-      get().showToast(t("promptLibrary.importFailed"), true);
-    }
-  },
+  importPromptsToLibrary: (files) => importPromptsToLibraryImpl(files, set, get),
 
-  async toggleGalleryFavorite(filename) {
-    try {
-      const result = await toggleGalleryFavorite(filename);
-      set((s) => {
-        const next = new Set(s.galleryFavorites);
-        if (result.isFavorite) next.add(filename);
-        else next.delete(filename);
-        return { galleryFavorites: next };
-      });
-      // Also update history items in place
-      set((s) => ({
-        history: s.history.map((h) =>
-          h.filename === filename ? { ...h, isFavorite: result.isFavorite } : h,
-        ),
-      }));
-    } catch (err) {
-      console.error("[GalleryFavorite] toggle failed", err);
-    }
-  },
+  toggleGalleryFavorite: (filename) => toggleGalleryFavoriteImpl(filename, set, get),
 
   // Canvas Mode actions (0.24)
   openCanvas: () => set({ canvasOpen: true, canvasZoom: 1, canvasPanX: 0, canvasPanY: 0 }),
