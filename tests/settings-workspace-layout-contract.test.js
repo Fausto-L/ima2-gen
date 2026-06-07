@@ -3,12 +3,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { readSourceTree } from "./_readTree.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
 const settings = readFileSync(join(root, "ui/src/components/SettingsWorkspace.tsx"), "utf8");
 const mobileToggle = readFileSync(join(root, "ui/src/components/MobileSettingsToggle.tsx"), "utf8");
-const css = readFileSync(join(root, "ui/src/index.css"), "utf8");
+const css = readSourceTree("ui/src/index.css");
 const settingsControlsCss = readFileSync(join(root, "ui/src/styles/settings-controls.css"), "utf8");
 
 test("settings workspace keeps mobile and desktop navigation from occupying the same grid", () => {

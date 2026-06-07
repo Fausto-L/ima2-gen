@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { readStoreBundle } from "./_storeBundle.mjs";
+import { readSourceTree } from "./_readTree.mjs";
 
 const appBar = readFileSync("ui/src/components/MobileAppBar.tsx", "utf8");
 const sheet = readFileSync("ui/src/components/MobileComposeSheet.tsx", "utf8");
-const store = readStoreBundle();
+const store = readSourceTree("ui/src/store/useAppStore.ts");
 const controls = readFileSync("ui/src/components/GenerationControlsPanel.tsx", "utf8");
 const rightPanel = readFileSync("ui/src/components/RightPanel.tsx", "utf8");
-const css = readFileSync("ui/src/index.css", "utf8");
+const css = readSourceTree("ui/src/index.css");
 const en = JSON.parse(readFileSync("ui/src/i18n/en.json", "utf8"));
 const ko = JSON.parse(readFileSync("ui/src/i18n/ko.json", "utf8"));
 

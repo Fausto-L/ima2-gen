@@ -1,9 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { readSourceTree } from "./_readTree.mjs";
 
 const imageNode = readFileSync("ui/src/components/ImageNode.tsx", "utf-8");
-const css = readFileSync("ui/src/index.css", "utf-8");
+const css = readSourceTree("ui/src/index.css");
 const ko = readFileSync("ui/src/i18n/ko.json", "utf-8");
 const en = readFileSync("ui/src/i18n/en.json", "utf-8");
 

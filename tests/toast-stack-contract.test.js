@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { readStoreBundle } from "./_storeBundle.mjs";
+import { readSourceTree } from "./_readTree.mjs";
 
-const storeSource = readStoreBundle();
+const storeSource = readSourceTree("ui/src/store/useAppStore.ts");
 const toastSource = readFileSync("ui/src/components/Toast.tsx", "utf8");
 const errorCardSource = readFileSync("ui/src/components/ErrorCard.tsx", "utf8");
-const cssSource = readFileSync("ui/src/index.css", "utf8");
+const cssSource = readSourceTree("ui/src/index.css");
 
 test("toast store keeps an append-only visible log with dismiss support", () => {
   assert.match(

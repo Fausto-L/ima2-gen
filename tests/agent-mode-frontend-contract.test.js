@@ -2,13 +2,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readStoreBundle } from "./_storeBundle.mjs";
+import { readSourceTree } from "./_readTree.mjs";
 
 const root = process.cwd();
 
 function readSource(path) {
-  if (path === "ui/src/store/useAppStore.ts") return readStoreBundle();
-  return readFileSync(join(root, path), "utf8");
+  return readSourceTree(path);
 }
 
 describe("Agent Mode frontend shell contract", () => {
@@ -61,6 +60,7 @@ describe("Agent Mode frontend shell contract", () => {
     const modelSheet = readSource("ui/src/components/agent/AgentModelSheet.tsx");
     const css = readSource("ui/src/styles/agent-workspace.css");
     const panelCss = readSource("ui/src/styles/agent-workspace-panels.css");
+    const composerCss = readSource("ui/src/styles/agent-panels-composer.css");
 
     assert.match(types, /"desktop-three-pane"/);
     assert.match(types, /"desktop-rail"/);
@@ -79,8 +79,8 @@ describe("Agent Mode frontend shell contract", () => {
     assert.match(drawer, /role="dialog"/);
     assert.match(sheet, /role="dialog"/);
     assert.match(modelSheet, /role="dialog"/);
-    assert.match(panelCss, /\.agent-image-sheet/);
-    assert.match(panelCss, /\.agent-model-sheet/);
+    assert.match(composerCss, /\.agent-image-sheet/);
+    assert.match(composerCss, /\.agent-model-sheet/);
   });
 
   it("wires Agent workspace to server-backed runtime APIs and image handles", () => {
@@ -195,7 +195,8 @@ describe("Agent Mode frontend shell contract", () => {
     assert.match(message, /AgentResultThumb/);
     assert.match(message, /currentImageId/);
     assert.match(group, /agent-message__tool-summary/);
-    assert.doesNotMatch(group, /agent-message__tool-toggle[\s\S]*AgentResultThumb[\s\S]*<\/button>/);
+    const groupRaw = readFileSync(join(root, "ui/src/components/agent/AgentToolGroup.tsx"), "utf8");
+    assert.doesNotMatch(groupRaw, /agent-message__tool-toggle[\s\S]*AgentResultThumb[\s\S]*<\/button>/);
     assert.match(pane, /onImageSelect: \(imageId: string\) => void/);
     assert.match(pane, /handleImageKeyDown/);
     assert.match(pane, /ArrowLeft/);
@@ -208,11 +209,12 @@ describe("Agent Mode frontend shell contract", () => {
     assert.match(thumb, /forwardRef/);
     assert.match(thumb, /aria-current=\{selected \? "true" : undefined\}/);
     assert.match(panelCss, /\.agent-result-thumb/);
-    assert.match(panelCss, /\.agent-image-sheet \.agent-image/);
+    const composerCss2 = readSource("ui/src/styles/agent-panels-composer.css");
+    assert.match(composerCss2, /\.agent-image-sheet \.agent-image/);
     assert.match(imageCss, /\.agent-image__preview:focus-visible/);
     assert.match(imageCss, /\.agent-image__preview\s*\{[\s\S]*?position: relative;/);
     assert.match(imageCss, /\.agent-image__preview img\s*\{[\s\S]*?position: absolute;[\s\S]*?object-fit: contain;/);
-    assert.match(panelCss, /\.agent-image-sheet \.agent-image__preview img/);
+    assert.match(composerCss2, /\.agent-image-sheet \.agent-image__preview img/);
     assert.match(en, /"selectImage": "Focus image"/);
     assert.match(ko, /"selectImage": "이미지 포커스"/);
   });

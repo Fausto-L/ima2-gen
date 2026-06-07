@@ -1,12 +1,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { readStoreBundle } from "./_storeBundle.mjs";
+import { readSourceTree } from "./_readTree.mjs";
 
-const store = readStoreBundle();
+const store = readSourceTree("ui/src/store/useAppStore.ts");
 const canvas = readFileSync("ui/src/components/NodeCanvas.tsx", "utf-8");
 const batchBar = readFileSync("ui/src/components/NodeBatchBar.tsx", "utf-8");
-const css = readFileSync("ui/src/index.css", "utf-8");
+const css = readSourceTree("ui/src/index.css");
 const ko = readFileSync("ui/src/i18n/ko.json", "utf-8");
 const selectionLib = readFileSync("ui/src/lib/nodeSelection.ts", "utf-8");
 const batchLib = readFileSync("ui/src/lib/nodeBatch.ts", "utf-8");

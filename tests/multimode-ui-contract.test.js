@@ -2,13 +2,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readStoreBundle } from "./_storeBundle.mjs";
+import { readSourceTree } from "./_readTree.mjs";
 
 const root = process.cwd();
 
 function readSource(path) {
-  if (path === "ui/src/store/useAppStore.ts") return readStoreBundle();
-  return readFileSync(join(root, path), "utf8");
+  return readSourceTree(path);
 }
 
 describe("multimode frontend UX contract", () => {
@@ -43,7 +42,7 @@ describe("multimode frontend UX contract", () => {
     assert.match(store, /if \(s\.uiMode !== "classic"\) return/);
     assert.match(store, /postMultimodeGenerateStream\(/);
     assert.match(store, /signal: controller\.signal/);
-    assert.match(store, /cancelMultimode: \(\) => \{/);
+    assert.match(store, /cancelMultimode: \(\) =>/);
     assert.match(api, /postMultimodeGenerateStream/);
     assert.match(api, /signal\?: AbortSignal/);
   });

@@ -1,12 +1,27 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { readSourceTree } from "./_readTree.mjs";
 
 const root = process.cwd();
 
 function readSource(path) {
-  return readFileSync(join(root, path), "utf8");
+  const content = readFileSync(join(root, path), "utf8");
+  const dir = dirname(path);
+  let combined = content;
+  const re = /(?:export|import)\s+[\s\S]*?from\s*["']\.\/([\w.\/-]+)["']/g;
+  let m;
+  while ((m = re.exec(content)) !== null) {
+    for (const ext of ["", ".ts", ".tsx", ".js"]) {
+      try { combined += "\n" + readFileSync(join(root, dir, m[1] + ext), "utf8"); break; } catch {}
+    }
+  }
+  const cssRe = /@import\s+["']\.\/([\w.\/-]+)["']/g;
+  while ((m = cssRe.exec(content)) !== null) {
+    try { combined += "\n" + readFileSync(join(root, dir, m[1]), "utf8"); } catch {}
+  }
+  return combined;
 }
 
 describe("canvas memo contract", () => {
@@ -42,7 +57,7 @@ describe("canvas memo contract", () => {
   });
 
   it("has memo overlay pointer event CSS", () => {
-    const source = readSource("ui/src/styles/canvas-mode.css");
+    const source = readSource("ui/src/styles/canvas-annotations.css");
     assert.match(source, /\.canvas-memo-overlay[\s\S]*pointer-events: none/);
     assert.match(source, /\.canvas-memo[\s\S]*pointer-events: auto/);
     assert.match(source, /@media \(max-width: 720px\)/);

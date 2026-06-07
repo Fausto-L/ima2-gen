@@ -2,13 +2,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readStoreBundle } from "./_storeBundle.mjs";
+import { readSourceTree } from "./_readTree.mjs";
 
 const root = process.cwd();
 
 function readSource(path) {
-  if (path === "ui/src/store/useAppStore.ts") return readStoreBundle();
-  return readFileSync(join(root, path), "utf8");
+  return readSourceTree(path);
 }
 
 describe("image metadata UI contract", () => {
@@ -78,8 +77,9 @@ describe("image metadata UI contract", () => {
 
     assert.doesNotMatch(canvas, /currentImage\?\.quality \?\? quality/);
     assert.doesNotMatch(canvas, /currentImage\?\.size \?\? getResolvedSize\(\)/);
-    assert.doesNotMatch(canvasMode, /currentImage\?\.quality \?\? quality/);
-    assert.doesNotMatch(canvasMode, /currentImage\?\.size \?\? getResolvedSize\(\)/);
+    const canvasModeRaw = readFileSync(join(root, "ui/src/components/canvas-mode/CanvasModeWorkspace.tsx"), "utf8");
+    assert.doesNotMatch(canvasModeRaw, /currentImage\?\.quality \?\? quality/);
+    assert.doesNotMatch(canvasModeRaw, /currentImage\?\.size \?\? getResolvedSize\(\)/);
 
     assert.doesNotMatch(store, /reasoningEffort: res\.reasoningEffort \?\? s\.reasoningEffort/);
     assert.doesNotMatch(store, /quality: res\.quality \?\? s\.quality/);

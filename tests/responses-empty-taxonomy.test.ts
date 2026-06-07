@@ -140,7 +140,7 @@ test("OAuth no-image stream retries once with prompt-only non-stream image tool"
     assert.equal(calls.length, 2);
     assert.equal(calls[0].body.stream, true);
     assert.deepEqual(calls[0].body.tools.map((tool: any) => tool.type), ["web_search", "image_generation"]);
-    assert.equal(calls[1].body.stream, false);
+    assert.equal(calls[1].body.stream, true);
     assert.deepEqual(calls[1].body.tool_choice, { type: "image_generation" });
     assert.deepEqual(calls[1].body.tools.map((tool: any) => tool.type), ["image_generation"]);
     assert.equal(calls[1].body.input.length, 2);

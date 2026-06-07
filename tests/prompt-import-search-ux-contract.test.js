@@ -1,12 +1,27 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { readSourceTree } from "./_readTree.mjs";
 
 const root = process.cwd();
 
 function readSource(path) {
-  return readFileSync(join(root, path), "utf8");
+  const content = readFileSync(join(root, path), "utf8");
+  const dir = dirname(path);
+  let combined = content;
+  const re = /(?:export|import)\s+[\s\S]*?from\s*["']\.\/([\w.\/-]+)["']/g;
+  let m;
+  while ((m = re.exec(content)) !== null) {
+    for (const ext of ["", ".ts", ".tsx", ".js"]) {
+      try { combined += "\n" + readFileSync(join(root, dir, m[1] + ext), "utf8"); break; } catch {}
+    }
+  }
+  const cssRe = /@import\s+["']\.\/([\w.\/-]+)["']/g;
+  while ((m = cssRe.exec(content)) !== null) {
+    try { combined += "\n" + readFileSync(join(root, dir, m[1]), "utf8"); } catch {}
+  }
+  return combined;
 }
 
 describe("prompt import search UX contract", () => {
@@ -19,7 +34,8 @@ describe("prompt import search UX contract", () => {
     assert.match(dialog, /PromptImportCandidatePreview/);
     assert.match(dialog, /activeCandidateId/);
     assert.match(dialog, /setActiveCandidateId/);
-    assert.doesNotMatch(dialog, /candidates\.map\(\(candidate\) =>/);
+    const dialogOnly = readFileSync(join(root, "ui/src/components/PromptImportDialog.tsx"), "utf8");
+    assert.doesNotMatch(dialogOnly, /candidates\.map\(\(candidate\) =>/);
 
     assert.match(results, /prompt-import-dialog__results/);
     assert.match(results, /prompt-import-dialog__result-card/);

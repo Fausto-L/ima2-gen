@@ -3,24 +3,24 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { readStoreBundle } from "./_storeBundle.mjs";
+import { readSourceTree } from "./_readTree.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
 const types = readFileSync(join(root, "ui/src/types/canvas.ts"), "utf8");
-const hook = readFileSync(join(root, "ui/src/hooks/useCanvasAnnotations.ts"), "utf8");
+const hook = readSourceTree("ui/src/hooks/useCanvasAnnotations.ts");
 const canvas = [
   "ui/src/components/canvas-mode/CanvasModeWorkspace.tsx",
   "ui/src/components/canvas-mode/CanvasModeTopbar.tsx",
   "ui/src/components/canvas-mode/useCanvasModePointerHandlers.ts",
   "ui/src/components/canvas-mode/useCanvasModeShortcuts.ts",
 ].map((path) => readFileSync(join(root, path), "utf8")).join("\n");
-const store = readStoreBundle();
+const store = readSourceTree("ui/src/store/useAppStore.ts");
 const coords = readFileSync(join(root, "ui/src/lib/canvas/coordinates.ts"), "utf8");
 const toolbar = readFileSync(join(root, "ui/src/components/canvas-mode/CanvasToolbar.tsx"), "utf8");
 const zoomControl = readFileSync(join(root, "ui/src/components/canvas-mode/CanvasZoomControl.tsx"), "utf8");
 const miniMap = readFileSync(join(root, "ui/src/components/canvas-mode/CanvasViewportMiniMap.tsx"), "utf8");
-const canvasModeCss = readFileSync(join(root, "ui/src/styles/canvas-mode.css"), "utf8");
+const canvasModeCss = readSourceTree("ui/src/styles/canvas-annotations.css");
 const css = readFileSync(join(root, "ui/src/styles/canvas-background-cleanup.css"), "utf8");
 const en = JSON.parse(readFileSync(join(root, "ui/src/i18n/en.json"), "utf8"));
 const ko = JSON.parse(readFileSync(join(root, "ui/src/i18n/ko.json"), "utf8"));

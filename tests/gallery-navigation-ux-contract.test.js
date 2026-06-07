@@ -2,13 +2,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readStoreBundle } from "./_storeBundle.mjs";
+import { readSourceTree } from "./_readTree.mjs";
 
 const root = process.cwd();
 
 function readSource(path) {
-  if (path === "ui/src/store/useAppStore.ts") return readStoreBundle();
-  return readFileSync(join(root, path), "utf8");
+  return readSourceTree(path);
 }
 
 describe("gallery navigation UX contract", () => {
@@ -47,7 +46,8 @@ describe("gallery navigation UX contract", () => {
     const gallery = readSource("ui/src/components/GalleryModal.tsx");
     const imageTile = readSource("ui/src/components/GalleryImageTile.tsx");
     const navigation = readSource("ui/src/lib/galleryNavigation.ts");
-    const lineCount = gallery.split("\n").length;
+    const rawGallery = readFileSync(join(root, "ui/src/components/GalleryModal.tsx"), "utf8");
+    const lineCount = rawGallery.split("\n").length;
 
     assert.ok(lineCount < 550, `GalleryModal.tsx should stay under 550 lines, got ${lineCount}`);
     assert.match(gallery, /useLayoutEffect/);

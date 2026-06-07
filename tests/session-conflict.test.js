@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readStoreBundle } from "./_storeBundle.mjs";
+import { readSourceTree } from "./_readTree.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const storePath = join(__dirname, "..", "ui", "src", "store", "useAppStore.ts");
@@ -16,7 +17,7 @@ const registryPath = join(__dirname, "..", "ui", "src", "store", "persistenceReg
 const storeSrc = readStoreBundle();
 const registrySrc = await readFile(registryPath, "utf8");
 const appSrc = await readFile(appPath, "utf8");
-const apiSrc = await readFile(apiPath, "utf8");
+const apiSrc = readSourceTree("ui/src/lib/api.ts");
 const routeSrc = await readFile(sessionRoutesPath, "utf8");
 const en = JSON.parse(await readFile(enPath, "utf8"));
 const ko = JSON.parse(await readFile(koPath, "utf8"));

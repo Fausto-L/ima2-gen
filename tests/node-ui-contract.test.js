@@ -2,13 +2,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readStoreBundle } from "./_storeBundle.mjs";
+import { readSourceTree } from "./_readTree.mjs";
 
 const root = process.cwd();
 
 function readSource(path) {
-  if (path === "ui/src/store/useAppStore.ts") return readStoreBundle();
-  return readFileSync(join(root, path), "utf8");
+  return readSourceTree(path);
 }
 
 describe("node UI compact metadata contract", () => {

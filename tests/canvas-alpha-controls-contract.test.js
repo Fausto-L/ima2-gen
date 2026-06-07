@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { readStoreBundle } from "./_storeBundle.mjs";
+import { readSourceTree } from "./_readTree.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
 const types = readFileSync(join(root, "ui/src/types/canvas.ts"), "utf8");
-const store = readStoreBundle();
+const store = readSourceTree("ui/src/store/useAppStore.ts");
 const merge = readFileSync(join(root, "ui/src/lib/canvas/mergeRenderer.ts"), "utf8");
 const exportR = readFileSync(join(root, "ui/src/lib/canvas/exportRenderer.ts"), "utf8");
 const canvas = [
@@ -18,7 +18,7 @@ const canvas = [
 ].map((path) => readFileSync(join(root, path), "utf8")).join("\n");
 const toolbar = readFileSync(join(root, "ui/src/components/canvas-mode/CanvasToolbar.tsx"), "utf8");
 const bgControl = readFileSync(join(root, "ui/src/components/canvas-mode/CanvasBackgroundControl.tsx"), "utf8");
-const css = readFileSync(join(root, "ui/src/styles/canvas-mode.css"), "utf8");
+const css = readSourceTree("ui/src/styles/canvas-annotations.css");
 const en = JSON.parse(readFileSync(join(root, "ui/src/i18n/en.json"), "utf8"));
 const ko = JSON.parse(readFileSync(join(root, "ui/src/i18n/ko.json"), "utf8"));
 

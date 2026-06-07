@@ -93,7 +93,7 @@ async function listenPlanner(handler) {
   return listen(app);
 }
 
-
+describe("Card News template contract", () => {
   it("creates a JSON-first mid-5 draft without generating images", async () => {
     const plan = asDraft(await createCardNewsDraft({
       topic: "중간고사 역전 플랜",

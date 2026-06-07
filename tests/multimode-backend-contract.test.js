@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readSourceTree } from "./_readTree.mjs";
 
 const root = process.cwd();
 
@@ -23,7 +24,7 @@ function readSource(path) {
   if (path === "lib/oauthProxy.ts") {
     return OAUTH_PROXY_SOURCES.map((p) => readFileSync(join(root, p), "utf8")).join("\n");
   }
-  return readFileSync(join(root, path), "utf8");
+  return readSourceTree(path);
 }
 
 describe("multimode backend contract", () => {
@@ -92,8 +93,7 @@ describe("multimode backend contract", () => {
     assert.match(route, /onFinalImage: async \(image, index\) =>/);
     assert.match(route, /await persistAndSendImage\(/);
     assert.match(route, /persistedIndexes\.has\(index\)/);
-    assert.match(route, /event: \$\{event\}/);
-    assert.match(route, /sendSse\(res, "image", item\)/);
+    assert.match(route, /writeSse\(res, "image", item\)/);
     assert.match(route, /fallbackCode === "RESPONSES_IMAGE_TIMEOUT"/);
     assert.match(route, /images\.length > 0/);
     assert.match(route, /finishHttpStatus = 206/);

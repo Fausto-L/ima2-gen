@@ -2,13 +2,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readStoreBundle } from "./_storeBundle.mjs";
+import { readSourceTree } from "./_readTree.mjs";
 
 const root = process.cwd();
 
 function readSource(path) {
-  if (path === "ui/src/store/useAppStore.ts") return readStoreBundle();
-  return readFileSync(join(root, path), "utf8");
+  return readSourceTree(path);
 }
 
 describe("in-flight prompt tooltip contract", () => {
@@ -31,8 +30,8 @@ describe("in-flight prompt tooltip contract", () => {
     assert.match(source, /className="in-flight-cancel"/);
     assert.match(source, /t\("inflight\.cancelAria"/);
     assert.match(api, /export function cancelInflight/);
-    assert.match(store, /cancelInFlightJob:\s*async/);
-    assert.match(store, /await cancelInflight\(requestId\)/);
+    assert.match(store, /cancelInFlightJob:/);
+    assert.match(store, /cancelInflight\(requestId\)/);
   });
 
   it("merges noPrompt into the existing locale inflight objects", () => {

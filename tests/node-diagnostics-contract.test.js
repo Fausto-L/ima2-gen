@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { readSourceTree } from "./_readTree.mjs";
 
 // NOTE: lib/oauthProxy.ts was split into lib/oauthProxy/*.ts behind a 1-line
 // facade. The `oauth` constant below concatenates all split sources so the
@@ -17,7 +18,10 @@ const OAUTH_PROXY_SOURCES = [
   "lib/oauthProxy/index.ts",
 ];
 const oauth = OAUTH_PROXY_SOURCES.map((p) => readFileSync(p, "utf-8")).join("\n");
-const nodes = readFileSync("routes/nodes.ts", "utf-8");
+const nodes = [
+  readFileSync("routes/nodes.ts", "utf-8"),
+  readFileSync("lib/nodeHelpers.ts", "utf-8"),
+].join("\n");
 
 describe("node diagnostics contract", () => {
   it("preserves safe OAuth stream error metadata", () => {

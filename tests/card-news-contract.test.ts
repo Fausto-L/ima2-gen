@@ -259,3 +259,4 @@ describe("Card News 0.20 dev MVP contract", () => {
       (err) => (err as { code?: string }).code === "CARD_NEWS_BAD_TEMPLATE_ID",
     );
   });
+});
