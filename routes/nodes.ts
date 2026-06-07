@@ -26,15 +26,17 @@ import { errInfo } from "../lib/errInfo.js";
 import { requireRuntimeContext, type RouteRuntimeContext } from "../lib/runtimeContext.js";
 import { validateModeration, imageFormatFromMime, writeSse, dataUrlFromB64 } from "../lib/routeHelpers.js";
 import {
-  type NodeGenerateBody, asUpstream, wantsSse, writeNodeError,
-  loadParentNodeB64, toGrokReferences, nodeErrorDetails,
+  type NodeGenerateBody, asUpstream, writeNodeError,
+  loadParentNodeB64, toGrokReferences, nodeErrorDetails, getStreamTransport,
 } from "../lib/nodeHelpers.js";
+import { wsBroadcast } from "../lib/wsServer.js";
 
 export function registerNodeRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
   const ctx = requireRuntimeContext(ctxRaw);
   app.post("/api/node/generate", async (req: Request, res: Response) => {
     const body = (req.body ?? {}) as NodeGenerateBody;
-    const streamResponse = wantsSse(req);
+    const transport = getStreamTransport(req);
+    const streamResponse = transport === "sse";
     const parentNodeId = (typeof body.parentNodeId === "string" ? body.parentNodeId : null);
     const requestId = typeof body.requestId === "string" ? body.requestId : (req.id ?? "");
     const sessionId = typeof body.sessionId === "string" ? body.sessionId : null;
@@ -209,6 +211,9 @@ export function registerNodeRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
           Connection: "keep-alive",
         });
         writeSse(res, "phase", { requestId, phase: "streaming" });
+      } else if (transport === "ws") {
+        res.status(202).json({ requestId });
+        wsBroadcast(requestId, "phase", { requestId, phase: "streaming" });
       }
 
       let b64: string | undefined, usage: unknown, webSearchCalls = 0, revisedPrompt: string | null = null;
@@ -287,16 +292,14 @@ export function registerNodeRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
                     reasoningEffort,
                     webSearchEnabled,
                     signal: cancelController.signal,
-                    partialImages: streamResponse ? 2 : 0,
-                    onPartialImage: streamResponse
-                      ? (partial) =>
-                          isJobCanceled(requestId)
-                            ? undefined
-                            : writeSse(res, "partial", {
-                                requestId,
-                                image: dataUrlFromB64(format, partial.b64),
-                                index: partial.index,
-                              })
+                    partialImages: transport !== "none" ? 2 : 0,
+                    onPartialImage: transport !== "none"
+                      ? (partial) => {
+                          if (isJobCanceled(requestId)) return undefined;
+                          const partialData = { requestId, image: dataUrlFromB64(format, partial.b64), index: partial.index };
+                          if (streamResponse) writeSse(res, "partial", partialData);
+                          else wsBroadcast(requestId, "partial", partialData);
+                        }
                       : null,
                   },
                 );
@@ -351,6 +354,15 @@ export function registerNodeRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
           outerHttpAlreadyCommitted: res.headersSent,
           sseErrorSent: streamResponse,
         });
+        if (transport === "ws") {
+          wsBroadcast(requestId, "error", {
+            error: { code: finishErrorCode ?? "NODE_GEN_FAILED", message: finalErr.message },
+            parentNodeId,
+            status: finishHttpStatus ?? 500,
+            ...nodeErrorDetails(finalErr, lastErr),
+          });
+          return;
+        }
         return writeNodeError(
           res,
           finishHttpStatus ?? 500,
@@ -440,6 +452,8 @@ export function registerNodeRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
       if (streamResponse) {
         writeSse(res, "done", payload);
         res.end();
+      } else if (transport === "ws") {
+        wsBroadcast(requestId, "done", payload as unknown as Record<string, unknown>);
       } else {
         res.json(payload);
       }
@@ -452,6 +466,10 @@ export function registerNodeRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
         finishCanceled = true;
         finishHttpStatus = canceled.status;
         finishErrorCode = canceled.code;
+        if (transport === "ws") {
+          wsBroadcast(requestId, "error", { error: { code: canceled.code, message: canceled.message }, parentNodeId, status: canceled.status });
+          return;
+        }
         return writeNodeError(
           res,
           canceled.status,
@@ -464,11 +482,22 @@ export function registerNodeRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
       finishHttpStatus = err.status || 500;
       finishErrorCode = code;
       logError("node", "error", err.raw, { requestId, code, parentNodeId, sessionId, clientNodeId });
-      writeNodeError(res, err.status || 500, code, err.message, parentNodeId, {
-        upstreamCode: ext.upstreamCode || null,
-        upstreamType: ext.upstreamType || null,
-        upstreamParam: ext.upstreamParam || null,
-      });
+      if (transport === "ws") {
+        wsBroadcast(requestId, "error", {
+          error: { code, message: err.message },
+          parentNodeId,
+          status: err.status || 500,
+          upstreamCode: ext.upstreamCode || null,
+          upstreamType: ext.upstreamType || null,
+          upstreamParam: ext.upstreamParam || null,
+        });
+      } else {
+        writeNodeError(res, err.status || 500, code, err.message, parentNodeId, {
+          upstreamCode: ext.upstreamCode || null,
+          upstreamType: ext.upstreamType || null,
+          upstreamParam: ext.upstreamParam || null,
+        });
+      }
     } finally {
       finishJob(requestId, {
         canceled: finishCanceled,

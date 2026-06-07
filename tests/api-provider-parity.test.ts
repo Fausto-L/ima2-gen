@@ -343,7 +343,7 @@ describe("API provider parity", () => {
     await withApp(async ({ baseUrl }) => {
       const res = await fetch(`${baseUrl}/api/generate/multimode`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
         body: JSON.stringify({ prompt: "two stages", provider: "api", maxImages: 2 }),
       });
       const text = await res.text();
@@ -369,7 +369,7 @@ describe("API provider parity", () => {
     await withApp(async ({ baseUrl }) => {
       const res = await fetch(`${baseUrl}/api/generate/multimode`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
         body: JSON.stringify({ prompt: "empty stages", provider: "api", maxImages: 1 }),
       });
       const text = await res.text();

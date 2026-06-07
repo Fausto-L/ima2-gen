@@ -36,6 +36,13 @@ export function wantsSse(req: Request) {
   return accept.includes("text/event-stream");
 }
 
+export function getStreamTransport(req: Request): "sse" | "ws" | "none" {
+  const accept = typeof req.headers.accept === "string" ? req.headers.accept : "";
+  if (accept.includes("text/event-stream")) return "sse";
+  if (req.headers["x-stream-transport"] === "websocket") return "ws";
+  return "none";
+}
+
 export function writeNodeError(
   res: Response,
   status: number,

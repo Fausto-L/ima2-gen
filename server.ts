@@ -2,6 +2,8 @@ import "dotenv/config";
 import express from "express";
 import type { Response } from "express";
 import { readFile } from "fs/promises";
+import type { Server as HttpServer } from "node:http";
+import { createWsServer } from "./lib/wsServer.js";
 import {
   existsSync,
   writeFileSync,
@@ -380,6 +382,7 @@ export async function startServer(overrides: StartServerOverrides = {}) {
       console.log(`[server.port] requested=${requestedPort} actual=${actualPort} reason=EADDRINUSE`);
     },
   });
+  createWsServer(server as unknown as HttpServer);
   ctx.serverActualPort = getServerPort(server) || ctx.config.server.port;
   ctx.serverUrl = `http://${runtimeHostUrl(ctx.config.server.host)}:${ctx.serverActualPort}`;
   console.log(`Image Gen running at ${ctx.serverUrl}`);

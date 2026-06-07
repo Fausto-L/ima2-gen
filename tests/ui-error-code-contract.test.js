@@ -22,17 +22,17 @@ test("node API preserves status on JSON and SSE errors", () => {
   assert.match(source, /export type NodeErrorResponse = \{[\s\S]*status\?: number;/);
   assert.match(source, /e\.status = err\?\.status \?\? res\.status;/);
   assert.match(source, /e\.status = err\?\.status;/);
-  assert.match(source, /No image data returned from the node stream/);
-  assert.match(source, /e\.code = "EMPTY_RESPONSE"/);
+  assert.match(source, /Node generation failed/);
+  assert.match(source, /e\.code = err\?\.error\?\.code;/);
 });
 
 test("UI surfaces server terminal generation errors from inflight polling", () => {
   const store = readSourceTree("ui/src/store/useAppStore.ts");
   const api = readSourceTree("ui/src/lib/api.ts");
 
-  assert.match(api, /No image data returned from the multimode stream/);
-  assert.match(api, /e\.code = "EMPTY_RESPONSE"/);
-  assert.match(api, /finalPayload\.images\.length === 0/);
+  assert.match(api, /Multimode generation failed/);
+  assert.match(api, /e\.code = err\.code/);
+  assert.match(api, /postMultimodeGenerateStream/);
   assert.match(store, /includeTerminal: true/);
   assert.match(store, /terminalJobError/);
   assert.match(store, /terminal\.status === "error"/);

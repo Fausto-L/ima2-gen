@@ -1,5 +1,6 @@
 import type { Response } from "express";
 import { type RuntimeContext } from "./runtimeContext.js";
+export { wsBroadcast } from "./wsServer.js";
 
 export function validateModeration(ctx: RuntimeContext, moderation: unknown) {
   if (typeof moderation !== "string" || !ctx.config.oauth.validModeration.has(moderation)) {

@@ -93,7 +93,7 @@ describe("multimode backend contract", () => {
     assert.match(route, /onFinalImage: async \(image, index\) =>/);
     assert.match(route, /await persistAndSendImage\(/);
     assert.match(route, /persistedIndexes\.has\(index\)/);
-    assert.match(route, /writeSse\(res, "image", item\)/);
+    assert.match(route, /emit\("image", item/);
     assert.match(route, /fallbackCode === "RESPONSES_IMAGE_TIMEOUT"/);
     assert.match(route, /images\.length > 0/);
     assert.match(route, /finishHttpStatus = 206/);

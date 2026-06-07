@@ -114,7 +114,7 @@ test("/api/video/generate streams progress and saves mp4 + sidecar", async () =>
   try {
     const res = await fetch(`${url}/api/video/generate`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
       body: JSON.stringify({ prompt: "animate a cube", provider: "grok", model: "grok-imagine-video", duration: 1, resolution: "480p", requestId: "req_video_ok" }),
     });
     const events = parseSse(await res.text());
@@ -162,7 +162,7 @@ test("/api/video/generate exposes fallback model metadata for 1.5 Ref2V", async 
   try {
     const res = await fetch(`${url}/api/video/generate`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
       body: JSON.stringify({
         prompt: "continue the character motion",
         provider: "grok",
@@ -246,7 +246,7 @@ test("/api/video/generate continueFromVideo extracts parent frame and stores bra
   try {
     const res = await fetch(`${url}/api/video/generate`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
       body: JSON.stringify({
         prompt: "continue from the last frame, footsteps only, no dialogue, end on closed door",
         provider: "grok",
@@ -274,15 +274,15 @@ test("/api/video/generate rejects non-grok provider and bad params", async () =>
   const generatedDir = await mkdtemp(join(tmpdir(), "ima2-video-route-"));
   const { server, url } = await videoApp(generatedDir, 18645);
   try {
-    const badProvider = parseSse(await (await fetch(`${url}/api/video/generate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "x", provider: "oauth" }) })).text());
+    const badProvider = parseSse(await (await fetch(`${url}/api/video/generate`, { method: "POST", headers: { "Content-Type": "application/json", Accept: "text/event-stream" }, body: JSON.stringify({ prompt: "x", provider: "oauth" }) })).text());
     assert.equal(badProvider.find((e) => e.event === "error")?.data.code, "VIDEO_PROVIDER_UNSUPPORTED");
 
-    const noPrompt = parseSse(await (await fetch(`${url}/api/video/generate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: "grok" }) })).text());
+    const noPrompt = parseSse(await (await fetch(`${url}/api/video/generate`, { method: "POST", headers: { "Content-Type": "application/json", Accept: "text/event-stream" }, body: JSON.stringify({ provider: "grok" }) })).text());
     const promptError = noPrompt.find((e) => e.event === "error")?.data;
     assert.equal(promptError.code, "PROMPT_REQUIRED");
     assert.match(promptError.guidance, /Active video prompt required/);
 
-    const badRes = parseSse(await (await fetch(`${url}/api/video/generate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "x", provider: "grok", resolution: "8k" }) })).text());
+    const badRes = parseSse(await (await fetch(`${url}/api/video/generate`, { method: "POST", headers: { "Content-Type": "application/json", Accept: "text/event-stream" }, body: JSON.stringify({ prompt: "x", provider: "grok", resolution: "8k" }) })).text());
     assert.equal(badRes.find((e) => e.event === "error")?.data.code, "INVALID_VIDEO_RESOLUTION");
   } finally {
     await new Promise((r) => server.close(r));
