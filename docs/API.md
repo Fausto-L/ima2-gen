@@ -197,7 +197,7 @@ Supported moderation values: `auto`, `low`.
 When `storyboard` is `true`, the server prepends storyboard keyframe instructions so image
 generations maintain character and scene continuity for multi-shot video production.
 
-Recommended model: `gpt-5.4`. Current app default: `gpt-5.4-mini`. `gpt-5.5` is the strongest quality option when supported, but callers should expect higher quota pressure and possible Codex CLI/backend capability requirements.
+Current app default: `gpt-5.6-luna`. `gpt-5.5` and the other supported GPT image models remain available when callers explicitly select them.
 
 When `provider` is `"grok"`, supported models are `grok-imagine-image` and
 `grok-imagine-image-quality`. The server uses `grok-4.3` as the search/planner
@@ -362,7 +362,7 @@ Generate a video via the Grok video provider. Returns Server-Sent Events on the 
 }
 ```
 
-**Models**: `grok-imagine-video` (default), `grok-imagine-video-1.5`. The legacy `grok-imagine-video-1.5-preview` string is accepted as a compatibility alias and normalized before the upstream request.
+**Models**: `grok-imagine-video-1.5` (default), `grok-imagine-video`. The legacy `grok-imagine-video-1.5-preview` string is accepted as a compatibility alias and normalized before the upstream request.
 
 **Mode** is auto-detected from reference inputs:
 
@@ -380,7 +380,7 @@ Generate a video via the Grok video provider. Returns Server-Sent Events on the 
 |---|---|---|---|
 | `prompt` | string | — | Required |
 | `provider` | string | `"grok"` | `"grok"` or `"grok-api"` |
-| `model` | string | `grok-imagine-video` | Video model |
+| `model` | string | `grok-imagine-video-1.5` | Video model |
 | `duration` | integer | `5` | 1–15 seconds (clamped to 10 for reference-to-video) |
 | `resolution` | string | `"480p"` | `480p`, `720p`, or `1080p` (`1080p` uses 1.5 T2V canvas shim or I2V) |
 | `aspectRatio` | string | `"auto"` | 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, auto |
@@ -543,8 +543,13 @@ files inside `generated/`; deleting an asset never deletes the file.
 | Method | Path | Notes |
 |---|---|---|
 | `GET` | `/api/assets` | List/search assets (`kind`, `folderId`, `tag`, `q`, `cursor`, `limit`) |
+| `GET` | `/api/assets/:id` | Fetch one asset by ID; returns `404 ASSET_NOT_FOUND` when absent |
 | `POST` | `/api/assets` | Promote/create an asset (`filePath`, `kind`, `name?`, `folderId?`, `tags?`, `metadata?`) |
+| `POST` | `/api/assets/promote-element` | Promote a gallery result to an `element` asset (`result.path` or `filePath`, `elementKind`, `name?`, `notes?`, `folderId?`, `tags?`) |
+| `POST` | `/api/assets/derived` | Save a derived asset (raw `image/png` body; query `source`, `kind=keyed-png`, `projectId?`, `name?`, `meta?` JSON) — writes `<src>-keyed-<ts>.png` + sidecar with `derivedFrom` and registers an asset record |
+| `POST` | `/api/video/keying` | Derive an alpha WebM from a generated green-screen mp4 (`source`, `keyParams{tolerance,softness,keyColor?}`, `projectId?`, `name?`) — responds `202 {requestId, filePath}`, publishes `keying-start/progress/done/error` on the event bus, writes sidecar with `derivedFrom` and registers a video asset |
 | `PATCH` | `/api/assets/:id` | Update name/folder/notes/tags/metadata |
+| `POST` | `/api/assets/:id/test-sheet` | Run an element test sheet; currently returns `501 TEST_SHEET_NOT_IMPLEMENTED` after validating the element asset |
 | `DELETE` | `/api/assets/:id` | Delete the catalog row only (file untouched) |
 | `DELETE` | `/api/assets/all` | Delete all asset records (files untouched) |
 | `GET` | `/api/assets/folders` | List folders (flat; tree assembled client-side) |
@@ -827,3 +832,39 @@ Current shape:
 ```
 
 Top-level `port` and `url` are kept for older CLI clients. New code should prefer `backend.url`.
+
+---
+
+## Sprite Recipe Routes
+
+### `GET /api/sprite-recipes`
+
+List all sprite recipes. Returns `{ recipes: SpriteRecipeRecord[] }`.
+
+### `POST /api/sprite-recipes`
+
+Create a new sprite recipe. Body: `SpriteRecipeDefinition`. Returns `201 { recipe }`.
+
+### `GET /api/sprite-recipes/:id`
+
+Get a single recipe. Returns `{ recipe }` or `404 { error }`.
+
+### `PATCH /api/sprite-recipes/:id`
+
+Update recipe fields. Returns `{ recipe }`.
+
+### `DELETE /api/sprite-recipes/:id`
+
+Delete a recipe. Returns `{ ok: true }`.
+
+### `POST /api/sprite-recipes/:id/anchor/approve`
+
+Approve an idle candidate as the identity anchor. Body: `{ assetId }`. Returns `{ recipe }`.
+
+### `POST /api/sprite-recipes/:id/anchor/generate`
+
+Generate an idle anchor candidate. Async: returns `202 { requestId }`, progress via `/api/events`.
+
+### `POST /api/sprite-recipes/:id/generate`
+
+Generate sprite rows for approved recipes. Body: `{ states?, async, requestId }`. Async: `202 { requestId }`.

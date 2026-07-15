@@ -140,7 +140,11 @@ import {
   updateAssetItemImpl, deleteAssetItemImpl, createAssetFolderImpl,
   renameAssetFolderImpl, moveAssetFolderImpl, deleteAssetFolderImpl,
 } from "./storeAssetsImpl";
+import { generateAssetGenImpl, retryAssetGenSaveImpl } from "./storeAssetGenImpl";
+import { refreshFoldersImpl } from "./storeAssetsImpl";
 import { createPresetSlice } from "./storePresetImpl";
+import { createEmptySpriteRecipeDraft } from "../types/spriteRecipe";
+import { approveSpriteAnchorImpl, cancelSpriteJobImpl, generateSpriteAnchorImpl, generateSpriteRowsImpl, loadSpriteRecipesImpl, saveSpriteRecipeImpl, selectSpriteRecipeImpl, updateSpriteRecipeDraftImpl } from "./storeSpriteRecipeImpl";
 
 export type { GalleryScope, ComposeSheetTab, ImageNodeStatus, ImageNodeData, GraphNode, GraphEdge, MultimodeSequenceState, AssetItem, AssetFolder, AssetsFilters } from "./storeTypes";
 export { flushGraphSaveBeacon, selectCurrentSessionId } from "./storeGraphSave";
@@ -155,11 +159,60 @@ const initialProvider =
 export const useAppStore = create<AppState>((set, get, store) => ({
   ...createPresetSlice(set, get, store),
   assets: [],
+  assetGenWorkflow: "generate",
+  setAssetGenWorkflow: (value) => set({ assetGenWorkflow: value }),
+  spriteRecipes: [], activeSpriteRecipeId: null, activeSpriteRecipe: null,
+  spriteRecipeDraft: createEmptySpriteRecipeDraft(), spriteRecipeDirty: false,
+  spriteRecipeLoading: false, spriteRecipeSaving: false, spriteRecipeGenerating: false,
+  spriteRecipeError: null, spriteSelectedStates: [], spritePartialPreviews: {},
+  loadSpriteRecipes: () => loadSpriteRecipesImpl(set, get),
+  selectSpriteRecipe: (id) => selectSpriteRecipeImpl(id, set, get),
+  updateSpriteRecipeDraft: (patch) => updateSpriteRecipeDraftImpl(patch, set),
+  saveSpriteRecipe: () => saveSpriteRecipeImpl(set, get),
+  generateSpriteAnchor: () => generateSpriteAnchorImpl(set, get),
+  approveSpriteAnchor: (assetId) => approveSpriteAnchorImpl(assetId, set, get),
+  generateSpriteRows: (keys) => generateSpriteRowsImpl(keys, set, get),
+  cancelSpriteJob: (requestId) => cancelSpriteJobImpl(requestId, set, get),
   assetsFolders: [],
   assetsTags: [],
   assetsLoading: false,
+  assetsLoadError: false,
   assetsCursor: null,
   assetsFilters: { kind: null, folderId: null, tag: null, q: "" },
+  assetGenPrompt: "",
+  assetGenBackground: "chroma-green",
+  assetGenProvider: initialProvider === "grok" || initialProvider === "grok-api" ? initialProvider : "oauth",
+  assetGenKind: "image",
+  assetGenVideoDuration: 5,
+  assetGenVideoResolution: "720p",
+  assetGenVideoAspect: "1:1",
+  setAssetGenVideoDuration: (v) => set({ assetGenVideoDuration: v }),
+  setAssetGenVideoResolution: (v) => set({ assetGenVideoResolution: v }),
+  setAssetGenVideoAspect: (v) => set({ assetGenVideoAspect: v }),
+  assetGenItems: [],
+  assetGenSaveFailures: [],
+  assetGenLastError: null,
+  setAssetGenLastError: (v) => set({ assetGenLastError: v }),
+  keyingTarget: null,
+  setKeyingTarget: (item) => set({ keyingTarget: item }),
+  addAssetGenDerivedItem: (item) => set((state) => (
+    item.filename && state.assetGenItems.some((entry) => entry.filename === item.filename)
+      ? {}
+      : { assetGenItems: [item, ...state.assetGenItems] }
+  )),
+  selectedProjectId: null,
+  setSelectedProject: (id) => {
+    set({ selectedProjectId: id });
+    // Keep the assets tab in sync: project selection maps to the folder filter.
+    setAssetsFiltersImpl({ folderId: id }, set, get);
+  },
+  loadAssetFolders: () => refreshFoldersImpl(set),
+  retryAssetGenSave: (requestId) => retryAssetGenSaveImpl(requestId, set, get),
+  setAssetGenPrompt: (v) => set({ assetGenPrompt: v }),
+  setAssetGenBackground: (v) => set({ assetGenBackground: v }),
+  setAssetGenProvider: (v) => set({ assetGenProvider: v }),
+  setAssetGenKind: (v) => set({ assetGenKind: v }),
+  generateAssetGen: () => generateAssetGenImpl(set, get),
   loadAssets: (reset) => loadAssetsImpl(reset, set, get),
   loadMoreAssets: () => loadMoreAssetsImpl(set, get),
   setAssetsFilters: (patch) => setAssetsFiltersImpl(patch, set, get),
