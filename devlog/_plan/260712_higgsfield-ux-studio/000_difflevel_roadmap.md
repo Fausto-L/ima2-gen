@@ -6,9 +6,9 @@ tags: [ima2-gen, devlog, difflevel, roadmap, higgsfield]
 
 # Higgsfield UX Studio — Diff-Level Roadmap
 
-완료된 phase 010–050의 실제 변경 내역과, 예정된 060–090의 diff-level 구현 명세.
-베이스: `dc09410` (main/preview HEAD) → 현재 dev HEAD `cbcf9e6` (14 커밋).
-테스트: 1149 pass / 0 fail. UI 빌드 green.
+완료된 phase 010–060의 실제 변경 내역과, 예정된 070–090의 diff-level 구현 명세.
+베이스: `dc09410` (main/preview HEAD) → dev HEAD `cbcf9e6` (14 커밋) → 현재 HEAD (060 구현 포함).
+테스트: 1187 pass / 0 fail. UI 빌드 green. (2026-07-15 기준)
 
 ---
 
@@ -260,50 +260,19 @@ Phase 010~050의 진행은 네 겹으로 정리된다.
 | 030+031 | 2 | 27 | 269 | 2 | 구조·IA |
 | 040 | 1 | 8 | 415 | 24 | UX |
 | 050 | 3 | 45 | 1723 | 31 | 기능 |
-| **합계** | **13** | **~100** | **+3594** | **−1329** | |
+| 060 | ~14 | ~30 | ~1500 | ~200 | 기능 |
+| **합계** | **~27** | **~130** | **+5094** | **−1529** | |
+
+Phase 060은 별도 구현 세션에서 완료. 잔여: `generatePipeline.ts`의 presetIds→XMP
+meta 전파 1건 (WP-1에서 closeout). 상세: `060_home-presets.md` 현재 코드 상태 참조.
 
 ---
 
-## Part II — 예정 (060–090)
+## Part II — 예정 (070–090)
 
-### Phase 060 — 홈 진입면 + 프리셋 시스템
-
-스펙: `003_home-presets.md` | 성격: 기능 | 의존: 020 Chip, 050 저장 계층
-
-#### Server / domain
-
-| Op | File | 내용 | est |
-|----|------|------|-----|
-| NEW | `lib/presetCompiler.ts` | `compilePresets()` 순수 함수 — fragment 결합, perProvider override, params 병합 | +160 |
-| NEW | `presets/camera-motion.json` | ~20 카메라 프리셋 시드 (dolly/orbit/crane/fpv 등) | +350 |
-| NEW | `presets/style.json` | ~15 스타일 프리셋 시드 | +260 |
-| NEW | `presets/lighting.json` | ~10 조명 프리셋 시드 | +180 |
-| MODIFY | `routes/generate.ts` | `presetIds` 정규화 → generation context 전달 | +15 |
-| MODIFY | `routes/video.ts` | video sidecar에 `presetIds` 저장 | +20 |
-| MODIFY | `lib/imageMetadata.ts` | XMP payload에 `presetIds` 추가 | +14 |
-
-#### Frontend
-
-| Op | File | 내용 | est |
-|----|------|------|-----|
-| NEW | `ui/src/lib/presets.ts` | browser catalog: `getPresetById`, `getPresetsByCategory` | +60 |
-| NEW | `ui/src/store/storePresetImpl.ts` | ID 중복 방지, 선택 순서 보존, defaults 저장 | +75 |
-| NEW | `ui/src/components/home/HomeWorkspace.tsx` | prompt-first composer + preset grid + 이어가기 | +130 |
-| NEW | `ui/src/components/home/PresetGrid.tsx` | category/mode grid, hover preview video | +160 |
-| NEW | `ui/src/components/home/HomePromptComposer.tsx` | 홈 전용 대형 textarea + Generate | +75 |
-| NEW | `ui/src/styles/home-workspace.css` | responsive grid, hover video, embedded strip | +270 |
-| MODIFY | `ui/src/components/PromptComposer.tsx` | preset chip row (ChipRow 재사용) | +45 |
-| MODIFY | `ui/src/store/storeGenerateImpl.ts` | 생성 시점 preset compile | +45 |
-| MODIFY | `ui/src/store/storeVideoImpl.ts` | video mode compile + presetIds 전달 | +45 |
-| MODIFY | `ui/src/App.tsx` | `HomeWorkspace` lazy, `uiMode === "home"` | +25 |
-| MODIFY | `ui/src/components/NavRail.tsx` | `#home` hash + Home rail item | +25 |
-
-#### Tests: NEW `tests/preset-compiler.test.ts` (+220), NEW `tests/preset-restore-contract.test.ts` (+120)
-
-Done 기준: 컴파일러 프리셋×프로바이더 스냅샷 테스트 + 칩 저장/복원 계약 pass.
-동일 프리셋으로 Grok/Gemini 실생성 비교 수동 검수 1회 → `assets/060/`.
-
-미결정: 홈을 기본 진입 모드로 할지 → 090 원장.
+> Phase 060은 구현 완료 — Part I 누적 통계에 포함. closeout 잔여 1건은 WP-1에서 처리.
+> 상세: `060_home-presets.md` 현재 코드 상태 참조.
+> stale path 정정: 계획상 `presetCatalog.ts` → 실제 `presets.ts`, `storeGenerateImpl.ts` → 실제 `storeGenImpl.ts`.
 
 ### Phase 070 — @멘션 영속 요소
 

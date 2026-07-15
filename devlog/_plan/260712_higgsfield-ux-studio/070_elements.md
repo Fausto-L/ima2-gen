@@ -23,7 +23,33 @@ tags: [ima2-gen, phase, elements, mention]
 - 멘션 파싱/주입 단위 테스트(프리셋 조합 포함) + 참조 상한 규칙 계약.
 - 캐릭터 요소 1개 3사 프로바이더 일관성 수동 검수 → `assets/070/`.
 
-상태: pending
+상태: pending (전면 신규 구현 필요)
+
+## 2026-07-15 현재 코드 상태 (sol 탐색 기반)
+
+Phase 070의 기반 골격은 일부 준비되어 있지만, element 전용 로직은 전부 미구현이다.
+
+### 이미 존재하는 기반
+- `lib/assetsStore.ts` — `kind: "element"` 타입 허용 (line 6). 생성/목록/필터에서 element를 일반 asset으로 처리
+- `lib/db.ts` — DB schema v6, assets 테이블에 nullable `metadata` JSON 컬럼 (element 전용 컬럼 없음)
+- `routes/assets.ts` — generic CRUD 존재. element에 filePath 불필요 (서버는 nullable 허용)
+- `ui/src/store/storeTypes.ts` — `AssetItem` union에 element 포함 (line 32)
+- `ui/src/components/controls/Chip.tsx` — mention chip 용도 선행 주석 존재 (line 15)
+- `ui/src/lib/resultChaining.ts` — `saveToAssets` action 존재, `saveAsElement` 추가 가능한 구조
+
+### 알려진 타입 갭
+- `ui/src/lib/api-assets.ts` (line 24): `createAsset()` 입력이 `filePath: string` 필수 — element는 파일 없이 생성해야 하므로 nullable로 변경 필요
+- `GET /api/assets/:id` 단일 조회 endpoint 없음 — element detail/mention 조회에 필요
+
+### 전부 미구현
+- `lib/elementCompiler.ts` — notes/refs→provider 입력 컴파일
+- element 전용 validation (name/refs 1-6/notes/elementKind)
+- `@` mention 파서, autocomplete menu, mention chip
+- ElementDetail + ElementRefGrid UI
+- AssetsWorkspace master/detail 레이아웃
+- generatePipeline/multimodePipeline/video element injection
+- XMP `elementIds` 필드
+- element CRUD store actions, selected elementIds 상태
 
 ## Diff-Level Implementation Spec
 

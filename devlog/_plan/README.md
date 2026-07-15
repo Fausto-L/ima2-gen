@@ -30,7 +30,7 @@ Deferred / 미래 항목은 `_plan/` 직속이 아니라 `_plan/_future/`에 둔
 | 4 | `260712_higgsfield-ux-studio/` | 구현 중 (010-060 완료, 070-090 진행 예정) | 힉스필드급 스튜디오 UX 개선. Phase 010~050 완료, 060은 XMP `presetIds` 전파 1건만 잔여. 070(요소)→080(노드/비디오)→090(closeout+미결정 원장)은 구현 대기. 디자인 선행, 기능 후행. SaaS/협업은 non-goal. |
 | 5 | `260715_icon_pipeline/` | handoff | `ima2 icon` CLI 파이프라인 핸드오프 (000/010/020). 구현 착수 시 P가 문서 재검증. `_fin/260715_asset_gen_mode/040_sheet_design.md`의 crop 소유권 문장(lib/sheetCrop.ts 단일 소유)을 반영할 것. |
 | 6 | `260715_spritegen-adoption/` | research (분석 완료) | [aldegad/sprite-gen](Apache-2.0) 차용 분석. 병렬 서브에이전트 3개 분석 결과를 000(허브)/010(soft-alpha unmix 키잉)/020(recipe SSoT+identity)/030(atlas manifest+큐레이터)으로 정리. 010은 assetgen 키잉 트랙의 자연스러운 다음 단계, 020/030은 스프라이트 모드 제품 결정 대기. |
-| 7 | `260715_subscription-mcp-providers/` | roadmap 확정 (구현 대기) | 인터뷰 6 rounds 종료(005). 확정: dual namespace(`ima2.*`/`mcp.<provider>.*`), ima2-owned execution, full-schema snapshot npm 번들+tag+takedown 게이트, 2-tier verifier. `000_plan.md`가 canonical roadmap이며 010(조사)→020 catalog SoT→030 runtime→040 snapshot→050 adapter→060 workflows→070 AI discovery CLI→080 UI→090 검증의 decade 문서가 diff-level로 완성됨. 다음 cycle은 010부터. |
+| 7 | `260715_subscription-mcp-providers/` | roadmap 확정 (구현 대기) | 인터뷰 6 rounds 종료(005). 확정: dual namespace(`ima2.*`/`mcp.<provider>.*`), ima2-owned execution, full-schema snapshot npm 번들+tag+takedown 게이트, 2-tier verifier. `000_plan.md`가 canonical roadmap이며 010(조사)→020 catalog SoT→030 runtime→040 snapshot→050 adapter→060 workflows→070 AI discovery CLI→080 UI→090 검증 + 100/110 확장 레인. 다음 cycle은 010부터 — 실행 pilot은 Higgsfield·Runway 2곳, Recraft·Magnific은 100으로 이연. |
 
 2026-07-15: `260715_asset_gen_mode/`(에셋 생성 모드 — asset-gen 탭, backgroundPreset,
 클라이언트 키잉, 알파 WebM 파생) WP1-WP11 완료로 `_fin/` 이동.

@@ -25,7 +25,27 @@ tags: [ima2-gen, phase, home, presets]
 - 컴파일러 프리셋×프로바이더 스냅샷 테스트 + 칩 저장/복원 계약.
 - 동일 프리셋 Grok/Gemini 실생성 비교 수동 검수 1회 → `assets/060/`.
 
-상태: pending
+상태: 구현 완료 — closeout 잔여 (generatePipeline presetIds→XMP meta 전달)
+
+## 2026-07-15 현재 코드 상태 (sol 탐색 기반)
+
+Phase 060의 거의 모든 계획이 이미 구현되어 있다.
+
+### 구현 완료 항목
+- `lib/presetCompiler.ts` — catalog/mode/provider 컴파일, provider별 fragments/params, applied IDs 지원
+- `presets/camera-motion.json`, `presets/style.json`, `presets/lighting.json` — seed JSON 3종 존재
+- `ui/src/lib/presets.ts` — 브라우저용 catalog 조회 (계획명 `presetCatalog.ts` → 실제 `presets.ts`)
+- `ui/src/store/storePresetImpl.ts` — Zustand 슬라이스 존재, 선택 CRUD/restore 동작
+- `ui/src/store/storePersistence.ts` — preset ID 영속화, catalog 대조 검증/중복 제거
+- `ui/src/components/home/HomeWorkspace.tsx` — `#home` 워크스페이스 lazy-loaded
+- `ui/src/components/PromptComposer.tsx` — selectedPresetIds 읽기, Chip/ChipRow 렌더 통합
+- `ui/src/components/NavRail.tsx` — `#home` hash 및 Home rail item 존재
+- `ui/src/App.tsx` — `uiMode === "home"` 렌더 분기 존재
+- `ui/src/store/storeGenImpl.ts` — 생성 시 preset 컴파일 + appliedPresetIds 전송 (계획명 `storeGenerateImpl.ts` → 실제 `storeGenImpl.ts`)
+- `lib/imageMetadata.ts` — XMP payload에 `presetIds` 필드 및 stringArray 정규화 존재
+
+### 미완: XMP 전파 갭 1건
+- `lib/generatePipeline.ts` (line ~345): meta 객체 구성 시 `presetIds`를 포함하지 않음. XMP 스키마는 준비되어 있으나 파이프라인이 값을 전달하지 않는다. WP-1에서 수정.
 
 ## Diff-Level Implementation Spec
 

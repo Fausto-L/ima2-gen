@@ -30,7 +30,28 @@ tags: [ima2-gen, phase, node-canvas, video]
 - extend 프레임 추출→주입 계약 테스트.
 - 100+ 노드 팬/줌 프로파일 수치 → `assets/080/`.
 
-상태: pending
+상태: pending (비디오 foundation 존재, 노드 전면 신규)
+
+## 2026-07-15 현재 코드 상태 (sol 탐색 기반)
+
+### Sub-track A — Node: 전면 신규
+- `lib/nodeTemplateStore.ts` — 미존재
+- `ui/src/components/NodeCanvas.tsx` — React Flow 캔버스. 등록된 node type은 `imageNode` 하나뿐 (line 45). empty state는 "add first" 버튼만 (line 111-114)
+- `ui/src/store/storeGraphNodeImpl.ts` — 모든 생성 노드가 `type: "imageNode"` (line 54-68). template/typed-node 지원 없음
+- `lib/nodeValidation.ts` — prompt/ref/moderation 검증만. port type 정의나 compatibility 로직 없음
+- 서버 graph persistence: `lib/sessionStore.ts` → client `storeGraphSave.ts` 경로. `lib/nodeStore.ts`는 생성 결과 바이트 + sidecar 저장용
+
+### Sub-track B — Video motion: 부분 존재
+- `lib/videoMotionPresets.ts` — 미존재 (신규 구현 필요)
+- `ui/src/components/VideoControlsPanel.tsx` (line 123-131) — camera-motion preset 칩이 이미 렌더됨. 060 preset 시스템 기반. 전용 motion catalog/exclusive group 로직은 없음
+
+### Sub-track C — Video extend: foundation 존재 (계획된 async-202 흐름은 아직)
+- `routes/videoExtended.ts` (line 191) — `POST /api/video/extend` 존재. 단, 현재는 동기 provider 호출 후 JSON 반환이며, 계획된 async-202 + 로컬 프레임 추출→I2V 주입 오케스트레이션은 미구현
+- `lib/videoFrameExtract.ts` (line 56-60) — last-frame 추출 존재 (`-sseof -3` FFmpeg). 안전한 base64 helper도 있음 (line 68-77). 이 foundation 위에 extend 오케스트레이션을 구축
+- `lib/videoContinuity.ts` (line 124) — continuity lineage 존재. extend 저장 시 사용됨 (videoExtended.ts line 83). 참고: `lib/videoSeriesChain.ts`는 구형 topic-chain 리더로, 실제 continuity owner는 `videoContinuity.ts`
+- `ui/src/components/ResultActions.tsx` — "Animate" action은 non-video item에만 존재 (line 51). video 전용 "Extend" action은 미노출
+
+### 테스트: 1187 pass / 0 fail (2026-07-15 기준)
 
 ## Diff-Level Implementation Spec
 

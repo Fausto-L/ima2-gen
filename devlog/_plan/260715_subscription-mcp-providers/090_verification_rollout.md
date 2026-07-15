@@ -66,14 +66,13 @@ mock green만으로 완료하지 않고 OAuth/token/과금/장시간 job/결과 
 1. open-source local MCP client boundary와 official-MCP-only gate 검증.
 2. hidden feature flag + CLI/status only.
 3. Settings connection UI.
-4. Recraft image control provider.
-5. Higgsfield/Runway generation.
-6. Magnific entitlement와 open-source MCP client 허용 근거가 모두 있으면 multi-model/video-editor comparison pilot.
-7. verified native workflows.
-8. Krea/Ideogram/BFL 등 OAuth Tier A 추가.
-9. HeyGen/Rendley 전문 mode는 별도 제품 결정 후 추가. Canva는 policy gate 전 disabled.
-10. API-key official MCP는 secondary opt-in lane에서만 추가.
-11. Pika는 experimental canary에서만 평가하고 production default에는 포함하지 않는다.
+4. Higgsfield/Runway generation (2026-07-16 결정: 실행 pilot 2곳).
+5. verified native workflows.
+6. Recraft·Magnific 확장 — `100_provider_expansion.md` (Magnific은 entitlement + open-source MCP client 허용 근거 확인 후).
+7. Krea/Ideogram/BFL 등 OAuth Tier A — `110_tier_a_backlog.md`.
+8. HeyGen/Rendley 전문 mode는 별도 제품 결정 후 추가. Canva는 policy gate 전 disabled.
+9. API-key official MCP는 secondary opt-in lane에서만 추가.
+10. Pika는 experimental canary에서만 평가하고 production default에는 포함하지 않는다.
 
 ## Kill switches
 

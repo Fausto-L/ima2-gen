@@ -49,6 +49,8 @@ ima2-gen은 provider 기능을 재판매하는 hosted SaaS나 API proxy가 아�
 3. Magnific — 이번 Luna 병렬 조사에서 가장 가까운 신규 peer로 확인됐다. 유료 플랜 OAuth, 이미지·영상 생성/편집, video project/clip editor, upscale, 공개된 video concatenation 범위를 갖는다. 단, 공식 문서가 제품/파이프라인 통합에는 API를 안내하므로 schema 열람 이후 adapter 착수 전 서면 허용 또는 적용 가능한 약관 근거가 필요하다.
 4. Recraft — 공개 tool 이름·파라미터·구독 크레딧 과금이 문서화되어 공통 runtime의 image control provider로 적합하다.
 
+> **2026-07-16 scope 축소:** 실행 pilot은 사용자 계정이 준비된 **Higgsfield·Runway** 두 곳이다. Magnific·Recraft는 후보 지위를 유지하되 `100_provider_expansion.md`로 이연됐다.
+
 Krea와 Ideogram은 pilot 직후의 Tier A다. Pika는 `Extend Video`와 `Stitch Videos`까지 공식 페이지에 표시하지만 provider 자체가 experimental/rough 상태로 명시하므로 격리된 기술 spike로만 다룬다. BFL은 이미지 전문 OAuth lane, HeyGen·Rendley는 avatar/video-editor workflow lane으로 분리한다. Canva는 기능상 design workflow 후보지만 정책 검토 전에는 disabled catalog entry로만 둔다. fal·Replicate·Leonardo·HiAPI·MiniMax·Hera·Golpo처럼 official MCP가 API key를 요구하는 후보는 secondary compatibility lane이며, API만 있고 공식 MCP가 없는 서비스는 제외한다.
 
 ## 구조 결정
@@ -86,7 +88,7 @@ Krea와 Ideogram은 pilot 직후의 Tier A다. Pika는 `Extend Video`와 `Stitch
 | WP | 문서 | 독립 완료 결과 | 선행 |
 |---:|---|---|---|
 | 0 | `001`~`005` | 후보 원장, Luna sweep, 인터뷰 기록(닫힘) | 없음 |
-| 1 | `010_authenticated_schema_spike.md` | 계정/플랜 요건 매트릭스 + 인증 후 sanitized `tools/list` snapshot(번들 파이프라인 입력) + 무과금 capability 판정 | 조사 |
+| 1 | `010_authenticated_schema_spike.md` | **Higgsfield·Runway 한정**(2026-07-16) 계정/플랜 요건 매트릭스 + 인증 후 sanitized `tools/list` snapshot + 무과금 capability 판정 | 조사 |
 | 2 | `020_contract_catalog_sot.md` | canonical contract model + dual namespace + availability 상태기계 + 기존 manifest/capabilities projection 이관 | WP1 fixture |
 | 3 | `030_mcp_runtime_auth.md` | 공통 Streamable HTTP/OAuth/token/connection runtime | WP2 |
 | 4 | `040_snapshot_lifecycle_bundle.md` | 획득→sanitize→tag→로컬 캐시/npm 번들→drift 감지·잠금 파이프라인 | WP2~3 |
@@ -95,6 +97,8 @@ Krea와 Ideogram은 pilot 직후의 Tier A다. Pika는 `Extend Video`와 `Stitch
 | 7 | `070_ai_discovery_cli.md` | AI-facing machine contract entrypoint(`ima2 tools …`), skill/docs projection 생성 | WP2, WP4 |
 | 8 | `080_ui_observability.md` | 연결/모델/action UI, SSE/inflight/metadata 표면 | WP5~6 |
 | 9 | `090_verification_rollout.md` | **Tier 1 clean-install golden-task 하네스 소유** + Tier 2 authenticated smoke + 보안·과금·rollout | WP1~8 |
+| 10 | `100_provider_expansion.md` | Recraft·Magnific 확장 — 010~090 재사용 계약으로 provider 추가 절차 검증 | WP9 |
+| 11 | `110_tier_a_backlog.md` | Krea/Ideogram/BFL 등 Tier A·specialist gated backlog 원장 | WP10 |
 
 WP1이 Higgsfield/Runway/Magnific의 실제 tool schema를 확정하기 전에는 WP5·WP6의 tool mapping을 구현하지 않는다.
 
