@@ -6,7 +6,7 @@ export const MAX_AGENT_PARALLELISM = MAX_GENERATION_COUNT;
 
 export const DEFAULT_AGENT_GENERATION_SETTINGS: AgentGenerationSettings = {
   provider: "oauth",
-  model: "gpt-5.4-mini",
+  model: "gpt-5.6-luna",
   quality: "medium",
   size: "1024x1024",
   format: "png",

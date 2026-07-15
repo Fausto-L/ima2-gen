@@ -1,6 +1,6 @@
 import type { Provider, Quality, SizePreset, Format, Moderation, ImageModel, Count } from "../types";
 import type { ReasoningEffort } from "../lib/reasoning";
-import { DEFAULT_IMAGE_MODEL, isGrokImageModel, isGeminiImageModel, normalizeVideoModelValue } from "../lib/imageModels";
+import { DEFAULT_IMAGE_MODEL, GROK_VIDEO_MODEL_15, isGrokImageModel, isGeminiImageModel, normalizeVideoModelValue } from "../lib/imageModels";
 import { parseRequestedCustomSide } from "../lib/size";
 import { getEffectiveVideoSourceCount } from "../lib/videoSourceCount";
 import {
@@ -22,7 +22,7 @@ export function setProviderImpl(provider: Provider, set: StoreSet, get: StoreGet
     saveVideoDefaults({ model: false });
   }
   if ((provider === "grok" || provider === "grok-api") && !isGrokImageModel(currentModel)) {
-    const grokModel = "grok-imagine-image";
+    const grokModel = "grok-imagine-image-quality";
     saveImageModel(grokModel);
     set({ provider, imageModel: grokModel });
   } else if ((provider === "agy" || provider === "gemini-api") && !isGeminiImageModel(currentModel)) {
@@ -102,7 +102,7 @@ export function setImageModelImpl(imageModel: ImageModel, set: StoreSet, get: St
 }
 
 export function selectVideoModelImpl(model: string | undefined, set: StoreSet, get: StoreGet): void {
-  const m = normalizeVideoModelValue(model) || "grok-imagine-video";
+  const m = normalizeVideoModelValue(model) || GROK_VIDEO_MODEL_15;
   set({ videoModelSelected: m });
   saveVideoDefaults({ model: m });
   if (get().provider !== "grok") get().setProvider("grok");

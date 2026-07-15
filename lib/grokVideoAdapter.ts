@@ -8,7 +8,7 @@ import { downloadVideo } from "./grokVideoDownload.js";
 import { buildGrokVideoPlannerSystemPrompt, formatDurationPacingGuidance, type VideoPlannerContext } from "./grokVideoPlannerPrompt.js";
 import type { VideoAspectRatio, VideoMode, VideoResolution } from "./imageModels.js";
 import {
-  GROK_VIDEO_MODEL_15,
+  GROK_FALLBACK_VIDEO_MODEL, GROK_VIDEO_MODEL_15,
   GROK_VIDEO_MODEL_15_PREVIEW_ALIAS,
   GROK_VIDEO_MODEL_BASE,
   MAX_REF2V_REFERENCES,
@@ -84,6 +84,7 @@ export interface GrokVideoOptions {
   directApiKey?: string;
   onEvent?: (ev: GrokVideoEvent) => void;
   storyboardActive?: boolean;
+  backgroundConstraint?: string;
 }
 
 interface VideoConfig {
@@ -104,7 +105,7 @@ function canonicalVideoModel(model: string): string {
 function videoConfig(ctx: RouteRuntimeContext): VideoConfig {
   const g = (ctx.config as any).grokProvider || {};
   return {
-    model: g.defaultVideoModel || "grok-imagine-video",
+    model: g.defaultVideoModel || GROK_FALLBACK_VIDEO_MODEL,
     startTimeoutMs: g.videoStartTimeoutMs || 60_000,
     pollIntervalMs: g.videoPollIntervalMs || 5_000,
     totalTimeoutMs: g.videoTimeoutMs || 900_000,
@@ -165,7 +166,7 @@ const FAILED_CODE_MAP: Record<string, { code: string; status: number }> = {
 
 export function buildGrokVideoPlannerPayload(
   prompt: string,
-  opts: { model: string; mode: VideoMode; duration: number; resolution: VideoResolution; aspectRatio: VideoAspectRatio; plannerModel?: string; searchSummary?: string; sourceImageUrl?: string; referenceImageUrls?: string[]; continuityLineage?: VideoContinuityLineage | null },
+  opts: { model: string; mode: VideoMode; duration: number; resolution: VideoResolution; aspectRatio: VideoAspectRatio; plannerModel?: string; searchSummary?: string; sourceImageUrl?: string; referenceImageUrls?: string[]; continuityLineage?: VideoContinuityLineage | null; backgroundConstraint?: string },
 ) {
   const isI2V = opts.mode === "image-to-video";
   const isRef2V = opts.mode === "reference-to-video";
@@ -185,6 +186,7 @@ export function buildGrokVideoPlannerPayload(
         lineageText ? `Authoritative continuation context:\n${lineageText}` : "Authoritative continuation context: none.",
         formatDurationPacingGuidance(opts.duration, opts.mode, opts.resolution),
         opts.searchSummary ? `Mandatory web-search brief:\n${opts.searchSummary}` : "Mandatory web-search brief: unavailable.",
+        ...(opts.backgroundConstraint ? [opts.backgroundConstraint] : []),
         "Return the generate_video.prompt argument in English only, except for exact visible text the user explicitly requested.",
         "\nUser prompt:",
         prompt,
@@ -274,6 +276,7 @@ export async function planGrokVideo(prompt: string, ctx: RouteRuntimeContext, op
     sourceImageUrl: options.sourceImage ? sourceImageUrl(options.sourceImage, options.sourceMime) : undefined,
     referenceImageUrls,
     continuityLineage: options.continuityLineage,
+    backgroundConstraint: options.backgroundConstraint,
   });
   const { url, headers } = videoEndpoint(ctx, "/v1/chat/completions", options.directApiKey);
   const { combinedSignal, timer } = withTimeoutSignal(options.signal, cfg.plannerTimeoutMs);

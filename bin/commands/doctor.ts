@@ -96,7 +96,7 @@ async function imageProbe(args: string[]) {
     provider: valueAfter(args, "--provider") || fileConfig.provider || "oauth",
     apiKey: typeof fileConfig.apiKey === "string" ? fileConfig.apiKey : undefined,
     oauthUrl: valueAfter(args, "--oauth-url") || undefined,
-    model: valueAfter(args, "--model") || runtimeConfig.imageModels?.default || "gpt-5.4-mini",
+    model: valueAfter(args, "--model") || runtimeConfig.imageModels?.default || "gpt-5.6-luna",
     size: valueAfter(args, "--size") || "1024x1024",
     quality: valueAfter(args, "--quality") || "low",
     moderation: valueAfter(args, "--moderation") || "low",

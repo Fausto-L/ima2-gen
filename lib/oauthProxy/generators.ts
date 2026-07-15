@@ -35,7 +35,7 @@ export async function generateViaOAuth(
 ) {
   await waitForOAuthReady(ctx);
   const oauthUrl = getOAuthUrl(ctx);
-  const model = options.model || ctx.config?.imageModels?.default || "gpt-5.4-mini";
+  const model = options.model || ctx.config?.imageModels?.default || "gpt-5.6-luna";
   const webSearchEnabled = resolveWebSearchEnabled(options);
   const tools = buildImageTools(webSearchEnabled, {
     quality,

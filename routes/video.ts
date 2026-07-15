@@ -11,6 +11,7 @@ import type { Express, Request, Response } from "express";
 import { startJob, finishJob, registerJobAbortController, isJobCanceled, isStartJobFailure, setJobPhase, INFLIGHT_RETRY_AFTER_SECONDS } from "../lib/inflight.js";
 import { isGenerationCanceledError, makeGenerationCanceledError } from "../lib/generationCancel.js";
 import { logEvent, logError } from "../lib/logger.js";
+import { parseBackgroundPreset, backgroundPromptSuffix, backgroundPlannerConstraint } from "../lib/backgroundPresets.js";
 import { invalidateHistoryIndex } from "../lib/historyIndex.js";
 import { generateVideoViaGrok, type GrokVideoEvent } from "../lib/grokVideoAdapter.js";
 import { getVideoSeriesChain } from "../lib/videoSeriesChain.js";
@@ -42,6 +43,8 @@ import { generateVideoThumbnail } from "../lib/videoThumb.js";
 import { publish } from "../lib/eventBus.js";
 import { publishJobEvent } from "../lib/ssePublish.js";
 import { normalizePresetIds } from "../lib/presetCompiler.js";
+import { getElementById } from "../lib/assetsStore.js";
+import { compileElements, ELEMENT_CAPACITY_DEFAULTS, type ElementDefinition, type ExistingReferenceInput } from "../lib/elementCompiler.js";
 
 function sendSse(res: Response, event: string, data: unknown) {
   if (res.writableEnded || res.destroyed) return;
@@ -170,6 +173,11 @@ export function registerVideoRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
       const { prompt, provider = "grok", model: rawModel } = req.body || {};
       const presetIds = normalizePresetIds(req.body?.presetIds);
       const sessionId = typeof req.body?.sessionId === "string" ? req.body.sessionId : null;
+      const backgroundParse = parseBackgroundPreset(req.body?.backgroundPreset);
+      if ("error" in backgroundParse) {
+        return fail(400, backgroundParse.code, backgroundParse.error);
+      }
+      const backgroundPreset = backgroundParse.preset;
       const clientNodeId = typeof req.body?.clientNodeId === "string" ? req.body.clientNodeId : null;
       const topic = typeof req.body?.topic === "string" ? req.body.topic.trim() : "";
 
@@ -211,7 +219,7 @@ export function registerVideoRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
       const activePrompt = requireActiveVideoPrompt(prompt);
       if (!activePrompt) return fail(400, "PROMPT_REQUIRED", "Prompt is required", { guidance: ACTIVE_VIDEO_PROMPT_GUIDANCE });
 
-      const modelCheck = normalizeGrokVideoModel(rawModel);
+      const modelCheck = normalizeGrokVideoModel(rawModel || ctx.config.grokProvider.defaultVideoModel);
       if (isNormalizeError(modelCheck)) return fail(modelCheck.status, modelCheck.code, modelCheck.error);
       const durationCheck = normalizeVideoDuration(req.body?.duration);
       if (isNormalizeError(durationCheck)) return fail(durationCheck.status, durationCheck.code, durationCheck.error);
@@ -235,20 +243,81 @@ export function registerVideoRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
         parentLineage = normalizeVideoContinuityLineage(req.body?.continuityLineage);
       }
 
-      const refInputs: Array<{ image?: unknown; filename?: unknown }> = [
-        ...toArray(req.body?.referenceImages).map((image) => ({ image })),
-        ...toArray(req.body?.referenceFilenames).map((filename) => ({ filename })),
-        ...(req.body?.sourceImage || req.body?.sourceFilename
-          ? [{ image: req.body?.sourceImage, filename: req.body?.sourceFilename }]
-          : []),
-      ];
+      const refInputs: Array<{ image?: unknown; filename?: unknown; source: ExistingReferenceInput["source"] }> = [];
       if (continueFromVideoFilename && !req.body?.sourceImage && !req.body?.sourceFilename) {
         try {
-          refInputs.push({ image: await extractGeneratedVideoFrameB64(ctx.config.storage.generatedDir, continueFromVideoFilename) });
+          refInputs.push({
+            image: await extractGeneratedVideoFrameB64(ctx.config.storage.generatedDir, continueFromVideoFilename),
+            source: "continuity",
+          });
         } catch (e: any) {
           return fail(e?.status || 500, "GROK_VIDEO_FRAME_FAILED", e?.message || "failed to extract continuation frame");
         }
       }
+      refInputs.push(
+        ...toArray(req.body?.referenceImages).map((image) => ({ image, source: "composer" as const })),
+        ...toArray(req.body?.referenceFilenames).map((filename) => ({ filename, source: "composer" as const })),
+        ...(req.body?.sourceImage || req.body?.sourceFilename
+          ? [{ image: req.body?.sourceImage, filename: req.body?.sourceFilename, source: "node" as const }]
+          : []),
+      );
+
+      const rawElementIds: string[] = Array.isArray(req.body?.elementIds)
+        ? req.body.elementIds.filter((id: unknown) => typeof id === "string" && id)
+        : [];
+      let elementNotesFragment = "";
+      let elementResolvedRefs: string[] = [];
+      let appliedElementIds: string[] = [];
+      if (rawElementIds.length > 0) {
+        try {
+          const elementMap = new Map<string, ElementDefinition>();
+          for (const elementId of rawElementIds) {
+            const record = getElementById(elementId);
+            if (record?.metadata) {
+              const metadata = typeof record.metadata === "string" ? JSON.parse(record.metadata) : record.metadata;
+              elementMap.set(elementId, {
+                id: elementId,
+                name: metadata.name ?? record.name,
+                kind: metadata.elementKind ?? "character",
+                refs: Array.isArray(metadata.refs) ? metadata.refs : [],
+                notes: metadata.notes,
+                defaultStrength: metadata.defaultStrength,
+                createdAt: record.createdAt ?? 0,
+                updatedAt: record.updatedAt ?? 0,
+              });
+            }
+          }
+          const elementCapacity = refInputs.length > 1
+            ? { ...ELEMENT_CAPACITY_DEFAULTS.grok.video, maxTotalRefs: MAX_REF2V_REFERENCES }
+            : ELEMENT_CAPACITY_DEFAULTS.grok.video;
+          const compiled = compileElements({
+            elementIds: rawElementIds,
+            elements: elementMap,
+            existingRefs: refInputs.map((ref): ExistingReferenceInput => ({
+              source: ref.source,
+              path: typeof ref.filename === "string" ? ref.filename : typeof ref.image === "string" ? ref.image : "",
+            })),
+            provider: "grok",
+            mode: "video",
+            capacity: elementCapacity,
+            missingPolicy: "collect",
+          });
+          elementNotesFragment = compiled.notesFragment;
+          appliedElementIds = compiled.elementIds;
+          for (const slot of compiled.referenceSlots) {
+            try {
+              const buffer = await readFile(slot.path);
+              const mime = slot.path.endsWith(".png") ? "image/png" : "image/jpeg";
+              elementResolvedRefs.push(`data:${mime};base64,${buffer.toString("base64")}`);
+            } catch {
+              logEvent("video", "element_ref_read_failed", { requestId, path: slot.path, elementId: slot.elementId });
+            }
+          }
+        } catch (e) {
+          logEvent("video", "element_compile_failed", { requestId, error: errInfo(e) });
+        }
+      }
+      refInputs.push(...elementResolvedRefs.map((image) => ({ image, source: "composer" as const })));
       let resolved: Array<{ b64: string; filename: string | null }>;
       try {
         const all = await Promise.all(refInputs.map((r) => resolveSourceImage(ctx, r.image, r.filename)));
@@ -317,7 +386,9 @@ export function registerVideoRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
       const basePrompt = chain.length > 0
         ? `[Series topic: ${topic}]\n[Previous prompts in series:\n${chain.map((p, i) => `${i + 1}. ${p}`).join("\n")}\n]\n\n${activePrompt}`
         : activePrompt;
-      const effectivePrompt = storyboardPrefix + basePrompt;
+      const effectivePrompt = storyboardPrefix + basePrompt
+        + (elementNotesFragment ? `\n${elementNotesFragment}` : "")
+        + (backgroundPreset ? ` ${backgroundPromptSuffix(backgroundPreset, "video")}` : "");
 
       const plannerModel = typeof req.body?.plannerModel === "string" ? req.body.plannerModel.trim() : undefined;
       const directApiKey = provider === "grok-api" ? ctx.xaiApiKey : undefined;
@@ -337,7 +408,18 @@ export function registerVideoRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
         directApiKey,
         onEvent,
         storyboardActive,
+        backgroundConstraint: backgroundPreset ? backgroundPlannerConstraint(backgroundPreset) : undefined,
       });
+
+      const plannerDroppedBackground = Boolean(
+        backgroundPreset
+        && typeof result.revisedPrompt === "string"
+        && result.revisedPrompt.trim()
+        && !/background/i.test(result.revisedPrompt),
+      );
+      if (plannerDroppedBackground) {
+        logEvent("grok", "video:background-constraint-dropped", { requestId, backgroundPreset });
+      }
 
       const rand = randomBytes(ctx.config.ids.generatedHexBytes).toString("hex");
       const filename = `${Date.now()}_${rand}.mp4`;
@@ -359,6 +441,7 @@ export function registerVideoRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
         userPrompt: activePrompt,
         revisedPrompt: result.revisedPrompt,
         presetIds,
+        ...(appliedElementIds.length > 0 ? { elementIds: appliedElementIds } : {}),
         provider,
         model: result.effectiveModel,
         requestedModel: result.requestedModel,
@@ -381,6 +464,7 @@ export function registerVideoRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
         videoContinuity,
         ...(topic ? { videoSeries: { topic, chainIndex: chain.length } } : {}),
         ...(storyboardActive ? { storyboard: true } : {}),
+        ...(backgroundPreset ? { backgroundPreset, ...(plannerDroppedBackground ? { plannerDroppedBackground: true } : {}) } : {}),
       };
       let finalBuffer = result.videoBuffer;
       if (storyboardActive) {

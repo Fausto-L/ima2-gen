@@ -1,12 +1,12 @@
 import type { RouteRuntimeContext } from "./runtimeContext.js";
 
-const FALLBACK_IMAGE_MODEL = "gpt-5.4-mini";
+export const FALLBACK_IMAGE_MODEL = "gpt-5.6-luna";
 const VALID_IMAGE_MODELS = new Set(["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]);
 const UNSUPPORTED_IMAGE_MODELS = new Set(["gpt-5.3-codex-spark"]);
 const FALLBACK_REASONING_EFFORT = "none";
 const VALID_REASONING_EFFORTS = new Set(["none", "low", "medium", "high", "xhigh", "max"]);
 
-const GROK_FALLBACK_IMAGE_MODEL = "grok-imagine-image";
+export const GROK_FALLBACK_IMAGE_MODEL = "grok-imagine-image-quality";
 const VALID_GROK_IMAGE_MODELS = new Set(["grok-imagine-image", "grok-imagine-image-quality"]);
 
 const GEMINI_API_FALLBACK_IMAGE_MODEL = "nano-banana-2";
@@ -93,7 +93,7 @@ export function normalizeGeminiApiModel(rawModel: unknown) {
 export const GROK_VIDEO_MODEL_BASE = "grok-imagine-video";
 export const GROK_VIDEO_MODEL_15 = "grok-imagine-video-1.5";
 export const GROK_VIDEO_MODEL_15_PREVIEW_ALIAS = "grok-imagine-video-1.5-preview";
-const GROK_FALLBACK_VIDEO_MODEL = GROK_VIDEO_MODEL_BASE;
+export const GROK_FALLBACK_VIDEO_MODEL = GROK_VIDEO_MODEL_15;
 export const VALID_GROK_VIDEO_MODELS = new Set([
   GROK_VIDEO_MODEL_BASE,
   GROK_VIDEO_MODEL_15,

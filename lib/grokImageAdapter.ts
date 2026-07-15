@@ -45,6 +45,7 @@ export function buildGrokPlannerPayload(
   plannerModel = "grok-4.3",
   searchSummary = "",
   references: GrokReferenceImage[] | number = 0,
+  backgroundConstraint = "",
 ) {
   const referenceImages = Array.isArray(references) ? references : [];
   const referenceCount = Array.isArray(references) ? references.length : references;
@@ -150,6 +151,7 @@ export function buildGrokPlannerPayload(
               `Selected image model: ${model}.`,
               sizeLine,
               referenceLine,
+              ...(backgroundConstraint ? [backgroundConstraint] : []),
               searchSummary ? `Mandatory web-search brief:\n${searchSummary}` : "Mandatory web-search brief: unavailable.",
               "Create the best final prompt for the image generator.",
               "Return the generate_image.prompt argument in English only, except for exact visible text that the user explicitly requested.",
@@ -294,9 +296,10 @@ export async function planGrokImage(
     references?: GrokReferenceImage[];
     directApiKey?: string;
     plannerModel?: string;
+    backgroundConstraint?: string;
   } = {},
 ): Promise<GrokImagePlan> {
-  const imageModel = options.model || (ctx.config as any).grokProvider?.defaultImageModel || "grok-imagine-image";
+  const imageModel = options.model || (ctx.config as any).grokProvider?.defaultImageModel || "grok-imagine-image-quality";
   const planner = getPlannerConfig(ctx);
   const plannerModel = options.plannerModel || planner.model;
   const sizeParams = mapSizeToGrokImageParams(options.size);
@@ -309,6 +312,7 @@ export async function planGrokImage(
     plannerModel,
     search.summary,
     options.references || options.referenceCount || 0,
+    options.backgroundConstraint || "",
   );
   const { url, headers } = getGrokEndpoint(ctx, "/v1/chat/completions", options.directApiKey);
   const { combinedSignal, timer } = withTimeoutSignal(options.signal, planner.timeoutMs);
@@ -367,7 +371,7 @@ export async function generateViaGrok(
     plannerModel?: string;
   } = {},
 ): Promise<GrokGenerateResult> {
-  const model = options.model || (ctx.config as any).grokProvider?.defaultImageModel || "grok-imagine-image";
+  const model = options.model || (ctx.config as any).grokProvider?.defaultImageModel || "grok-imagine-image-quality";
   const references = options.references || [];
   const plan = options.plannedPrompt
     ? { prompt: options.plannedPrompt, model, webSearchCalls: options.webSearchCalls ?? 1 }
@@ -412,7 +416,7 @@ export async function editViaGrok(
   ctx: RouteRuntimeContext,
   options: { model?: string; size?: string; signal?: AbortSignal; requestId?: string; directApiKey?: string } = {},
 ): Promise<GrokGenerateResult> {
-  const model = options.model || (ctx.config as any).grokProvider?.defaultImageModel || "grok-imagine-image";
+  const model = options.model || (ctx.config as any).grokProvider?.defaultImageModel || "grok-imagine-image-quality";
   const detectedInputMime = detectImageMimeFromB64(imageB64) || "image/png";
   const imageUrl = imageB64.startsWith("data:") ? imageB64 : `data:${detectedInputMime};base64,${imageB64}`;
   const payload: Record<string, unknown> = { model, prompt, n: 1, response_format: "url", image: { type: "image_url", url: imageUrl }, ...mapSizeToGrokImageParams(options.size) };

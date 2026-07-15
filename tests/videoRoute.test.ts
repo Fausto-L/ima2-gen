@@ -161,6 +161,35 @@ test("/api/video/generate streams progress and saves mp4 + sidecar", async () =>
   }
 });
 
+test("/api/video/generate uses configured Grok Video 1.5 default when model is omitted", async () => {
+  let startBody: any = null;
+  const proxy = makeProxy({ captureStart: (body) => { startBody = body; } });
+  const proxyUrl = await listen(proxy);
+  const proxyPort = Number(new URL(proxyUrl).port);
+  const generatedDir = await mkdtemp(join(tmpdir(), "ima2-video-route-default-model-"));
+  const { server, url } = await videoApp(generatedDir, proxyPort);
+  try {
+    const res = await fetch(`${url}/api/video/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: "animate the source image",
+        provider: "grok",
+        sourceImage: Buffer.from("img").toString("base64"),
+        duration: 1,
+        resolution: "480p",
+      }),
+    });
+    const events = parseSse(await res.text());
+    assert.ok(events.some((event) => event.event === "done"), "has done");
+    assert.equal(startBody?.model, "grok-imagine-video-1.5");
+  } finally {
+    await new Promise((r) => server.close(r));
+    await new Promise((r) => proxy.close(r));
+    await rm(generatedDir, { recursive: true, force: true });
+  }
+});
+
 test("/api/video/generate exposes fallback model metadata for 1.5 Ref2V", async () => {
   const proxy = makeProxy({ failFirstGeneration: true });
   const proxyUrl = await listen(proxy);

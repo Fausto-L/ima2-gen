@@ -39,9 +39,9 @@ describe("gpt-5.6 rollout: validators", () => {
     assert.match(result.error ?? "", /max/);
   });
 
-  it("keeps defaults unchanged (rollout does not flip defaults)", () => {
-    assert.deepEqual(normalizeImageModel({}, undefined), { model: "gpt-5.4-mini" });
-    assert.equal(config.imageModels.default, "gpt-5.4-mini");
+  it("uses luna as the product default", () => {
+    assert.deepEqual(normalizeImageModel({}, undefined), { model: "gpt-5.6-luna" });
+    assert.equal(config.imageModels.default, "gpt-5.6-luna");
   });
 });
 

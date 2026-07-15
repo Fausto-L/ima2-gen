@@ -75,7 +75,7 @@ export async function requestAgentQuestionAnswer(
         headers: endpoint.headers,
         signal,
         body: JSON.stringify({
-          model: options.model || ctx.config.imageModels?.default || "gpt-5.4-mini",
+          model: options.model || ctx.config.imageModels?.default || "gpt-5.6-luna",
           input: [
             { role: "developer", content: AGENT_QUESTION_DEVELOPER_PROMPT },
             { role: "user", content: question },

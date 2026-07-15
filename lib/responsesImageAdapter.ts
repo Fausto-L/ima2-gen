@@ -293,7 +293,7 @@ interface GenerateOptions {
 
 export async function generateViaResponses(provider: string | undefined, prompt: string | undefined, quality: string | undefined, size: string | undefined, moderation: string = "low", references: ReferenceRef[] = [], requestId: string | null = null, mode: string = "auto", ctxRaw: RouteRuntimeContext = {}, options: GenerateOptions = {}) {
   const ctx = requireRuntimeContext(ctxRaw);
-  const model = options.model || ctx.config?.imageModels?.default || "gpt-5.4-mini";
+  const model = options.model || ctx.config?.imageModels?.default || "gpt-5.6-luna";
   const webSearchEnabled = options.webSearchEnabled !== false && options.searchMode !== "off";
   const requestTools = tools(webSearchEnabled, { quality, size, moderation, ...(options.partialImages ? { partial_images: options.partialImages } : {}) });
   const toolChoice = imageToolChoice(options.forceImageToolChoice ?? ctx.config?.oauth?.forceImageToolChoice !== false);
@@ -372,7 +372,7 @@ export async function generateMultimodeViaResponses(provider: string | undefined
     maxGeneratedImages,
     Math.max(1, Math.trunc(Number(options.maxImages) || 1)),
   );
-  const model = options.model || ctx.config?.imageModels?.default || "gpt-5.4-mini";
+  const model = options.model || ctx.config?.imageModels?.default || "gpt-5.6-luna";
   const webSearchEnabled = options.webSearchEnabled !== false && options.searchMode !== "off";
   const requestTools = tools(webSearchEnabled, { quality, size, moderation, ...(options.partialImages ? { partial_images: options.partialImages } : {}) });
   const userText = buildMultimodeSequencePrompt(
@@ -411,7 +411,7 @@ export async function generateMultimodeViaResponses(provider: string | undefined
 
 export async function editViaResponses(provider: string | undefined, prompt: string | undefined, imageB64: string | undefined, quality: string | undefined, size: string | undefined, moderation: string = "low", mode: string = "auto", ctxRaw: RouteRuntimeContext = {}, requestId: string | null = null, options: GenerateOptions = {}) {
   const ctx = requireRuntimeContext(ctxRaw);
-  const model = options.model || ctx.config?.imageModels?.default || "gpt-5.4-mini";
+  const model = options.model || ctx.config?.imageModels?.default || "gpt-5.6-luna";
   const webSearchEnabled = options.webSearchEnabled !== false && options.searchMode !== "off";
   const requestTools = tools(webSearchEnabled, { quality, size, moderation });
   const toolChoice = imageToolChoice(options.forceImageToolChoice ?? ctx.config?.oauth?.forceImageToolChoice !== false);

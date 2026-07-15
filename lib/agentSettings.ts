@@ -12,7 +12,7 @@ const MAX_AGENT_PARALLELISM = Math.max(1, Math.trunc(config.limits.maxParallel))
 
 export const DEFAULT_AGENT_GENERATION_SETTINGS: AgentGenerationSettings = {
   provider: "oauth",
-  model: "gpt-5.4-mini",
+  model: "gpt-5.6-luna",
   quality: "medium",
   size: "1024x1024",
   format: "png",

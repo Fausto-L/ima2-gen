@@ -1,6 +1,6 @@
 import type { ImageModel, OpenAIImageModel, GeminiImageModel, Provider, UnsupportedImageModel, VideoModel } from "../types";
 
-export const DEFAULT_IMAGE_MODEL: ImageModel = "gpt-5.4-mini";
+export const DEFAULT_IMAGE_MODEL: ImageModel = "gpt-5.6-luna";
 export const IMAGE_MODEL_STORAGE_KEY = "ima2.imageModel";
 
 export const IMAGE_MODEL_OPTIONS: Array<{
@@ -15,8 +15,8 @@ export const IMAGE_MODEL_OPTIONS: Array<{
   { value: "gpt-5.6-sol", shortLabel: "5.6s", fullLabelKey: "settings.imageModel.gpt56Sol" },
   { value: "gpt-5.6-terra", shortLabel: "5.6t", fullLabelKey: "settings.imageModel.gpt56Terra" },
   { value: "gpt-5.6-luna", shortLabel: "5.6l", fullLabelKey: "settings.imageModel.gpt56Luna" },
-  { value: "grok-imagine-image", shortLabel: "grok", fullLabelKey: "settings.imageModel.grokImagine" },
   { value: "grok-imagine-image-quality", shortLabel: "grok+", fullLabelKey: "settings.imageModel.grokImagineQuality" },
+  { value: "grok-imagine-image", shortLabel: "grok", fullLabelKey: "settings.imageModel.grokImagine" },
   { value: "nano-banana-2", shortLabel: "nb2 agy", fullLabelKey: "settings.imageModel.nanoBanana2", providerHint: "agy" },
   { value: "nano-banana-2", shortLabel: "nb2 api", fullLabelKey: "settings.imageModel.nanoBanana2Api", providerHint: "gemini-api" },
   { value: "nano-banana-pro", shortLabel: "nbp api", fullLabelKey: "settings.imageModel.nanoBananaPro", providerHint: "gemini-api" },

@@ -5,8 +5,8 @@ import { normalizeImageModel } from "../lib/imageModels.ts";
 import { registerNodeRoutes } from "../routes/nodes.ts";
 
 describe("image model normalization", () => {
-  it("defaults to gpt-5.4-mini without route config", () => {
-    assert.deepEqual(normalizeImageModel({}, undefined), { model: "gpt-5.4-mini" });
+  it("defaults to gpt-5.6-luna without route config", () => {
+    assert.deepEqual(normalizeImageModel({}, undefined), { model: "gpt-5.6-luna" });
   });
 
   it("accepts supported image models", () => {

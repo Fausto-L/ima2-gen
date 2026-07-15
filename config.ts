@@ -260,7 +260,7 @@ export const config = {
     model: pickStr(env.IMA2_STYLE_MODEL, fileCfg.styleSheet?.model, "gpt-5.4-mini"),
   },
   imageModels: {
-    default: pickStr(env.IMA2_IMAGE_MODEL_DEFAULT, fileCfg.imageModels?.default, "gpt-5.4-mini"),
+    default: pickStr(env.IMA2_IMAGE_MODEL_DEFAULT, fileCfg.imageModels?.default, "gpt-5.6-luna"),
     valid: new Set(["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]),
     unsupported: new Set(["gpt-5.3-codex-spark"]),
     reasoningEffort: pickStr(
@@ -274,7 +274,7 @@ export const config = {
     defaultImageModel: pickStr(
       env.IMA2_API_IMAGE_MODEL_DEFAULT,
       fileCfg.apiProvider?.defaultImageModel,
-      "gpt-5.4-mini",
+      "gpt-5.6-luna",
     ),
     defaultReasoningEffort: pickStr(
       env.IMA2_API_REASONING_EFFORT,
@@ -291,10 +291,10 @@ export const config = {
     restartDelayMs: pickInt(env.IMA2_GROK_RESTART_DELAY_MS, fileCfg.grokProvider?.restartDelayMs, 2000),
     plannerModel: pickStr(env.IMA2_GROK_PLANNER_MODEL, fileCfg.grokProvider?.plannerModel, "grok-4.3"),
     plannerTimeoutMs: pickInt(env.IMA2_GROK_PLANNER_TIMEOUT_MS, fileCfg.grokProvider?.plannerTimeoutMs, 60_000),
-    defaultImageModel: pickStr(env.IMA2_GROK_IMAGE_MODEL_DEFAULT, fileCfg.grokProvider?.defaultImageModel, "grok-imagine-image"),
+    defaultImageModel: pickStr(env.IMA2_GROK_IMAGE_MODEL_DEFAULT, fileCfg.grokProvider?.defaultImageModel, "grok-imagine-image-quality"),
     generationTimeoutMs: pickInt(env.IMA2_GROK_GENERATION_TIMEOUT_MS, fileCfg.grokProvider?.generationTimeoutMs, 120_000),
     statusTimeoutMs: pickInt(env.IMA2_GROK_STATUS_TIMEOUT_MS, fileCfg.grokProvider?.statusTimeoutMs, 3000),
-    defaultVideoModel: pickStr(env.IMA2_GROK_VIDEO_MODEL_DEFAULT, fileCfg.grokProvider?.defaultVideoModel, "grok-imagine-video"),
+    defaultVideoModel: pickStr(env.IMA2_GROK_VIDEO_MODEL_DEFAULT, fileCfg.grokProvider?.defaultVideoModel, "grok-imagine-video-1.5"),
     videoStartTimeoutMs: pickInt(env.IMA2_GROK_VIDEO_START_TIMEOUT_MS, fileCfg.grokProvider?.videoStartTimeoutMs, 60_000),
     videoPollIntervalMs: pickInt(env.IMA2_GROK_VIDEO_POLL_INTERVAL_MS, fileCfg.grokProvider?.videoPollIntervalMs, 5_000),
     videoTimeoutMs: pickInt(env.IMA2_GROK_VIDEO_TIMEOUT_MS, fileCfg.grokProvider?.videoTimeoutMs, 900_000),

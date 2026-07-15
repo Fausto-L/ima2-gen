@@ -1,5 +1,5 @@
 import type { RuntimeContext } from "./runtimeContext.js";
-import { normalizeImageModel, normalizeReasoningEffort, normalizeGrokImageModel, normalizeGeminiApiModel } from "./imageModels.js";
+import { FALLBACK_IMAGE_MODEL, normalizeImageModel, normalizeReasoningEffort, normalizeGrokImageModel, normalizeGeminiApiModel } from "./imageModels.js";
 
 export function resolveProviderOptions(ctx: RuntimeContext | null | undefined, {
   provider = "oauth",
@@ -62,7 +62,7 @@ export function resolveProviderOptions(ctx: RuntimeContext | null | undefined, {
   const activeProvider = provider === "api" ? "api" : "oauth";
   const apiConfig: { defaultImageModel?: string; defaultReasoningEffort?: string; defaultSize?: string; allowWebSearch?: boolean } = (ctx?.config as { apiProvider?: any })?.apiProvider || {};
   const modelInput = activeProvider === "api"
-    ? (rawModel || apiConfig.defaultImageModel || "gpt-5.4-mini")
+    ? (rawModel || apiConfig.defaultImageModel || FALLBACK_IMAGE_MODEL)
     : rawModel;
   const modelCheck = normalizeImageModel(ctx, modelInput);
   if (modelCheck.error) return { error: modelCheck.error, code: modelCheck.code, status: modelCheck.status };

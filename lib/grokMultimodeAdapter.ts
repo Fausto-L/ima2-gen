@@ -32,7 +32,7 @@ export async function generateMultimodeViaGrok(
     onFinalImage?: (image: { b64: string; revisedPrompt?: string; mime?: string }, index: number) => void | Promise<void>;
   } = {},
 ): Promise<GrokMultimodeResult> {
-  const model = options.model || (ctx.config as any).grokProvider?.defaultImageModel || "grok-imagine-image";
+  const model = options.model || (ctx.config as any).grokProvider?.defaultImageModel || "grok-imagine-image-quality";
   const maxGeneratedImages = Math.max(
     1,
     Math.trunc(Number((ctx.config as any).limits?.maxGeneratedImages) || 24),

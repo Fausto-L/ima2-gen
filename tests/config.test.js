@@ -29,6 +29,8 @@ function loadConfig(env = {}) {
           valid: [...c.imageModels.valid],
           unsupported: [...c.imageModels.unsupported],
         },
+        apiProvider: c.apiProvider,
+        grokProvider: c.grokProvider,
         storage: c.storage,
         ids: c.ids,
         inflight: c.inflight,
@@ -76,7 +78,10 @@ test("config exposes default shape", () => {
   assert.equal(c.inflight.ttlMs, 600000);
   assert.equal(c.inflight.terminalTtlMs, 300000);
   assert.deepEqual(c.oauth.validModeration.sort(), ["auto", "low"]);
-  assert.equal(c.imageModels.default, "gpt-5.4-mini");
+  assert.equal(c.imageModels.default, "gpt-5.6-luna");
+  assert.equal(c.apiProvider.defaultImageModel, "gpt-5.6-luna");
+  assert.equal(c.grokProvider.defaultImageModel, "grok-imagine-image-quality");
+  assert.equal(c.grokProvider.defaultVideoModel, "grok-imagine-video-1.5");
   assert.deepEqual(c.imageModels.valid.sort(), ["gpt-5.4", "gpt-5.4-mini", "gpt-5.5", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"]);
   assert.deepEqual(c.imageModels.unsupported, ["gpt-5.3-codex-spark"]);
   assert.equal(c.features.cardNews, false);

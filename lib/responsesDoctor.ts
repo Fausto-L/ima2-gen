@@ -421,7 +421,7 @@ async function runSingleProbe(provider: string, options: ImageDoctorProbeOptions
 
 export async function runImageDoctorProbe(options: ImageDoctorProbeOptions = {}) {
   const provider = options.provider || "oauth";
-  const model = options.model || defaultConfig.imageModels?.default || "gpt-5.4-mini";
+  const model = options.model || defaultConfig.imageModels?.default || "gpt-5.6-luna";
   const size = options.size || "1024x1024";
   const quality = options.quality || "low";
   const moderation = options.moderation || "low";
