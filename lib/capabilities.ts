@@ -1,6 +1,7 @@
 import { config as runtimeConfigDefault } from "../config.js";
 import { AGENT_ALLOWED_TOOLS } from "./agentTypes.js";
 import { AGENT_TOOL_MANIFEST } from "./agentToolManifest.js";
+import { buildCatalog, catalogSummary } from "./contracts/catalog.js";
 import { KEY_TO_ENV, WRITABLE_CONFIG_KEYS } from "./configKeys.js";
 import { DEFAULT_IMAGE_QUALITY, VALID_IMAGE_QUALITIES } from "./oauthNormalize.js";
 import type { AppConfig } from "./runtimeContext.js";
@@ -119,6 +120,9 @@ export function buildIma2Capabilities({
       uiOnly: true,
       cliCommand: null,
     },
+    // Additive contract-catalog summary (020 WP2). Full machine contracts land
+    // with the `ima2 tools` surface (070); snapshot sources attach in 040.
+    contracts: catalogSummary(buildCatalog()),
     guidance: {
       highQuality: "Use --quality high for requests where output fidelity matters.",
       parallelGeneration: "Run multiple ima2 gen commands as separate queued jobs; no --parallel flag is required.",

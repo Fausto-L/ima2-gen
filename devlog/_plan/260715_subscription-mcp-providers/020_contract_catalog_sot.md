@@ -22,18 +22,23 @@ ima2 내장 tool과 외부 provider MCP tool을 하나의 canonical contract mod
 // NEW lib/contracts/types.ts
 export type ContractNamespace = "ima2" | `mcp.${string}`;
 export interface ToolContract {
-  id: string;                       // "ima2.video.extend" | "mcp.higgsfield.<tool>"
+  id: string;                       // "ima2.generate_image" | "mcp.higgsfield.<tool>"
   namespace: ContractNamespace;
   name: string;                     // upstream 원본 이름 또는 ima2 canonical 이름
-  description: string;              // trust: quoted data — instruction 병합 금지
-  inputSchema: JsonSchema;          // JSON Schema (draft 2020-12 기준 저장)
-  outputContract: OutputContract;   // artifact kind, sidecar fields, lineage 규칙
+  title?: string;                   // upstream title 보존 (A-audit WP2 blocker 2)
+  description: string;
+  trust: "builtin" | "upstream-untrusted"; // description을 instruction으로 병합 금지 라벨
+  inputSchema: JsonSchema;
+  outputSchema?: JsonSchema;        // upstream 제공 시 보존; ima2 outputContract는 050이 정의(이연)
+  annotations?: Record<string, unknown>; // upstream annotations 무손실 보존
   errorContract: TypedErrorCode[];  // auth_required | unavailable | schema_changed | ...
   executionOwner: "ima2-server";    // 인터뷰 Round 2로 고정
   availability: Availability;
-  provenance?: SnapshotProvenance;  // mcp.* 전용: provider/endpoint/fetchedAt/hash/entitlementTag
-  binding?: ToolBinding;            // normalized capability <-> upstream tool 연결
+  provenance?: SnapshotProvenance;  // mcp.* 전용
+  binding?: ToolBinding;            // normalized capability <-> upstream tool 연결 (후속)
 }
+// snapshot 원본은 SnapshotSource{provenance, serverInstructions?, tools[]}로 무손실 유지 —
+// catalog는 이를 ToolContract로 투영하되 040 sanitizer/lifecycle이 원본 shape를 계속 소유한다.
 export interface Availability {
   state: "documented" | "installed" | "connected" | "callable" | "stale" | "blocked";
   cause?: "auth_required" | "entitlement" | "schema_drift" | "revoked" | "offline";
@@ -51,7 +56,7 @@ export interface Availability {
 | NEW | `lib/contracts/catalog.ts` | 내장 tool 정의(현 manifest 이관) + snapshot loader 병합, id 충돌 검사, namespace 분리 조회 API. |
 | NEW | `lib/contracts/availability.ts` | 상태기계: 전이표, callable predicate, cause 축 매핑. 순수 함수로 유지. |
 | MODIFY | `lib/agentToolManifest.ts` | 하드코딩 배열 제거, catalog projection으로 재정의. export 시그니처 보존. |
-| MODIFY | `lib/capabilities.ts` | command/tool surface를 catalog에서 파생. `uiOnly`/`cliCommand` 의미 보존. |
+| MODIFY | `lib/capabilities.ts` | 기존 필드 전부 불변(회귀 0) + **additive** `contracts` 요약 필드 추가(catalog 항목 수·namespace·availability 분포). tool 정의 자체는 manifest projection 경유로 이미 catalog-derived (WP2 감사 blocker 1 해소). |
 | MODIFY | `routes/agent.ts` | 변경 없음 목표 — projection 호환성 테스트로 보증. |
 | NEW | `tests/contracts-catalog.test.ts` | id/namespace 규칙, 충돌, projection 호환 snapshot, availability 전이표. |
 | NEW | `tests/contracts-availability.test.ts` | callable predicate 진리표, cause 매핑, stale/blocked 잠금. |
