@@ -53,10 +53,13 @@ unmix를 전역 적용하지 않고, hard-key 영역으로부터 Chebyshev 거�
 
 ### 적용 범위 결정
 
-unmix는 **유채색 키(green/magenta 등)에만** 적용한다. 무채색 키(흰/검)는
-T(C) 텐트 점수가 정의되지 않으며(keyed/unkeyed 채널 구분 불가), 이미 031
-하드닝(채도 상한 + border-contiguity)이 소유한다. `keySaturation < 40`이면
-unmix 경로를 건너뛴다 (colorKey.ts:96의 기존 `isAchromaticKey` 판정 재사용).
+unmix는 **극단 채널 유채색 키에만** 적용한다. 원본 분류 규칙(extract.py:42-49)을
+그대로 쓴다: keyed 채널 = 키 채널값 ≥192, unkeyed 채널 = <64. 둘 중 하나라도
+비면 `keyTintScore = 0` → 전체 no-op. 이 규칙이 무채색 키(흰/검: unkeyed 또는
+keyed 집합이 빔)를 자연 차단하므로 별도 isAchromaticKey 가드는 불필요하다.
+지원 키: green(0,255,0)·magenta(255,0,255)류 극단 키. 추가 가드: keyColor의 모든
+채널이 ≥192 또는 <64가 아니면(중간 채널 존재) 전체 no-op — 원본 규칙만으로는
+(255,0,128) 같은 키가 통과하므로 명시적 검증을 둔다.
 
 ### NEW `ui/src/lib/canvas/softUnmix.ts` (자체 완결, DOM 독립)
 
@@ -65,7 +68,7 @@ export type SoftUnmixParams = {
   keyColor: RGB;
   /** hard-key 영역으로부터 Chebyshev 거리 상한. 0 = 비활성. 기본 4 */
   reach: number;
-  /** trapped-spill 클러스터 최대 크기 (전경 픽셀 대비 비율). 기본 0.02 */
+  /** trapped-spill 클러스터 최대 크기 (전경 픽셀 대비 비율). 원본 기본 0.005 */
   spillMaxFraction: number;
 };
 
@@ -84,15 +87,26 @@ export function applySoftUnmix(
 ): void;
 ```
 
+**이중 despill 차단 규칙 (audit blocker 1 해소):** unmix의 obs는 항상
+**source의 원본 RGB**다. applyColorKey가 이미 feather 픽셀의 RGB를 avg-limiter
+despill로 변형했으므로(colorKey.ts:227-249) keyed의 RGB를 입력으로 쓰면 혼합
+모델이 깨진다. unmix 대상 픽셀은 source RGB로 coverage/subject를 계산해 keyed의
+**RGB와 alpha를 모두 덮어쓴다** (band 안에서는 unmix가 경계 소유자, v1.13 교훈).
+단 keyed.alpha=0(hard-keyed) 픽셀은 그대로 0 유지. alpha_in은 source의 alpha.
+
 내부 단계 (extract.py:92-246 이식, 함수당 50줄 분할):
 
 1. `computeKeyDepth`: alpha=0 픽셀을 seed로 8방향 BFS, Chebyshev 거리 맵
    (Int16Array, reach 초과는 -1). wandErase의 Int32Array 큐 패턴 재사용.
-2. 픽셀 분류: `T(obs) <= 0` → SUBJECT(불변). 그 외 키 색조 픽셀 중
-   depth in [1, reach] → unmix 적용. depth 밖 키 색조 픽셀 → 3단계 후보.
-3. trapped-spill: 남은 키 색조 픽셀(alpha>0)의 4-연결 클러스터를 flood-fill로
-   수집, 크기 ≤ spillMaxFraction × 전경픽셀수 인 클러스터만 RGB despill
-   (subject 복원값으로 교체, **alpha 유지**). 큰 클러스터 = 소재색, 불변.
+2. 픽셀 분류 (source 색 기준, extract.py:126-138): KEYED(keyed.alpha=0) /
+   SUBJECT(tint < fringeDelta=18) / BLEND_IN_BAND(RGB 거리 ≤ fringeThreshold=180)
+   / BLEND_OUT_OF_BAND. unmix 조건: depth∈[1,reach]이고, IN_BAND는 depth≤2일
+   때만, OUT_OF_BAND는 reach 안이면 항상 (extra guardrail, extract.py:176-190).
+3. trapped-spill (extract.py:193-246): 남은 키 색조(tint ≥ fringeDelta,
+   alpha>0) 픽셀의 **8-연결** 클러스터 수집 (audit blocker 2 해소 — 원본
+   dx,dy∈{-1,0,1}). 크기 ≤ max(32, spillMaxFraction×전경픽셀수) 이고 클러스터
+   최대 tint > 40 (_SPILL_MIN_TINT) 인 클러스터만 RGB despill (source 기준
+   복원값으로 교체, **alpha는 keyed의 값 그대로 유지**). 큰 클러스터 = 소재색.
 
 ### MODIFY `ui/src/components/assetgen/KeyingPanel.tsx`
 
@@ -101,7 +115,7 @@ re-key 이펙트의 파이프라인 순서 (현행 applyColorKey → eraseSeedRe
 ```ts
 const keyed = applyColorKey(src, { keyColor, tolerance, softness, spill });
 if (unmixEnabled) {
-  applySoftUnmix(keyed, src, { keyColor, reach: 4, spillMaxFraction: 0.02 });
+  applySoftUnmix(keyed, src, { keyColor, reach: 4, spillMaxFraction: 0.005 });
 }
 if (eraseSeeds.length > 0) eraseSeedRegions(keyed, src, eraseSeeds, tolerance);
 ```
@@ -114,10 +128,12 @@ if (eraseSeeds.length > 0) eraseSeedRegions(keyed, src, eraseSeeds, tolerance);
 
 | 케이스 | 활성화 시나리오 |
 |---|---|
-| 50% green-blend 픽셀 복원 | subject (200,40,40)와 GREEN 50% 혼합 픽셀 → unmix 후 RGB≈subject±10, alpha≈128±16 |
-| reach 제한 | hard-key 영역에서 reach 밖의 초록끼 픽셀은 불변 (소재색 보존) |
-| trapped-spill | 전경 내부 작은 green 클러스터 → RGB despill + alpha 유지; 큰 green 블록 → 불변 |
-| 무채색 no-op | 흰 키에서 applySoftUnmix 호출 시 버퍼 바이트 불변 |
+| 50% green-blend 픽셀 복원 | subject (200,40,40)와 GREEN(0,255,0) 50% 혼합 픽셀이 hard-key 경계에서 Chebyshev 거리 1-2에 위치 → unmix 후 RGB≈subject±10, alpha≈128±16 |
+| 이중 despill 차단 | applyColorKey가 이미 G를 깎은 feather 픽셀에서 unmix 결과가 source 기준 복원값과 일치 (keyed RGB 입력이 아님을 증명) |
+| reach 제한 | hard-key seed(alpha=0)에서 Chebyshev 거리 5(>reach=4)에 배치한 초록끼 픽셀은 바이트 불변 — 거리를 기하적으로 구성해 검증 |
+| trapped-spill 소 | 전경 내부 대각선 연결(8-연결로만 하나) green 클러스터(크기<32, max tint>40) → RGB despill + alpha 바이트 단위 원값 유지 assertion |
+| trapped-spill 대 | spillLimit 초과 green 블록 → 바이트 불변 (소재색 보존) |
+| 무채색 no-op | 흰 키(keyTintScore=0)에서 applySoftUnmix 호출 시 버퍼 바이트 불변 |
 | 말라붙은 입력 | 빈/불일치 버퍼 throw |
 
 ### 검증 절차 (WP2 C 단계)
