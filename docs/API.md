@@ -171,6 +171,22 @@ CLI and legacy clients omit `async` and keep the original behavior: per-request 
 
 ## Generation
 
+## Sprite Atlas
+
+Sprite atlas imports require both a sprite-gen-compatible manifest and a PNG atlas. Unknown manifest fields are preserved during read/write round trips.
+
+| Method | Path | Notes |
+|---|---|---|
+| `POST` | `/api/sprite-atlas/import` | JSON `{ manifest, atlasBase64, runId?, name? }`; validates explicit rects and creates a sprite run plus representative image asset. |
+| `GET` | `/api/sprite-atlas/:runId` | Returns manifest, optional curation, and atlas URL. |
+| `PUT` | `/api/sprite-atlas/:runId/curation` | Stores sprite-gen curation v1 atomically without changing source frames. |
+| `POST` | `/api/sprite-atlas/:runId/unpack` | Extracts frames using manifest rects. |
+| `POST` | `/api/sprite-atlas/:runId/bake` | Applies curation and rebuilds atlas, manifest, and report. |
+| `POST` | `/api/sprite-atlas/:runId/export/contact-sheet` | Body `{ state, columns? }`; creates a PNG contact sheet. |
+| `POST` | `/api/sprite-atlas/:runId/export/gif` | Body `{ state, fps?, loop? }`; creates and decode-validates a transparent GIF through ffmpeg. |
+
+Import without a manifest returns `SPRITE_MANIFEST_REQUIRED`. GIF export returns `FFMPEG_UNAVAILABLE` with HTTP 503 when ffmpeg is unavailable.
+
 ### `POST /api/generate`
 
 Text-to-image and reference-guided root generation.

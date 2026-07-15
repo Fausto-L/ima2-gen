@@ -6,6 +6,7 @@ import { registerHistoryRoutes } from "./history.js";
 import { registerAssetsRoutes } from "./assets.js";
 import { registerSpriteRecipeRoutes } from "./spriteRecipes.js";
 import { registerSpriteGenerationRoutes } from "./spriteGeneration.js";
+import { registerSpriteAtlasRoutes } from "./spriteAtlas.js";
 import { registerAssetDerivedRoutes } from "./assetDerived.js";
 import { registerVideoKeyingRoutes } from "./videoKeying.js";
 import { registerSessionRoutes } from "./sessions.js";
@@ -45,6 +46,7 @@ export function configureRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
   registerAssetsRoutes(app, ctx);
   registerSpriteRecipeRoutes(app);
   registerSpriteGenerationRoutes(app, ctx);
+  registerSpriteAtlasRoutes(app, ctx);
   registerAssetDerivedRoutes(app, ctx);
   registerVideoKeyingRoutes(app, ctx);
   registerAnnotationRoutes(app, ctx);

@@ -17,6 +17,7 @@ import type {
   VideoContinuityLineage,
   HistoryStripLayout,
 } from "../types";
+import type { SpriteCuratorTarget } from "../types/spriteAtlas";
 import type { HistoryCursor, SessionSummary, PromptItem, PromptFolder } from "../lib/api";
 import type { ClientNodeId } from "../lib/graph";
 import type { NodeBatchMode } from "../lib/nodeBatch";
@@ -260,6 +261,8 @@ export type AppState = PresetState & {
   setAssetGenLastError: (v: string | null) => void;
   keyingTarget: GenerateItem | null;
   setKeyingTarget: (item: GenerateItem | null) => void;
+  spriteCuratorTarget: SpriteCuratorTarget | null;
+  setCuratorTarget: (target: SpriteCuratorTarget | null) => void;
   addAssetGenDerivedItem: (item: GenerateItem) => void;
   selectedProjectId: string | null;
   setSelectedProject: (id: string | null) => void;
