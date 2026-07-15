@@ -1,7 +1,7 @@
 // Media job executor (050 WP5): tools/call + task polling. Pure execution —
 // returns normalized results; persistence belongs to routes/mcpMedia.ts.
 import type { McpConnectionManager } from "./connectionManager.js";
-import type { MediaJobRequest, MediaProviderAdapter, MediaTaskPoll } from "./providerAdapter.js";
+import type { MediaJobRequest, MediaProviderAdapter, MediaTaskPoll, ToolCallPlan } from "./providerAdapter.js";
 
 export interface ExecuteMediaJobOptions {
   signal?: AbortSignal;
@@ -29,8 +29,20 @@ export async function executeMediaJob(
   options: ExecuteMediaJobOptions = {},
 ): Promise<MediaJobResult> {
   if (!adapter.executable) throw new Error(`MCP_EXECUTION_LOCKED:${adapter.provider}`);
-  const deadline = Date.now() + (options.timeoutMs ?? (request.kind === "video" ? 12 * 60_000 : 5 * 60_000));
   const plan = adapter.buildGenerateCall(request);
+  const timeoutMs = options.timeoutMs ?? (request.kind === "video" ? 12 * 60_000 : 5 * 60_000);
+  return executeMediaPlan(manager, adapter, plan, { ...options, timeoutMs });
+}
+
+/** Shared submit -> taskId -> poll path (060 WP6): used by generation AND media actions. */
+export async function executeMediaPlan(
+  manager: McpConnectionManager,
+  adapter: MediaProviderAdapter,
+  plan: ToolCallPlan,
+  options: ExecuteMediaJobOptions = {},
+): Promise<MediaJobResult> {
+  if (!adapter.executable) throw new Error(`MCP_EXECUTION_LOCKED:${adapter.provider}`);
+  const deadline = Date.now() + (options.timeoutMs ?? 12 * 60_000);
   const submitResult = await manager.callTool(adapter.provider, plan.toolName, plan.args, { signal: options.signal });
   const taskId = adapter.parseTaskId(submitResult);
   if (!taskId) throw new Error(`MCP_TASK_ID_MISSING:${adapter.provider}:${plan.toolName}`);

@@ -2,6 +2,23 @@
 
 > **Post-interview canonical (2026-07-16).** WP6. **혼합 파이프라인(cross-provider chain)의 단일 소유자다** (A-audit blocker 4): GPT/Grok 이미지 → MCP provider I2V, MCP 영상 → 다른 provider stitch 같은 chain은 이 phase의 lineage(`lib/videoContinuity.ts`, `lib/videoSeriesChain.ts`) 계약 위에서 정의되며, 각 단계의 결과 ingest 자체는 050 계약을 재사용한다. 혼합 chain의 accept 기준: 어떤 provider 조합이든 parent/root/series/input lineage가 복원되고 중간 산출물이 다음 단계의 유효 입력으로 검증된다.
 
+## WP6 감사 round 1 반영 (2026-07-16, FAIL 4 High → canonical 재정의)
+
+**Canonical file map (WP6 실행 범위— 아래 map이 이전 초안의 mediaActions/videoExtended/UI 행을 대체한다. UI·videoExtended 통합은 WP8):**
+
+| Op | Path | 변경 |
+|---|---|---|
+| NEW | `lib/mcp/mediaWorkflowRouter.ts` | 순수 결정표 `resolveMediaAction({operation, provider, liveTools})` → native/fallback/unavailable + plan. **callable은 provider가 아니라 tool 단위**: live snapshot에서 해당 tool 존재+schemaHash 일치일 때만 native. |
+| NEW | `lib/videoConcat.ts` | `videoChromaKey.ts:93-130`의 cancellable `execFile` 패턴 재사용. 입력 개수(≤12)/파일당·합계 byte 상한/duration 상한, 번호 붙은 temp, `finally` 정리, timeout, typed `FFMPEG_UNAVAILABLE`·`CONCAT_NORMALIZE_REQUIRED`. stream-copy 우선, ffprobe로 codec/container 호환 검증. |
+| NEW | `lib/mcp/adapters/runwayUpload.ts` | init_upload(filename/fileSize/mimeType) → PUT(각 part etag 필수) → complete_upload. **모든 PUT URL에 다운로드와 동일한 public-HTTPS/DNS/IP 검증 + redirect 금지 + timeout + streamed 업로드** (hostile MCP 응답의 로컬 파일 유출 차단). |
+| MODIFY | `lib/mcp/downloadMediaResult.ts` | `assertPublicHttps` export (upload와 공유). |
+| MODIFY | `routes/mcpMedia.ts` | (a) `/api/mcp/generate`에 `startFrameFilename` — `lib/videoFrameExtract.ts:16-36`의 realpath/symlink 컨테인먼트 헬퍼 재사용 + regular file + 확장자/byte 상한 검증 후 업로드, sidecar에 **generic `parent: {filename, mediaType, role:"start-frame"}` 필드**(videoContinuity의 clip 의미론은 이미지 부모에 부적합 — 감사 4 채택). (b) NEW `POST /api/mcp/media-action` — router plan 디스패치: `stitch`(local concat), `upscale-video`/`upscale-image`/`edit-video`(native runway, 050 executor+persistence 재사용). |
+| NEW | `tests/mcp-media-workflow-router.test.ts` | 결정표 진리표: native 부재 시 fallback 정확히 1회+native 호출 0, tool 단위 callable(누락/drift tool은 native 불가). |
+| NEW | `tests/video-concat.test.ts` | codec mismatch→normalize-required, 순서 보존, 정리, abort, ffmpeg 부재. |
+| NEW | `tests/mcp-media-action.test.ts` | upload arg 매핑(fixture schema 대조), startFrameFilename 컨테인먼트(탈출 경로 400), parent lineage sidecar, media-action 디스패치. |
+
+혼합 chain lineage 계약: sidecar `parent` 필드로 parent/root를 복원한다(videoContinuity는 video-to-video 연속에만 유지). C-phase 실증: 실제 GPT 생성 갤러리 이미지 → upload → seedance-2 I2V → parent sidecar 확인.
+
 ## 목적
 
 MCP가 실제 제공하는 편집 도구를 ima2 action으로 연결하고, 없는 기능은 현재 local primitive로 안전하게 보완한다. marketing page에만 있는 기능은 노출하지 않는다.
@@ -19,20 +36,12 @@ user action
 
 ## File change map
 
-| Op | Path | 변경 |
-|---|---|---|
-| NEW | `lib/mcp/mediaWorkflowRouter.ts` | native/fallback/unavailable 결정을 한 곳에서 수행하고 decision metadata를 반환. |
-| NEW | `lib/mcp/adapters/mediaActions.ts` | provider별 verified extend/stitch/reframe/upscale/edit tool mapping. |
-| NEW | `lib/videoConcat.ts` | ordered MP4 probe/normalize/concat, temp cleanup, cancellation. transition은 별도 capability. |
-| MODIFY | `routes/videoExtended.ts` | provider와 capability를 받아 native extend/edit 또는 fallback router 사용; blocking JSON을 async 202+eventBus로 정규화. |
-| MODIFY | `lib/videoFrameExtract.ts` | continuation-owned temp artifact와 precise last-frame probe 계약. |
-| MODIFY | `lib/videoContinuity.ts` | operation kind(native-extend/frame-continue/stitch/reframe/upscale)와 parent/inputs lineage. |
-| MODIFY | `lib/videoSeriesChain.ts` | multi-input stitch lineage와 branch sequence 조회. |
-| MODIFY | `ui/src/components/ResultActions.tsx` | capability별 `이어가기`, `AI 연장`, `합치기`, `리프레임`, `업스케일` action. 용어 분리. |
-| MODIFY | `ui/src/store/storeVideoImpl.ts` | async workflow request/SSE/cancel/retry state. |
-| NEW | `tests/mcp-media-workflow-router.test.ts` | native/fallback/unavailable 결정표. |
-| MODIFY | `tests/videoExtendedRoute.test.ts` | MCP native extend, frame fallback, concat, cancellation, lineage. |
-| NEW | `tests/video-concat.test.ts` | codec mismatch, ordering, corrupt input, cleanup, abort. |
+> Canonical map은 위 "WP6 감사 round 1 반영" 섹션이다. 이전 초안의 mediaActions/videoExtended/videoContinuity/videoSeriesChain/UI 행은 WP8 또는 후속 사이클로 이연됐다(§WP8 이연 참조). 추가 확정(round 2): **executor 시밍** — `lib/mcp/executeMediaJob.ts`에 공유 `executeMediaPlan(manager, adapter, plan, opts)`(submit→taskId→poll 공통 경로)를 추출하고, runway adapter에 `buildActionCall(action, inputs)`(`upscale_video`/`upscale_image`/`edit_video` — runway-hosted URL 입력)를 추가한다. `/api/mcp/media-action`의 native 경로는 로컬 파일을 runwayUpload로 올린 뒤 action plan을 실행한다.
+
+### WP8/후속 이연 (구 초안 행)
+
+- `routes/videoExtended.ts` 통합, `videoFrameExtract`/`videoContinuity`/`videoSeriesChain` 확장, `ResultActions`/`storeVideoImpl` UI — WP8.
+- `tests/videoExtendedRoute.test.ts` 확장 — WP8.
 
 ## Native 기능 gate
 
@@ -68,6 +77,7 @@ user action
 ```bash
 npm run typecheck
 npm run typecheck:tests
-node --test --import tsx tests/mcp-media-workflow-router.test.ts tests/videoExtendedRoute.test.ts tests/video-concat.test.ts
+npm run build:server
+node --test --import tsx tests/mcp-media-workflow-router.test.ts tests/video-concat.test.ts tests/mcp-media-action.test.ts
 npm test
 ```

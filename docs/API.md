@@ -926,3 +926,15 @@ Async: returns `202 { requestId }`; progress (`submitted`, `provider-queued`,
 The route is the single persistence owner: results are committed to the generated
 library (file + strict sidecar + thumbnail) before `done` is emitted. Catalog-only
 providers (e.g. Higgsfield on a free plan) return `409 MCP_EXECUTION_LOCKED`.
+`startFrameFilename` accepts an existing generated-library image: it is uploaded to
+the provider and used as the image-to-video start frame, recording
+`parent: { filename, mediaType, role: "start-frame" }` lineage in the sidecar.
+
+### `POST /api/mcp/media-action`
+
+Run a media workflow action. Body: `{ action: "stitch"|"upscale-video"|"upscale-image"|"edit-video"|"extend"|"reframe", files: [generated filenames], prompt?, provider? }`.
+The workflow router decides per-tool: `native` (provider tool present live with a
+matching schema), `fallback` (`stitch` → local ffmpeg concat; `extend` → last-frame
+I2V), or `unavailable` (`409 MEDIA_ACTION_UNAVAILABLE`, e.g. reframe while the
+provider is catalog-only). Async: `202 { requestId, mode, plan }`; results commit
+through the same single persistence owner with `parent`/`inputs` lineage.

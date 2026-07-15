@@ -78,6 +78,23 @@ function parsePoll(result: Record<string, unknown>): MediaTaskPoll {
   return { status, outputUrls, ...(failureDetail ? { detail: failureDetail } : {}) };
 }
 
+export type RunwayMediaAction = "upscale-video" | "upscale-image" | "edit-video";
+
+/** Native media-action plans (060 WP6). Inputs must be runway-hosted or public HTTPS URLs. */
+export function buildRunwayActionCall(action: RunwayMediaAction, inputs: { url: string; prompt?: string }): ToolCallPlan {
+  const rationale = DEFAULT_RATIONALE;
+  switch (action) {
+    case "upscale-video":
+      return { toolName: "upscale_video", args: { rationale, video: { url: inputs.url } } };
+    case "upscale-image":
+      return { toolName: "upscale_image", args: { rationale, image: { url: inputs.url } } };
+    case "edit-video": {
+      if (!inputs.prompt) throw new Error("MCP_ACTION_PROMPT_REQUIRED");
+      return { toolName: "edit_video", args: { rationale, promptText: inputs.prompt, video: { url: inputs.url } } };
+    }
+  }
+}
+
 export const runwayAdapter: MediaProviderAdapter = {
   provider: "runway",
   models: { image: IMAGE_MODELS, video: VIDEO_MODELS },

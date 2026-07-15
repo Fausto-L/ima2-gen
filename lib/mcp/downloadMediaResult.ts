@@ -21,7 +21,7 @@ function isPrivateAddress(address: string): boolean {
   return PRIVATE_V4.some((pattern) => pattern.test(address));
 }
 
-async function assertPublicHttps(url: URL): Promise<void> {
+export async function assertPublicHttps(url: URL): Promise<void> {
   if (url.protocol !== "https:") throw new Error(`MCP_DOWNLOAD_INSECURE:${url.protocol}`);
   const host = url.hostname;
   const addresses = isIP(host) ? [{ address: host }] : await lookup(host, { all: true });
