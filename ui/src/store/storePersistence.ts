@@ -119,6 +119,7 @@ export function loadUIMode(): UIMode {
     if (raw === "card-news") return ENABLE_CARD_NEWS_MODE ? raw : "classic";
     if (raw === "node") return ENABLE_NODE_MODE ? raw : "classic";
     if (raw === "assets") return raw;
+    if (raw === "asset-gen") return raw;
     if (raw === "home") return raw;
     if (raw === "classic") return raw;
   } catch {}
@@ -340,6 +341,14 @@ export function loadGenerationDefaults(): GenerationDefaults {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const out: GenerationDefaults = {};
     if (isProvider(parsed.provider)) out.provider = parsed.provider;
+    const mcpProvider = parsed.mcpProvider;
+    const mcpModel = parsed.mcpModel;
+    if (typeof mcpProvider === "string" || mcpProvider === null) {
+      out.mcpProvider = mcpProvider as string | null;
+    }
+    if (typeof mcpModel === "string" || mcpModel === null) {
+      out.mcpModel = mcpModel as string | null;
+    }
     if (isQuality(parsed.quality)) out.quality = parsed.quality;
     if (isSizePreset(parsed.sizePreset)) out.sizePreset = parsed.sizePreset;
     if (typeof parsed.customW === "number" && Number.isFinite(parsed.customW)) {
@@ -368,6 +377,18 @@ export function loadGenerationDefaults(): GenerationDefaults {
   } catch {
     return {};
   }
+}
+
+export function loadMcpSelection(): { provider: string | null; model: string | null } {
+  const defaults = loadGenerationDefaults();
+  return {
+    provider: typeof defaults.mcpProvider === "string" ? defaults.mcpProvider : null,
+    model: typeof defaults.mcpModel === "string" ? defaults.mcpModel : null,
+  };
+}
+
+export function saveMcpSelection(provider: string | null, model: string | null): void {
+  saveGenerationDefaultsPatch({ mcpProvider: provider, mcpModel: model });
 }
 
 export function saveGenerationDefaultsPatch(patch: GenerationDefaults): void {

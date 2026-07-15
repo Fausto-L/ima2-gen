@@ -65,7 +65,7 @@ export type PersistedInFlight = {
   sessionId?: string | null;
   parentNodeId?: string | null;
   clientNodeId?: string | null;
-  kind?: "classic" | "node" | "multimode" | "video";
+  kind?: "classic" | "node" | "multimode" | "video" | "mcp-image" | "mcp-video" | `mcp-action-${string}`;
 };
 
 export type ServerInFlightJob = {
@@ -192,6 +192,8 @@ export type MultimodeSequenceState = {
 
 export type GenerationDefaults = Partial<{
   provider: Provider;
+  mcpProvider: string | null;
+  mcpModel: string | null;
   quality: Quality;
   sizePreset: SizePreset;
   customW: number;
@@ -445,6 +447,9 @@ export type AppState = PresetState & {
   flushGraphSave: (reason?: GraphSaveReason) => Promise<void>;
 
   setProvider: (p: Provider) => void;
+  /** Hydrated lazily by the sidebar MCP selector until the store bootstrap owns this lane. */
+  mcpProvider?: string | null;
+  mcpModel?: string | null;
   setQuality: (q: Quality) => void;
   setSizePreset: (s: SizePreset) => void;
   setCustomSize: (w: number, h: number) => void;

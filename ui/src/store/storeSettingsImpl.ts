@@ -4,7 +4,10 @@ import { DEFAULT_IMAGE_MODEL, GROK_VIDEO_MODEL_15, isGrokImageModel, isGeminiIma
 import { parseRequestedCustomSide } from "../lib/size";
 import { getEffectiveVideoSourceCount } from "../lib/videoSourceCount";
 import {
+  composePrompt,
+  loadMcpSelection,
   saveImageModel,
+  saveMcpSelection,
   saveReasoningEffort,
   saveWebSearchEnabled,
   saveVideoDefaults,
@@ -12,8 +15,91 @@ import {
   normalizeCount,
 } from "./storePersistence";
 import type { StoreSet, StoreGet } from "./storeTypes";
+import { startMcpGeneration } from "../lib/mcpProviders";
+import { t } from "../i18n";
+
+let coreGenerateAction: ReturnType<StoreGet>["generate"] | null = null;
+
+async function runMcpGenerate(get: StoreGet): Promise<void> {
+  const state = get();
+  const provider = state.mcpProvider;
+  const prompt = composePrompt(state.prompt, state.insertedPrompts);
+  if (!provider || !prompt) return;
+  const kind = state.videoModelSelected ? "video" : "image";
+  try {
+    await startMcpGeneration({
+      provider,
+      kind,
+      prompt,
+      model: state.mcpModel ?? undefined,
+      ratio: kind === "video" ? state.videoAspectRatio : state.grokAspectRatio,
+      startFrameFilename: kind === "video" ? state.currentImage?.filename : undefined,
+      requestId: `mcp_ui_${Date.now()}`,
+    }, {
+      onDone: () => get().hydrateHistory(),
+      onError: () => get().showToast(t("mcp.generateFailed"), true),
+    });
+    await get().reconcileInflight();
+    get().startInFlightPolling();
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    get().showToast(
+      code === "MCP_NOT_CONNECTED" || code === "MCP_PROVIDER_UNKNOWN"
+        ? t("mcp.selectionUnavailable")
+        : t("mcp.generateFailed"),
+      true,
+    );
+  }
+}
+
+function clearMcpLane(set: StoreSet): void {
+  saveMcpSelection(null, null);
+  set({
+    mcpProvider: null,
+    mcpModel: null,
+    ...(coreGenerateAction ? { generate: coreGenerateAction } : {}),
+  });
+}
+
+export function setMcpProviderImpl(
+  mcpProvider: string | null,
+  set: StoreSet,
+  get: StoreGet,
+  persistedModel: string | null = null,
+): void {
+  if (!mcpProvider) {
+    clearMcpLane(set);
+    return;
+  }
+  if (!coreGenerateAction) coreGenerateAction = get().generate;
+  const mcpModel = get().mcpProvider === mcpProvider
+    ? get().mcpModel ?? persistedModel
+    : persistedModel;
+  saveMcpSelection(mcpProvider, mcpModel);
+  saveGenerationDefaultsPatch({ count: 1, multimode: false });
+  set({
+    mcpProvider,
+    mcpModel,
+    count: 1,
+    multimode: false,
+    generate: () => runMcpGenerate(get),
+  });
+}
+
+export function setMcpModelImpl(mcpModel: string | null, set: StoreSet, get: StoreGet): void {
+  saveMcpSelection(get().mcpProvider ?? null, mcpModel);
+  set({ mcpModel });
+}
+
+export function hydrateMcpSelectionImpl(set: StoreSet, get: StoreGet): void {
+  const selection = loadMcpSelection();
+  if (selection.provider) {
+    setMcpProviderImpl(selection.provider, set, get, selection.model);
+  }
+}
 
 export function setProviderImpl(provider: Provider, set: StoreSet, get: StoreGet): void {
+  clearMcpLane(set);
   saveGenerationDefaultsPatch({ provider });
   const currentModel = get().imageModel;
   const supportsVideo = provider === "grok" || provider === "grok-api";
@@ -75,6 +161,7 @@ export function setModerationImpl(moderation: Moderation, set: StoreSet): void {
 }
 
 export function setImageModelImpl(imageModel: ImageModel, set: StoreSet, get: StoreGet): void {
+  clearMcpLane(set);
   saveImageModel(imageModel);
   set({ videoModelSelected: false });
   saveVideoDefaults({ model: false });
@@ -102,6 +189,7 @@ export function setImageModelImpl(imageModel: ImageModel, set: StoreSet, get: St
 }
 
 export function selectVideoModelImpl(model: string | undefined, set: StoreSet, get: StoreGet): void {
+  clearMcpLane(set);
   const m = normalizeVideoModelValue(model) || GROK_VIDEO_MODEL_15;
   set({ videoModelSelected: m });
   saveVideoDefaults({ model: m });

@@ -8,6 +8,7 @@ import { LanguageToggle } from "./LanguageToggle";
 import { HistoryStripLayoutToggle } from "./HistoryStripLayoutToggle";
 import { WorkspaceProfileSettings } from "./settings/WorkspaceProfileSettings";
 import { GrokPlannerSelect } from "./settings/GrokPlannerSelect";
+import { McpProviderConnections } from "./settings/McpProviderConnections";
 import { useAppStore } from "../store/useAppStore";
 import type { GalleryScope } from "../store/useAppStore";
 import { useI18n } from "../i18n";
@@ -180,6 +181,7 @@ export function SettingsWorkspace() {
           <section className="settings-content" aria-label={t("settings.contentAria")}>
             <SettingsSectionBlock id="providers" setRef={setSectionRef}>
               <AccountSettings />
+              <McpProviderConnections />
               <article className="settings-row">
                 <div className="settings-row__copy">
                   <h4>{t("readiness.settingsTitle")}</h4>

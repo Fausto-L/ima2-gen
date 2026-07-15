@@ -1,0 +1,96 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, it } from "node:test";
+
+const root = process.cwd();
+const readSource = (path) => readFileSync(join(root, path), "utf8");
+
+function leafPaths(value, prefix = "") {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [prefix];
+  return Object.entries(value).flatMap(([key, child]) =>
+    leafPaths(child, prefix ? `${prefix}.${key}` : key),
+  );
+}
+
+describe("MCP provider UI contract", () => {
+  it("uses the canonical APIs and pre-opens then cleans up the OAuth popup", () => {
+    const source = readSource("ui/src/lib/mcpProviders.ts");
+
+    assert.match(source, /jsonFetch<McpProvidersResponse>\("\/api\/mcp\/providers"/);
+    assert.match(source, /window\.open\("about:blank"/);
+    assert.match(source, /popup\.location\.href = authorizationUrl/);
+    assert.match(source, /catch \(error\) \{\s*popup\?\.close\(\)/);
+    assert.match(source, /\/api\/contracts\/\$\{encodeURIComponent\(toolId\)\}/);
+    assert.match(source, /inputSchema\?\.properties\?\.model\?\.enum/);
+    assert.match(source, /jsonFetch<\{ ok: boolean; requestId: string \}>\("\/api\/mcp\/generate"/);
+  });
+
+  it("normalizes MCP completion through history refresh without classic image injection", () => {
+    const api = readSource("ui/src/lib/mcpProviders.ts");
+    const settings = readSource("ui/src/store/storeSettingsImpl.ts");
+
+    assert.match(api, /subscribe\(requestId, null/);
+    assert.match(api, /event === "done"/);
+    assert.match(api, /filename: data\.filename/);
+    assert.match(api, /mediaType: data\.mediaType/);
+    assert.match(settings, /onDone: \(\) => get\(\)\.hydrateHistory\(\)/);
+    assert.match(settings, /requestId: `mcp_ui_\$\{Date\.now\(\)\}`/);
+    assert.doesNotMatch(settings, /res\.image|addGeneratedHistoryItem/);
+  });
+
+  it("keeps core and MCP lanes exclusive and persists opaque provider ids", () => {
+    const types = readSource("ui/src/store/storeTypes.ts");
+    const settings = readSource("ui/src/store/storeSettingsImpl.ts");
+    const persistence = readSource("ui/src/store/storePersistence.ts");
+
+    assert.match(types, /mcpProvider\?: string \| null/);
+    assert.match(types, /mcpModel\?: string \| null/);
+    assert.match(settings, /setMcpProviderImpl/);
+    assert.match(settings, /clearMcpLane\(set\)/);
+    assert.match(settings, /count: 1/);
+    assert.match(settings, /multimode: false/);
+    assert.match(persistence, /typeof mcpProvider === "string"/);
+    assert.match(persistence, /saveMcpSelection\(provider: string \| null, model: string \| null\)/);
+  });
+
+  it("shows connected MCP providers only, preserves unknown selection, and locks Higgsfield", () => {
+    const select = readSource("ui/src/components/GenProviderModelSelect.tsx");
+
+    assert.match(select, /status\.state === "connected"/);
+    assert.match(select, /mcpProvider && !connectedMcpProviders\.some/);
+    assert.match(select, /entry\.id === "higgsfield"/);
+    assert.match(select, /disabled=\{Boolean\(unavailableReason\)\}/);
+    assert.match(select, /REASONING_EFFORT_OPTIONS/);
+    assert.match(select, /getImageModelOptionsForProvider/);
+    assert.match(select, /getMcpModelOptions/);
+  });
+
+  it("uses the split selector only outside Agent mode", () => {
+    const sidebar = readSource("ui/src/components/Sidebar.tsx");
+    const mobile = readSource("ui/src/components/MobileAppBar.tsx");
+
+    assert.match(sidebar, /agentMode \? \([\s\S]*<ImageModelSelect variant="sidebar"/);
+    assert.match(sidebar, /:\s*\(\s*<GenProviderModelSelect compact=\{isMobile\} \/>/);
+    assert.match(mobile, /<GenProviderModelSelect compact \/>/);
+    assert.doesNotMatch(mobile, /<ImageModelSelect/);
+  });
+
+  it("resyncs MCP generation and action jobs after reload", () => {
+    const types = readSource("ui/src/store/storeTypes.ts");
+    const helpers = readSource("ui/src/store/storeHelpers.ts");
+
+    assert.match(types, /"mcp-image" \| "mcp-video" \| `mcp-action-\$\{string\}`/);
+    assert.match(helpers, /scope\.kind === job\.kind/);
+    assert.match(helpers, /value === "mcp-image" \|\| value === "mcp-video"/);
+    assert.match(helpers, /value\.startsWith\("mcp-action-"\)/);
+  });
+
+  it("keeps Korean and English MCP copy in recursive parity", () => {
+    const ko = JSON.parse(readSource("ui/src/i18n/ko.json"));
+    const en = JSON.parse(readSource("ui/src/i18n/en.json"));
+    assert.deepEqual(leafPaths(ko.mcp).sort(), leafPaths(en.mcp).sort());
+    assert.equal(ko.mcp.billingUnknown, "미확인");
+    assert.equal(en.mcp.billingUnknown, "Unknown");
+  });
+});

@@ -1,5 +1,5 @@
 import { useAppStore } from "../store/useAppStore";
-import { ImageModelSelect } from "./ImageModelSelect";
+import { GenProviderModelSelect } from "./GenProviderModelSelect";
 import { useI18n } from "../i18n";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { ENABLE_AGENT_MODE, ENABLE_CARD_NEWS_MODE, ENABLE_NODE_MODE } from "../lib/devMode";
@@ -14,6 +14,7 @@ export function MobileAppBar() {
       uiModeRaw === "card-news" && ENABLE_CARD_NEWS_MODE ? "card-news" :
       uiModeRaw === "node" && ENABLE_NODE_MODE ? "node" :
       uiModeRaw === "assets" ? "assets" :
+      uiModeRaw === "asset-gen" ? "asset-gen" :
         "classic";
   const isMobile = useIsMobile();
 
@@ -29,7 +30,7 @@ export function MobileAppBar() {
         </div>
       </div>
       <div className="mobile-app-bar__actions">
-        <ImageModelSelect variant="sidebar" />
+        <GenProviderModelSelect compact />
         <button
           type="button"
           className="mobile-app-bar__icon-button"
@@ -58,12 +59,13 @@ export function MobileAppBar() {
           className="mobile-app-bar__generate"
           onClick={() => openComposeSheet("prompt")}
           aria-label={t("appBar.generateAria")}
+          title={t("appBar.generate")}
+          style={{ width: 44, padding: 0 }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M12 3l1.8 5.4L19 10l-5.2 1.6L12 17l-1.8-5.4L5 10l5.2-1.6L12 3z" />
             <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z" />
           </svg>
-          <span>{t("appBar.generate")}</span>
         </button>
       </div>
     </header>

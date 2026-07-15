@@ -3,6 +3,7 @@ import { GenerateButton } from "./GenerateButton";
 import { InFlightList } from "./InFlightList";
 import { SessionPicker } from "./SessionPicker";
 import { ImageModelSelect } from "./ImageModelSelect";
+import { GenProviderModelSelect } from "./GenProviderModelSelect";
 import { CardNewsComposer } from "./card-news/CardNewsComposer";
 import { SidebarHistory } from "./history/SidebarHistory";
 import { useAppStore } from "../store/useAppStore";
@@ -24,6 +25,7 @@ export function SidebarStack() {
       uiModeRaw === "card-news" && ENABLE_CARD_NEWS_MODE ? "card-news" :
       uiModeRaw === "node" && ENABLE_NODE_MODE ? "node" :
       uiModeRaw === "assets" ? "assets" :
+      uiModeRaw === "asset-gen" ? "asset-gen" :
         "classic";
   const workspaceSettings = resolveWorkspaceSettings(workspaceProfile);
   const promptStudioDesktop =
@@ -80,6 +82,8 @@ type SidebarChromeProps = {
 };
 
 export function SidebarChrome({ agentSettings, onAgentSettingsChange }: SidebarChromeProps = {}) {
+  const agentMode = Boolean(agentSettings && onAgentSettingsChange);
+  const isMobile = useIsMobile();
   return (
     <>
       <div className="logo">
@@ -90,7 +94,11 @@ export function SidebarChrome({ agentSettings, onAgentSettingsChange }: SidebarC
         </div>
         <div className="logo-actions">
           <PromptLibraryButton />
-          <ImageModelSelect variant="sidebar" agentSettings={agentSettings} onAgentSettingsChange={onAgentSettingsChange} />
+          {agentMode ? (
+            <ImageModelSelect variant="sidebar" agentSettings={agentSettings} onAgentSettingsChange={onAgentSettingsChange} />
+          ) : (
+            <GenProviderModelSelect compact={isMobile} />
+          )}
         </div>
       </div>
     </>

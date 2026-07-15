@@ -41,6 +41,12 @@ export function getInflightQueryScopes(state: {
     scopes.push({ kind: "multimode" });
   }
   scopes.push({ kind: "video" });
+  scopes.push({ kind: "mcp-image" }, { kind: "mcp-video" });
+  for (const job of state.inFlight) {
+    if (job.kind?.startsWith("mcp-action-") && !scopes.some((scope) => scope.kind === job.kind)) {
+      scopes.push({ kind: job.kind });
+    }
+  }
   return scopes;
 }
 
@@ -58,7 +64,8 @@ export async function fetchInflightScopes(scopes: InflightQueryScope[]): Promise
 }> {
   const responses = await Promise.all(scopes.map((scope) =>
     getInflight({
-      kind: scope.kind,
+      // api-inflight's legacy union has not yet adopted the server's extensible MCP kinds.
+      kind: scope.kind as NonNullable<Parameters<typeof getInflight>[0]>["kind"],
       sessionId: scope.sessionId,
       includeTerminal: true,
     }),
@@ -72,11 +79,11 @@ export async function fetchInflightScopes(scopes: InflightQueryScope[]): Promise
 export function toPersistedInFlightJob(job: ServerInFlightJob): PersistedInFlight {
   const meta = job.meta ?? {};
   const kind =
-    job.kind === "classic" || job.kind === "node" || job.kind === "multimode"
+    job.kind === "classic" || job.kind === "node" || job.kind === "multimode" || job.kind === "video"
       ? job.kind
-      : meta.kind === "classic" || meta.kind === "node" || meta.kind === "multimode"
+      : meta.kind === "classic" || meta.kind === "node" || meta.kind === "multimode" || meta.kind === "video"
         ? meta.kind
-        : undefined;
+        : normalizeInflightKind(job.kind) ?? normalizeInflightKind(meta.kind);
   return {
     id: job.requestId,
     prompt: typeof job.prompt === "string" ? job.prompt : "",
@@ -145,11 +152,21 @@ export function loadInFlight(): PersistedInFlight[] {
         sessionId: typeof x.sessionId === "string" ? x.sessionId : null,
         parentNodeId: typeof x.parentNodeId === "string" ? x.parentNodeId : null,
         clientNodeId: typeof x.clientNodeId === "string" ? x.clientNodeId : null,
-        kind: x.kind === "classic" || x.kind === "node" || x.kind === "multimode" || x.kind === "video" ? x.kind : undefined,
+        kind: x.kind === "classic" || x.kind === "node" || x.kind === "multimode" || x.kind === "video"
+          ? x.kind
+          : normalizeInflightKind(x.kind),
       }));
   } catch {
     return [];
   }
+}
+
+export function normalizeInflightKind(value: unknown): PersistedInFlight["kind"] {
+  if (
+    value === "classic" || value === "node" || value === "multimode" || value === "video" ||
+    value === "mcp-image" || value === "mcp-video"
+  ) return value;
+  return typeof value === "string" && value.startsWith("mcp-action-") ? value as `mcp-action-${string}` : undefined;
 }
 
 export const HISTORY_LIMIT = 500;
