@@ -22,6 +22,7 @@
     "test:package-install": "node --test tests/package-install-smoke.mjs",
     "test:package-global-update": "node scripts/package-global-update-smoke.mjs",
     "test:inventory": "node scripts/classify-tests.mjs --check --fail-js-runtime",
+    "verify:chroma": "node scripts/verify-chroma.mjs",
     "setup": "node bin/ima2.js setup",
     "prepack": "npm run ui:build && npm run build:server && npm run build:cli",
     "prepublishOnly": "node scripts/release-contract.mjs assert-publish-context && npm run verify:release",
@@ -75,6 +76,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
     "@openai/codex": "0.144.1",
     "better-sqlite3": "^12.9.0",
     "dotenv": "^17.4.2",
