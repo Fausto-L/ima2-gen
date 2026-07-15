@@ -150,6 +150,32 @@ export class McpConnectionManager {
     this.session(provider).snapshotDiff = diff;
   }
 
+  /** Execute a provider tool call (WP5). Connected-state enforced; abort propagated;
+   *  MCP isError results are normalized to typed errors. */
+  async callTool(
+    provider: string,
+    name: string,
+    args: Record<string, unknown>,
+    options: { signal?: AbortSignal; timeoutMs?: number } = {},
+  ): Promise<Record<string, unknown>> {
+    const session = this.session(provider);
+    if (session.state !== "connected" || !session.client) throw new Error("MCP_NOT_CONNECTED");
+    const raw = await (session.client.callTool as unknown as (
+      params: { name: string; arguments: Record<string, unknown> },
+      schema?: undefined,
+      opts?: { signal?: AbortSignal; timeout?: number },
+    ) => Promise<Record<string, unknown>>)(
+      { name, arguments: args },
+      undefined,
+      { ...(options.signal ? { signal: options.signal } : {}), timeout: options.timeoutMs ?? 120_000 },
+    );
+    if ((raw as { isError?: boolean }).isError) {
+      const text = JSON.stringify((raw as { content?: unknown }).content ?? "").slice(0, 400);
+      throw new Error(`MCP_TOOL_ERROR:${name}:${text}`);
+    }
+    return raw;
+  }
+
   /** Close the live session but KEEP stored tokens (refresh path). */
   async reset(provider: string): Promise<void> {
     const session = this.session(provider);

@@ -32,6 +32,7 @@ import { registerVideoExtendedRoutes } from "./videoExtended.js";
 import { registerQuotaRoutes } from "./quota.js";
 import { registerAuthRoutes } from "./auth.js";
 import { registerMcpConnectionRoutes } from "./mcpConnections.js";
+import { registerMcpMediaRoutes } from "./mcpMedia.js";
 import { mountKeyRoutes } from "./keys.js";
 import { registerGenerationRequestLogRoutes } from "./generationRequestLog.js";
 import { type RouteRuntimeContext, requireRuntimeContext } from "../lib/runtimeContext.js";
@@ -71,6 +72,7 @@ export function configureRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
   registerQuotaRoutes(app, ctx);
   registerAuthRoutes(app);
   registerMcpConnectionRoutes(app, ctx);
+  registerMcpMediaRoutes(app, ctx);
   mountKeyRoutes(app, ctx);
   registerGenerationRequestLogRoutes(app, ctx);
 }

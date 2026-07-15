@@ -916,3 +916,13 @@ Close and re-establish the session reusing stored tokens (refresh-token path).
 ### `DELETE /api/mcp/providers/:id/connection`
 
 Clear local tokens and close the session. Does not revoke the provider-side grant.
+
+### `POST /api/mcp/generate`
+
+Generate media through a connected MCP provider. Body:
+`{ provider: "runway", kind: "image"|"video", prompt, model?, ratio?, startFrameUrl?, requestId? }`.
+Async: returns `202 { requestId }`; progress (`submitted`, `provider-queued`,
+`provider-running`, `downloading`) and terminal `done`/`error` arrive on `/api/events`.
+The route is the single persistence owner: results are committed to the generated
+library (file + strict sidecar + thumbnail) before `done` is emitted. Catalog-only
+providers (e.g. Higgsfield on a free plan) return `409 MCP_EXECUTION_LOCKED`.
