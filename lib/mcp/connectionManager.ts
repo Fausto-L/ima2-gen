@@ -20,6 +20,7 @@ interface ProviderSession {
   detail?: string;
   connectedAt?: string;
   toolCount?: number;
+  snapshotDiff?: { drifted: string[]; missing: string[]; added: string[] };
 }
 
 interface PendingAuth {
@@ -72,6 +73,7 @@ export class McpConnectionManager {
       ...(s.detail ? { detail: s.detail } : {}),
       ...(s.toolCount !== undefined ? { toolCount: s.toolCount } : {}),
       ...(s.connectedAt ? { connectedAt: s.connectedAt } : {}),
+      ...(s.snapshotDiff ? { snapshotDiff: s.snapshotDiff } : {}),
     };
   }
 
@@ -130,7 +132,22 @@ export class McpConnectionManager {
       cursor = page.nextCursor;
     } while (cursor);
     session.toolCount = tools.length;
-    return { provider, fetchedAt: new Date().toISOString(), tools };
+    const client = session.client as unknown as {
+      getServerVersion?: () => Record<string, unknown> | undefined;
+    };
+    const transport = session.transport as unknown as { protocolVersion?: string } | undefined;
+    return {
+      provider,
+      fetchedAt: new Date().toISOString(),
+      tools,
+      serverInfo: client.getServerVersion?.() ?? null,
+      ...(transport?.protocolVersion ? { protocolVersion: transport.protocolVersion } : {}),
+    };
+  }
+
+  /** Attach an ingest diff to the provider status (called by routes after ingest). */
+  attachSnapshotDiff(provider: string, diff: { drifted: string[]; missing: string[]; added: string[] }): void {
+    this.session(provider).snapshotDiff = diff;
   }
 
   /** Close the live session but KEEP stored tokens (refresh path). */

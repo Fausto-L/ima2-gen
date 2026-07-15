@@ -24,10 +24,15 @@ export interface McpConnectionStatus {
   detail?: string;
   toolCount?: number;
   connectedAt?: string;
+  /** Attached after a successful connect/refresh ingest (040): tool-name lists only. */
+  snapshotDiff?: { drifted: string[]; missing: string[]; added: string[] };
 }
 
 export interface McpToolListing {
   provider: string;
   fetchedAt: string;
   tools: Array<Record<string, unknown>>;
+  /** Negotiated live-session metadata for snapshot provenance (040). */
+  serverInfo?: Record<string, unknown> | null;
+  protocolVersion?: string;
 }

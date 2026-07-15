@@ -223,6 +223,7 @@ export const config = {
     enabledProviders: (pickStr(env.IMA2_MCP_PROVIDERS, Array.isArray(fileCfg.mcp?.enabledProviders) ? fileCfg.mcp.enabledProviders.join(",") : undefined, "runway,higgsfield"))
       .split(",").map((s: string) => s.trim()).filter(Boolean),
     tokenDir: pickStr(env.IMA2_MCP_TOKEN_DIR, fileCfg.mcp?.tokenDir, join(configDir, "mcp")),
+    snapshotDir: pickStr(env.IMA2_MCP_SNAPSHOT_DIR, fileCfg.mcp?.snapshotDir, join(configDir, "mcp", "snapshots")),
   },
   storage: {
     configDir,

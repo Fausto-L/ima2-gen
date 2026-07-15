@@ -4,6 +4,8 @@
 import type { Express, Request, Response } from "express";
 import { McpConnectionManager } from "../lib/mcp/connectionManager.js";
 import { listProviders } from "../lib/mcp/providerRegistry.js";
+import { resolveProviderEndpoint } from "../lib/mcp/providerRegistry.js";
+import { ingestLiveTools } from "../lib/mcp/snapshotPipeline.js";
 import { requireRuntimeContext, type RouteRuntimeContext } from "../lib/runtimeContext.js";
 
 function typedError(res: Response, status: number, code: string, message: string) {
@@ -12,6 +14,29 @@ function typedError(res: Response, status: number, code: string, message: string
 
 function errorCode(error: unknown): string {
   return String((error as Error)?.message ?? error).split(":")[0];
+}
+
+/** Connect/refresh success path (040): capture live tools -> snapshot ingest ->
+ *  attach the diff summary to the connection status. Failures degrade to a
+ *  detail-free status (ingest is best-effort; connection stays usable). */
+async function ingestAfterConnect(
+  manager: McpConnectionManager,
+  ctx: ReturnType<typeof requireRuntimeContext>,
+  provider: string,
+): Promise<void> {
+  try {
+    const listing = await manager.listTools(provider);
+    const { diff } = await ingestLiveTools({
+      listing,
+      endpoint: resolveProviderEndpoint(provider, ctx.config.mcp.enabledProviders),
+      entitlementTag: "user-oauth-account",
+      snapshotDir: ctx.config.mcp.snapshotDir,
+      packageRoot: ctx.config.storage.packageRoot,
+    });
+    manager.attachSnapshotDiff(provider, diff);
+  } catch {
+    /* snapshot ingest is best-effort; connection status remains authoritative */
+  }
 }
 
 export function registerMcpConnectionRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
@@ -36,7 +61,8 @@ export function registerMcpConnectionRoutes(app: Express, ctxRaw: RouteRuntimeCo
   app.post("/api/mcp/providers/:id/connect", async (req: Request, res: Response) => {
     try {
       const status = await manager.connect(String(req.params.id));
-      res.status(status.state === "auth_required" ? 202 : 200).json({ ok: true, status });
+      if (status.state === "connected") await ingestAfterConnect(manager, ctx, String(req.params.id));
+      res.status(status.state === "auth_required" ? 202 : 200).json({ ok: true, status: manager.status(String(req.params.id)) });
     } catch (error) {
       typedError(res, 400, errorCode(error), "MCP connect failed");
     }
@@ -48,6 +74,7 @@ export function registerMcpConnectionRoutes(app: Express, ctxRaw: RouteRuntimeCo
     if (!state || !code) return typedError(res, 400, "MCP_OAUTH_CALLBACK_INVALID", "state and code are required");
     try {
       const status = await manager.handleOAuthCallback(state, code);
+      if (status.state === "connected") await ingestAfterConnect(manager, ctx, status.provider);
       res.type("html").send(`<h2>ima2: ${status.provider} 연결 완료. 이 창은 닫아도 됩니다.</h2>`);
     } catch (error) {
       typedError(res, 400, errorCode(error), "OAuth callback rejected");
@@ -58,7 +85,8 @@ export function registerMcpConnectionRoutes(app: Express, ctxRaw: RouteRuntimeCo
     try {
       await manager.reset(String(req.params.id));
       const status = await manager.connect(String(req.params.id));
-      res.json({ ok: true, status });
+      if (status.state === "connected") await ingestAfterConnect(manager, ctx, String(req.params.id));
+      res.json({ ok: true, status: manager.status(String(req.params.id)) });
     } catch (error) {
       typedError(res, 400, errorCode(error), "MCP refresh failed");
     }

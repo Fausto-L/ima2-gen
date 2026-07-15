@@ -41,6 +41,8 @@ export interface SnapshotProvenance {
   endpoint: string;
   fetchedAt: string;
   serverInfo?: Record<string, unknown> | null;
+  /** Negotiated MCP protocol version from the live session, when known. */
+  protocolVersion?: string;
   entitlementTag: string;
   originalHash: string;
   sanitizedHash: string;
@@ -60,6 +62,8 @@ export interface SnapshotTool {
   inputSchema?: JsonSchema;
   outputSchema?: JsonSchema;
   annotations?: Record<string, unknown>;
+  /** sha256 of canonical({inputSchema, outputSchema}); recomputed when absent. */
+  schemaHash?: string;
 }
 
 export interface ToolContract {

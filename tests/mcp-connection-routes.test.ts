@@ -11,14 +11,19 @@ const dir = mkdtempSync(join(tmpdir(), "ima2-mcp-routes-"));
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 const fakeManager = {
-  status: (id: string) => ({ provider: id, state: "disconnected" }),
-  connect: async (id: string) => ({ provider: id, state: "auth_required", authorizationUrl: "https://provider.example/authorize" }),
+  last: new Map<string, Record<string, unknown>>(),
+  status(id: string) { return this.last.get(id) ?? { provider: id, state: "disconnected" }; },
+  async connect(id: string) {
+    const status = { provider: id, state: "auth_required", authorizationUrl: "https://provider.example/authorize" };
+    this.last.set(id, status);
+    return status;
+  },
   handleOAuthCallback: async (state: string) => {
     if (state !== "good-state") throw new Error("MCP_OAUTH_STATE_INVALID");
     return { provider: "runway", state: "connected" };
   },
   reset: async () => undefined,
-  disconnect: async (id: string) => ({ provider: id, state: "disconnected" }),
+  async disconnect(id: string) { const status = { provider: id, state: "disconnected" }; this.last.set(id, status); return status; },
 };
 
 async function withApp(run: (base: string) => Promise<void>) {
