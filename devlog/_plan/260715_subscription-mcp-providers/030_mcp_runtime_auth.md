@@ -2,6 +2,17 @@
 
 > **Post-interview canonical (2026-07-16).** WP3. ima2-owned execution은 인터뷰 Round 2에서 확정됐다. tool 계약의 정의·availability는 020 catalog가 소유하고, 이 phase는 transport/OAuth/token/connection lifecycle만 소유한다. `toolCatalog.ts`의 sanitize/hash/drift 책임은 040으로 이관됐다 — 여기서는 live tools/list의 획득과 connection 상태 전달까지만 담당한다.
 
+## WP3 감사 round 1 반영 (2026-07-16, FAIL → 수정)
+
+1. **Redirect URI는 live origin에서 파생한다.** 서버가 port fallback으로 다른 포트에 bind될 수 있으므로(`server.ts:430-438`), OAuth redirect URI는 정적 config가 아니라 listen 완료 후의 실제 포트(`http://localhost:<actualPort>/api/mcp/oauth/callback`)로 구성한다. dynamic client registration은 origin별로 저장하고, origin이 바뀌면 재등록·재인증이 필요함을 상태로 노출한다(silent 재사용 금지).
+2. **OAuth callback은 loopback 전용이다.** 기존 전역 guard(`x-ima2-token`, 비-loopback 차단)를 우회하는 예외를 만들지 않는다. redirect URI가 항상 localhost이므로 provider 승인 후 브라우저가 같은 머신에서 loopback으로 돌아온다. 비-loopback callback은 기존 guard가 자연 차단하며, 이를 테스트로 고정한다. token을 query로 노출하는 우회는 금지.
+3. **state → provider/transport 상관관계를 manager가 소유한다.** callback 경로는 하나(`/api/mcp/oauth/callback`)이고 provider 식별은 OAuth `state`로만 한다: pendingAuth map(state → provider+transport+만료), state 불일치/만료/재사용은 token 교환 전에 400으로 거부, `finishAuth(code)`는 해당 pending transport 인스턴스에만 호출한다.
+4. Medium 반영: `mcpConnectionManager`는 RuntimeContext optional 필드로 추가하고 requireRuntimeContext에서 `undefined` 기본값을 보존한다(기존 fixture 무파손). `tokenDir`은 `config.storage` 관례(`join(configDir, "mcp")`)를 따르고 config 중앙에서 해석한다. MCP route는 전역 LAN guard를 상속함을 명시하고 loopback/비-loopback 테스트를 둔다.
+
+### Round 2 잔여 High 해소 — callback guard 예외
+
+전역 guard는 요청 출처가 아니라 설정된 host 기준으로 token을 요구하므로, 비-loopback 배포에서는 localhost callback도 401이 된다(round 2 검증). 해소: **GET `/api/mcp/oauth/callback` 단일 경로만 token guard에서 명시적으로 예외**한다. 근거는 표준 OAuth redirect endpoint 관행과 동일 — 보안 경계는 (a) 단회용·비추측 `state`(pendingAuth 매칭 실패 시 token 교환 없이 400), (b) PKCE, (c) 이 endpoint는 privileged 데이터를 반환하지 않음(HTML 완료 화면). 테스트로 고정: token 없는 callback 성공(유효 state), 무효 state 400, 그 외 `/api/mcp/*`는 guard 유지.
+
 ## 목적
 
 원격 MCP를 ima2-gen 내부 provider로 안전하게 호출하는 공통 runtime을 만든다. provider adapter는 transport/token 저장을 직접 구현하지 않는다.

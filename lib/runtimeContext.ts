@@ -1,5 +1,6 @@
 import type OpenAI from "openai";
 import { config as runtimeConfigDefault } from "../config.js";
+import type { McpConnectionManager } from "./mcp/connectionManager.js";
 
 export type AppConfig = typeof runtimeConfigDefault;
 export type ApiKeySource = "env" | "oauth" | "config" | "none" | undefined;
@@ -35,6 +36,8 @@ export interface RuntimeContext {
   vertexProjectId: string | undefined;
   hasVertexKey: boolean;
   geminiAuthMode?: string;
+  /** Lazily attached by routes/mcpConnections.ts (030 WP3); undefined until MCP routes register. */
+  mcpConnectionManager?: McpConnectionManager;
 }
 
 /** A partial used during boot when only some fields are known, or by callers

@@ -184,10 +184,15 @@ function tokenMatches(actual: unknown, expected: string): boolean {
   return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
 }
 
-function createLanApiGuard(host: string | undefined, token: string | undefined) {
+export function createLanApiGuard(host: string | undefined, token: string | undefined) {
   const requiredToken = isLoopbackHost(host) ? "" : String(token || "");
   return function lanApiGuard(req: Request, res: Response, next: NextFunction) {
     if (!requiredToken || !req.path.startsWith("/api")) return next();
+    // OAuth redirect endpoints are conventionally unauthenticated: the provider's
+    // browser redirect cannot carry x-ima2-token. Security boundary for this single
+    // path is the single-use unguessable OAuth state + PKCE (030 WP3 audit round 2);
+    // an invalid state is rejected with 400 before any token exchange.
+    if (req.path === "/api/mcp/oauth/callback") return next();
     const supplied = req.get("x-ima2-token") ?? req.query.token;
     if (tokenMatches(supplied, requiredToken)) return next();
     return res.status(401).json({

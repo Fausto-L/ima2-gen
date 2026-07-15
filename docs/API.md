@@ -884,3 +884,35 @@ Generate an idle anchor candidate. Async: returns `202 { requestId }`, progress 
 ### `POST /api/sprite-recipes/:id/generate`
 
 Generate sprite rows for approved recipes. Body: `{ states?, async, requestId }`. Async: `202 { requestId }`.
+
+## MCP Provider Connections
+
+Remote subscription MCP providers (Runway, Higgsfield) connect through a compiled
+registry — arbitrary endpoints are rejected. All responses are secret-free: tokens
+live only in `${configDir}/mcp/<provider>.json` (0600).
+
+### `GET /api/mcp/providers`
+
+List registry providers with per-provider connection status.
+
+### `GET /api/mcp/providers/:id/status`
+
+Connection status: `disconnected | connecting | auth_required | connected | offline | error`.
+
+### `POST /api/mcp/providers/:id/connect`
+
+Start or resume a connection. Returns `202 { status: { state: "auth_required", authorizationUrl } }`
+when the user must approve OAuth in a browser; `200` once connected.
+
+### `GET /api/mcp/oauth/callback`
+
+OAuth redirect target (`?state=&code=`). Exempt from the LAN token guard; protected by
+the single-use OAuth `state` + PKCE. Invalid state → `400` with no token exchange.
+
+### `POST /api/mcp/providers/:id/refresh`
+
+Close and re-establish the session reusing stored tokens (refresh-token path).
+
+### `DELETE /api/mcp/providers/:id/connection`
+
+Clear local tokens and close the session. Does not revoke the provider-side grant.

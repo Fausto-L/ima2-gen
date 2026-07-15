@@ -1,0 +1,75 @@
+// MCP provider connection routes (030 WP3). Secret-free responses only.
+// GET /api/mcp/oauth/callback is exempted from the LAN token guard in server.ts;
+// its security boundary is the single-use OAuth state (manager pendingAuth).
+import type { Express, Request, Response } from "express";
+import { McpConnectionManager } from "../lib/mcp/connectionManager.js";
+import { listProviders } from "../lib/mcp/providerRegistry.js";
+import { requireRuntimeContext, type RouteRuntimeContext } from "../lib/runtimeContext.js";
+
+function typedError(res: Response, status: number, code: string, message: string) {
+  return res.status(status).json({ error: { code, message } });
+}
+
+function errorCode(error: unknown): string {
+  return String((error as Error)?.message ?? error).split(":")[0];
+}
+
+export function registerMcpConnectionRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
+  const ctx = requireRuntimeContext(ctxRaw);
+  const manager = (ctx.mcpConnectionManager ??= new McpConnectionManager({
+    enabledProviders: ctx.config.mcp.enabledProviders,
+    tokenDir: ctx.config.mcp.tokenDir,
+    // Live origin, resolved lazily AFTER listen (audit round 1 blocker 1).
+    getOrigin: () => `http://localhost:${ctx.serverActualPort ?? ctx.serverConfiguredPort}`,
+  }));
+
+  app.get("/api/mcp/providers", (_req: Request, res: Response) => {
+    const providers = listProviders(ctx.config.mcp.enabledProviders)
+      .map((p) => ({ ...p, status: manager.status(p.id) }));
+    res.json({ ok: true, providers });
+  });
+
+  app.get("/api/mcp/providers/:id/status", (req: Request, res: Response) => {
+    res.json({ ok: true, status: manager.status(String(req.params.id)) });
+  });
+
+  app.post("/api/mcp/providers/:id/connect", async (req: Request, res: Response) => {
+    try {
+      const status = await manager.connect(String(req.params.id));
+      res.status(status.state === "auth_required" ? 202 : 200).json({ ok: true, status });
+    } catch (error) {
+      typedError(res, 400, errorCode(error), "MCP connect failed");
+    }
+  });
+
+  app.get("/api/mcp/oauth/callback", async (req: Request, res: Response) => {
+    const state = typeof req.query.state === "string" ? req.query.state : "";
+    const code = typeof req.query.code === "string" ? req.query.code : "";
+    if (!state || !code) return typedError(res, 400, "MCP_OAUTH_CALLBACK_INVALID", "state and code are required");
+    try {
+      const status = await manager.handleOAuthCallback(state, code);
+      res.type("html").send(`<h2>ima2: ${status.provider} 연결 완료. 이 창은 닫아도 됩니다.</h2>`);
+    } catch (error) {
+      typedError(res, 400, errorCode(error), "OAuth callback rejected");
+    }
+  });
+
+  app.post("/api/mcp/providers/:id/refresh", async (req: Request, res: Response) => {
+    try {
+      await manager.reset(String(req.params.id));
+      const status = await manager.connect(String(req.params.id));
+      res.json({ ok: true, status });
+    } catch (error) {
+      typedError(res, 400, errorCode(error), "MCP refresh failed");
+    }
+  });
+
+  app.delete("/api/mcp/providers/:id/connection", async (req: Request, res: Response) => {
+    try {
+      const status = await manager.disconnect(String(req.params.id));
+      res.json({ ok: true, status, note: "local tokens cleared; provider-side grant is not revoked" });
+    } catch (error) {
+      typedError(res, 400, errorCode(error), "MCP disconnect failed");
+    }
+  });
+}
