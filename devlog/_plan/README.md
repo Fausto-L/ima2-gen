@@ -27,7 +27,13 @@ Deferred / 미래 항목은 `_plan/` 직속이 아니라 `_plan/_future/`에 둔
 | 1 | `260515_fork-prompting-modularization-research/` | research | Prompt Builder/composer modularization reference. |
 | 2 | `260531_pr-issue-review-rebase-plan/` | reference | PR #81/#3 통합 계획 + 이슈 triage 문서. |
 | 3 | `260711_production-hardening/` | closeout 단계 | 프로덕션 하드닝 멀티 WP: devlog closeout, Agent(비디오) 탭 전면 개선, persistence 검증, 500줄 분할, 캔버스 G1, 하드닝 스캔/수정, 최종 검증. 상세는 레인 내 000/010/011/012/020/021/030/090 문서. |
-| 4 | `260712_higgsfield-ux-studio/` | plan 확정 | 힉스필드급 스튜디오 UX 개선. 스펙은 000~008, 실행은 phase 010(토큰)→020(컨트롤 킷)→030(레일)→040(체이닝)→050(Assets)→060(프리셋)→070(요소)→080(노드/비디오)→090(closeout+미결정 원장). 디자인 선행, 기능 후행. SaaS/협업은 non-goal. |
+| 4 | `260712_higgsfield-ux-studio/` | 구현 중 (010-060 완료, 070-090 진행 예정) | 힉스필드급 스튜디오 UX 개선. Phase 010~050 완료, 060은 XMP `presetIds` 전파 1건만 잔여. 070(요소)→080(노드/비디오)→090(closeout+미결정 원장)은 구현 대기. 디자인 선행, 기능 후행. SaaS/협업은 non-goal. |
+| 5 | `260715_icon_pipeline/` | handoff | `ima2 icon` CLI 파이프라인 핸드오프 (000/010/020). 구현 착수 시 P가 문서 재검증. `_fin/260715_asset_gen_mode/040_sheet_design.md`의 crop 소유권 문장(lib/sheetCrop.ts 단일 소유)을 반영할 것. |
+| 6 | `260715_spritegen-adoption/` | research (분석 완료) | [aldegad/sprite-gen](Apache-2.0) 차용 분석. 병렬 서브에이전트 3개 분석 결과를 000(허브)/010(soft-alpha unmix 키잉)/020(recipe SSoT+identity)/030(atlas manifest+큐레이터)으로 정리. 010은 assetgen 키잉 트랙의 자연스러운 다음 단계, 020/030은 스프라이트 모드 제품 결정 대기. |
+| 7 | `260715_subscription-mcp-providers/` | roadmap 확정 (구현 대기) | 인터뷰 6 rounds 종료(005). 확정: dual namespace(`ima2.*`/`mcp.<provider>.*`), ima2-owned execution, full-schema snapshot npm 번들+tag+takedown 게이트, 2-tier verifier. `000_plan.md`가 canonical roadmap이며 010(조사)→020 catalog SoT→030 runtime→040 snapshot→050 adapter→060 workflows→070 AI discovery CLI→080 UI→090 검증의 decade 문서가 diff-level로 완성됨. 다음 cycle은 010부터. |
+
+2026-07-15: `260715_asset_gen_mode/`(에셋 생성 모드 — asset-gen 탭, backgroundPreset,
+클라이언트 키잉, 알파 WebM 파생) WP1-WP11 완료로 `_fin/` 이동.
 
 Deferred (`_plan/_future/`): `260430_issue27-canvas-svg-export/`,
 `260430_issue28-canvas-pptx-export/`, `260430_issue31-provider-masked-edit/`,
@@ -81,6 +87,28 @@ Detailed issue-to-evidence matrix:
 
 ## 변경 기록
 
+- 2026-07-15: 구독형 media MCP provider 조사 레인 추가
+  (`260715_subscription-mcp-providers/`). Higgsfield/Runway/Magnific/Recraft를
+  authenticated schema cohort로 선정하고 Pika experimental, BFL/HeyGen/Rendley/Canva
+  specialist, fal/Replicate 등 API-key lane을 분리했다. 구현은 시작하지 않음.
+- 2026-07-16: 구독형 MCP 레인 인터뷰 종료 + roadmap 확정
+  (`260715_subscription-mcp-providers/`). 약관 Luna sweep(생태계는 tool 계약
+  재게시가 표준 관행, Runway/Higgsfield ToS 문구는 수용된 잔여 리스크) 후
+  decade 문서 000~090을 post-interview canonical로 개정. 020/040/070 신설,
+  기존 020/030/040/050을 030/050/060/080으로 리넘버. UI provider/model 분리와
+  비디오 라우팅 결정표는 080에 반영. 구현은 다음 cycle(010)부터.
+- 2026-07-15: asset-gen 키잉 전후 비교 후속 완료
+  (`260715_asset_gen_keyed_preview/`). 원본/배경 제거 2-up, 저장 직후 keyed
+  PNG/WebM 결과 카드, checkerboard/배지, stale async target/SSE cleanup과 malformed
+  payload guard를 구현. exact 320px overflow 0, 이미지 저장 E2E asset 레코드 확인,
+  luna low 최종 감사 PASS. 완료 후 `_fin` 이동.
+- 2026-07-15: Higgsfield UX 레인 Phase 060 구현 확인 (XMP `presetIds` 전파 1건
+  잔여). Phase 070/080/090 구현 PABCD 루프 진입
+  (goalplan `implement-higgsfield-ux-studio-phases-060-090-fo`).
+  difflevel roadmap을 현재 코드 상태에 맞춰 갱신: 060을 Part I 완료로 이동,
+  070/080 decade doc에 현재 코드 상태 주석 추가, stale path 정정
+  (`presetCatalog.ts`→`presets.ts`, `storeGenerateImpl.ts`→`storeGenImpl.ts`,
+  continuity owner `videoSeriesChain.ts`→`videoContinuity.ts`).
 - 2026-07-11 (3차): production-hardening 구현 라운드 완료. `_fin` 이동:
   `260605_stabilize-split/` (Phase 3 분할 완료 — 4파일 전부 500줄 이하),
   `260516_agent-mode-followup-jawdev/` + `260517_agent-ui-polish-jawdev/`
