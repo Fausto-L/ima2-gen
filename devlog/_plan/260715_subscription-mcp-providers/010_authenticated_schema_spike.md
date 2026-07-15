@@ -14,8 +14,8 @@
 
 | Provider | 필요 계정/플랜 (공개 문서 기준) | OAuth 방식 | 이 phase에서 실증할 것 |
 |---|---|---|---|
-| Higgsfield | Higgsfield 계정. MCP 페이지는 "no API key required" — 무료 계정으로 연결 가능한지, 생성 tool이 유료 플랜/credit을 요구하는지 미확정 | 계정 OAuth (`mcp.higgsfield.ai/mcp`) | 무료 vs 유료 계정의 tools/list 차이, credit 잔액 조회 tool 존재 여부 |
-| Runway | Runway 계정 + 유료 plan credits (Explore Mode 제외 명시) | 계정 OAuth (`mcp.runwayml.com/mcp`), Streamable HTTP only | 현재 사용자 plan에서 연결·tools/list 가능 여부, plan별 tool 표면 차이 |
+| Higgsfield | Higgsfield 계정. MCP 페이지는 "no API key required" | 계정 OAuth (`mcp.higgsfield.ai/mcp`) | **판정 완료(2026-07-16): `schema-ok`** — 현재 사용자 계정으로 73 tools 전체 수신, 결제 불필요. 잔액 조회 tool(`balance`, `show_plans_and_credits`) 존재 확인. 상세: `011_spike_results.md` |
+| Runway | Runway 계정 + 유료 plan credits (Explore Mode 제외 명시) | 계정 OAuth (`mcp.runwayml.com/mcp`), Streamable HTTP only | **판정 완료(2026-07-16): `connected-via-user-oauth`** — 14 tools 전체 수신. plan tier는 fixture로 증명 불가(사용자 진술 유료). 상세: `011_spike_results.md` |
 | Magnific | 모든 유료 plan. MCP 호출은 항상 account credits 소비 명시 | OAuth 2.1 (`mcp.magnific.com`) | 무과금으로 tools/list만 가능한지, tool 목록이 공개 docs와 일치하는지 |
 | Recraft | web subscription credits 계정 | OAuth (`mcp.recraft.ai/mcp`) | 공개 tool 문서와 live schema의 파라미터 단위 대조 (control fixture) |
 

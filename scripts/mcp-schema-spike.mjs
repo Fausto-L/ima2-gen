@@ -4,7 +4,6 @@
 // tools/call, resources, prompts are structurally denied (no call path + guard).
 // Usage: node scripts/mcp-schema-spike.mjs --provider runway|higgsfield [--list-only]
 import { createServer } from "node:http";
-import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync, chmodSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -12,6 +11,7 @@ import { spawn } from "node:child_process";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
+import { scrub, sha, denyMutations } from "./lib/spikeSanitize.mjs";
 
 const PROVIDERS = {
   runway: "https://mcp.runwayml.com/mcp",
@@ -82,28 +82,9 @@ function waitForCallback() {
   });
 }
 
-const SECRET_PATTERNS = [
-  /[A-Za-z0-9_-]{40,}/g, // long opaque tokens
-  /[\w.+-]+@[\w-]+\.[\w.]+/g, // emails
-  /(sig|signature|token|key|secret)=[^&\s"']+/gi, // signed query params
-];
-function scrub(value) {
-  if (typeof value === "string") {
-    let out = value;
-    for (const p of SECRET_PATTERNS) out = out.replace(p, "[REDACTED]");
-    return out;
-  }
-  if (Array.isArray(value)) return value.map(scrub);
-  if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, scrub(v)]));
-  }
-  return value;
-}
-const sha = (obj) => "sha256:" + createHash("sha256").update(JSON.stringify(obj)).digest("hex");
-
 async function connectOnce() {
   const client = new Client({ name: "ima2-gen-spike", version: "0.1.0" }, { capabilities: {} });
-  client.callTool = () => { throw new Error("MCP_SPIKE_MUTATION_DENIED"); };
+  denyMutations(client);
   const transport = new StreamableHTTPClientTransport(new URL(endpoint), { authProvider });
   await client.connect(transport);
   return { client, transport };
