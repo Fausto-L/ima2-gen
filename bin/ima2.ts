@@ -328,6 +328,7 @@ function showHelp() {
     config <sub>   Config get/set/ls/path/rm       (ima2 config --help)
     defaults <sub> Inspect/change model defaults   (ima2 defaults --help)
     capabilities   Agent capability metadata       (ima2 capabilities --help)
+    tools          Machine tool contracts for agents (ima2 tools --help)
     ping           Ping running server / check health
 
   Agent skills (SKILL.md + references/):
@@ -391,7 +392,7 @@ if (args.includes("-v") || args.includes("--version")) {
 }
 
 if ((!command || args.includes("-h") || args.includes("--help"))
-    && !["doctor", "gen", "video", "edit", "ls", "show", "ps", "cancel", "session", "history", "prompt", "multimode", "node", "annotate", "canvas-versions", "metadata", "comfy", "cardnews", "inflight", "storage", "billing", "providers", "oauth", "grok", "config", "defaults", "capabilities", "skill", "ping", "backfill-thumbs"].includes(command)) {
+    && !["doctor", "gen", "video", "edit", "ls", "show", "ps", "cancel", "session", "history", "prompt", "multimode", "node", "annotate", "canvas-versions", "metadata", "comfy", "cardnews", "inflight", "storage", "billing", "providers", "oauth", "grok", "config", "defaults", "capabilities", "tools", "skill", "ping", "backfill-thumbs"].includes(command)) {
   showHelp();
   process.exit(command ? 0 : 1);
 }
@@ -455,6 +456,7 @@ switch (command) {
   case "config":
   case "defaults":
   case "capabilities":
+  case "tools":
   case "skill":
   case "grok":
   case "ping": {

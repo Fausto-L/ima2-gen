@@ -938,3 +938,19 @@ matching schema), `fallback` (`stitch` → local ffmpeg concat; `extend` → las
 I2V), or `unavailable` (`409 MEDIA_ACTION_UNAVAILABLE`, e.g. reframe while the
 provider is catalog-only). Async: `202 { requestId, mode, plan }`; results commit
 through the same single persistence owner with `parent`/`inputs` lineage.
+
+## Contract Discovery
+
+Machine-readable tool contracts for AI agents (`ima2 tools` CLI backs onto these).
+
+### `GET /api/contracts`
+
+Full catalog summary: `{ ok, data: { tools: [{ id, namespace, availability, executable, description }] }, catalogVersion, schemaVersion, cliVersion, requestId, generatedAt }`.
+Availability is promoted from live connection state: `callable` requires a connected
+session plus post-connect ingest evidence; bundled snapshots alone stay `documented`.
+
+### `GET /api/contracts/:id`
+
+Full contract for one tool, including the `execution` binding block: bound tools carry
+`{ binding, endpoint, inputContract }` — the normalized schema `ima2 tools call`
+accepts (the raw upstream `inputSchema` is reference material only).

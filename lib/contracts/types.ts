@@ -12,6 +12,7 @@ export type TypedErrorCode =
   | "schema_changed"
   | "unknown_tool"
   | "invalid_input"
+  | "execution_unbound"
   | "upstream_error";
 
 export type AvailabilityState =
