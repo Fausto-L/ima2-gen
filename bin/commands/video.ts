@@ -1,5 +1,5 @@
 import { parseArgs } from "../lib/args.js";
-import { resolveServer } from "../lib/client.js";
+import { resolveServer, resolveHistoryReference } from "../lib/client.js";
 import { streamSse } from "../lib/sse.js";
 import { out, die, color, json, exitCodeForError } from "../lib/output.js";
 import { config } from "../../config.js";
@@ -82,6 +82,7 @@ const SPEC = {
     "aspect-ratio": { type: "string", default: "auto" },
     model:         { type: "string" },
     "planner-model": { type: "string" },
+    bg:            { type: "string" },
     storyboard:    { type: "boolean" },
     topic:         { type: "string" },
     ref:           { type: "string", repeatable: true },
@@ -121,7 +122,7 @@ const HELP = `
         --planner-model <name>          Planner model override (e.g. grok-4.3, gpt-5.5)
         --storyboard                    Enable storyboard mode (maintains character/scene continuity)
         --topic <text>                  Series topic for prompt chain continuity
-        --ref <file>                    Attach source/reference image (repeatable, max 7)
+        --ref <file|@last>              Attach source/reference image (repeatable, max 7)
     -o, --out <file>                    Output file path
     -d, --out-dir <dir>                 Output directory
         --json                          Print JSON result to stdout
@@ -190,10 +191,14 @@ export default async function videoCmd(argv: string[]) {
   try { server = await resolveServer({ serverFlag: args.server }); }
   catch (e: unknown) { die(exitCodeForError(e), (e as Error).message); throw e; }
 
+  let latestPromise: Promise<string> | undefined;
   const referenceImages = await Promise.all(refs.map(async (p: string) => {
-    const buf = await readFile(p);
+    if (p === "@last") latestPromise ||= resolveHistoryReference(server.base, p);
+    let resolved = p === "@last" ? await latestPromise! : p;
+    if (p === "@last") resolved = join(config.storage.generatedDir, resolved);
+    const buf = await readFile(resolved);
     return buf.toString("base64");
-  }));
+  })).catch((e: any) => die(e?.code === "HISTORY_EMPTY" ? 5 : 1, e?.message || String(e)));
 
   const requestId = `req_cli_video_${Date.now().toString(36)}`;
 
@@ -207,6 +212,7 @@ export default async function videoCmd(argv: string[]) {
   };
   if (args.model) body.model = model;
   if (args["planner-model"]) body.plannerModel = args["planner-model"];
+  if (args.bg) body.backgroundPreset = String(args.bg);
   if (args.storyboard) body.storyboard = true;
   if (args.session) body.sessionId = args.session;
   if (args.topic) body.topic = args.topic;
@@ -438,10 +444,13 @@ async function videoContinueCmd(argv: string[]) {
 }
 
 async function videoFrameCmd(argv: string[]) {
-  const spec = { flags: { last: { type: "boolean" }, position: { type: "string" }, out: { type: "string" }, output: { short: "o", type: "string" }, timeout: { type: "string", default: "60" }, server: { type: "string" }, help: { short: "h", type: "boolean" } } };
+  const hasOut = argv.some((value) => value === "-o" || value === "--out" || value.startsWith("--out="));
+  const hasOutput = argv.some((value) => value === "--output" || value.startsWith("--output="));
+  if (hasOut && hasOutput) die(2, "--out and --output are mutually exclusive");
+  const spec = { flags: { last: { type: "boolean" }, position: { type: "string" }, out: { short: "o", type: "string" }, output: { type: "string" }, timeout: { type: "string", default: "60" }, server: { type: "string" }, help: { short: "h", type: "boolean" } } };
   const args = parseArgs(argv, spec);
   rejectUnknownFlags(args);
-  if (args.help) { out(`  ima2 video frame <generated-file> [--last] [--position <sec>] [-o output.png]\n\n  Extract a frame from a generated video file.\n\n  Options:\n        --last            Extract last frame (default)\n        --position <sec>  Extract frame at specific second\n    -o, --output <path>   Output file path\n        --out <path>      Alias for --output\n        --timeout <sec>   Default: 60\n        --server <url>    Override server URL`); return; }
+  if (args.help) { out(`  ima2 video frame <generated-file> [--last] [--position <sec>] [-o, --out <path>]\n\n  Extract a frame from a generated video file.\n\n  Options:\n        --last            Extract last frame (default)\n        --position <sec>  Extract frame at specific second\n    -o, --out <path>      Output file path\n        --output <path>   Alias for --out\n        --timeout <sec>   Default: 60\n        --server <url>    Override server URL`); return; }
   const file = args.positional[0];
   if (!file) die(2, "file argument required");
   if (args.last && args.position) die(2, "use either --last or --position, not both");
@@ -454,7 +463,7 @@ async function videoFrameCmd(argv: string[]) {
   const res = await fetch(url, { signal: timeoutSignal(args.timeout) });
   if (!res.ok) { const d = await readJsonResponse(res, "frame extraction"); die(1, `frame extraction failed: ${(d as any).error || res.status}`); }
   const buf = Buffer.from(await res.arrayBuffer());
-  const outPath = (args.output || args.out) as string || `frame-${basename(file).replace(/\.[^.]+$/, "")}.png`;
+  const outPath = (args.out ?? args.output) as string || `frame-${basename(file).replace(/\.[^.]+$/, "")}.png`;
   await writeBuffer(outPath, buf);
   out(color.green("✓ ") + `Frame saved: ${outPath} (${buf.length} bytes)`);
 }

@@ -4,6 +4,7 @@ import { fileToDataUri, dataUriToFile, defaultOutName, readStdin } from "../lib/
 import { out, die, dieWithError, color, json } from "../lib/output.js";
 import { config } from "../../config.js";
 import { createCliRequestId, recoverGeneratedOutputs, formatRecoveryHint } from "../lib/recover-output.js";
+import { canonicalizeImageModel } from "../lib/model-aliases.js";
 
 import { errInfo } from "../../lib/errInfo.js";
 const VALID_MODES = new Set(["auto", "direct"]);
@@ -31,6 +32,7 @@ const SPEC = {
     provider:  {              type: "string" },
     mode:      {              type: "string", default: "auto" },
     moderation: {              type: "string", default: "low" },
+    bg:        {              type: "string" },
     session:   {              type: "string" },
     "reasoning-effort": {     type: "string" },
     "web-search":      {     type: "boolean" },
@@ -58,10 +60,12 @@ const HELP = `
     -d, --out-dir <dir>                     Output dir for multiple images
         --json                              Print JSON result to stdout
         --no-save                           Skip save; print b64 to stdout (use --force for TTY)
+        --bg <chroma-green|white|black>     Uniform background preset (asset keying)
         --stdin                              Read prompt from stdin
         --timeout <sec>                     Default: 180
         --server <url>                      Override server URL
-        --model <gpt-5.5|gpt-5.4|gpt-5.4-mini|gpt-5.6-sol|gpt-5.6-terra|gpt-5.6-luna|grok-imagine-image|grok-imagine-image-quality|nano-banana-2|nano-banana-pro>
+        --model <gpt-5.5|gpt-5.4|gpt-5.4-mini|gpt-5.6-sol|gpt-5.6-terra|gpt-5.6-luna|gpt-5.3-codex-spark|grok-imagine-image|grok-imagine-image-quality|nano-banana-2|nano-banana-pro>
+                                            Aliases: luna, sol, terra, spark
         --provider <auto|oauth|api|grok|grok-api|agy|gemini-api>
                                             Provider (oauth = GPT OAuth; grok = xAI Grok; agy/gemini-api = Gemini)
         --mode <auto|direct>                Prompt handling mode. Default: auto
@@ -97,7 +101,8 @@ export default async function genCmd(argv: string[]) {
   if (args.provider && !VALID_PROVIDERS.has(String(args.provider))) {
     die(2, "--provider must be one of: auto, oauth, api, grok, grok-api, agy, gemini-api");
   }
-  if (args.model && !KNOWN_IMAGE_MODELS.has(String(args.model))) {
+  const model = canonicalizeImageModel(args.model);
+  if (model && !KNOWN_IMAGE_MODELS.has(model)) {
     die(2, "--model must be one of: gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.3-codex-spark, grok-imagine-image, grok-imagine-image-quality, nano-banana-2, nano-banana-pro");
   }
   const VALID_REASONING = new Set(["none", "low", "medium", "high", "xhigh", "max"]);
@@ -132,12 +137,13 @@ export default async function genCmd(argv: string[]) {
     size: args.size,
     n,
     references,
-    model: args.model,
+    model,
     mode: args.mode,
     moderation: args.moderation,
     sessionId: args.session,
     requestId,
   };
+  if (args.bg) body.backgroundPreset = String(args.bg);
   if (args["reasoning-effort"]) body.reasoningEffort = args["reasoning-effort"];
   if (args.provider) body.provider = args.provider;
   if (args["no-web-search"]) body.webSearchEnabled = false;

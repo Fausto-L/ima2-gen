@@ -1,5 +1,5 @@
 import { parseArgs } from "../lib/args.js";
-import { resolveServer, request } from "../lib/client.js";
+import { resolveServer, request, resolveLastHistoryItem } from "../lib/client.js";
 import { openUrl } from "../lib/platform.js";
 import { out, die, color, json, exitCodeForError } from "../lib/output.js";
 import { fileToDataUri } from "../lib/files.js";
@@ -18,7 +18,7 @@ const SPEC = {
 
 export default async function showCmd(argv: string[]) {
   const args = parseArgs(argv, SPEC);
-  if (args.help) { out("ima2 show <filename> [--json] [--reveal] [--metadata]"); return; }
+  if (args.help) { out("ima2 show <filename|@last> [--json] [--reveal] [--metadata] [--server <url>]"); return; }
   const name = args.positional[0];
   if (!name) die(2, "filename required");
 
@@ -27,13 +27,17 @@ export default async function showCmd(argv: string[]) {
   catch (e) {
     const err = errInfo(e); die(exitCodeForError(e), err.message); }
 
-  let resp;
-  try { resp = await request(server.base, "/api/history"); }
+  let item: Record<string, any> | undefined;
+  try {
+    if (name === "@last") item = await resolveLastHistoryItem(server.base);
+    else {
+      const resp = await request(server.base, "/api/history");
+      const items: Record<string, any>[] = resp.items || [];
+      item = items.find((it) => it.filename === name || (it.filename && it.filename.endsWith(name)));
+    }
+  }
   catch (e) {
-    const err = errInfo(e); die(exitCodeForError(e), err.message); }
-
-  const items: Record<string, any>[] = resp.items || resp.history || [];
-  const item = items.find((it: Record<string, any>) => it.filename === name || (it.filename && it.filename.endsWith(name)));
+    const err = errInfo(e); die(err.code === "HISTORY_EMPTY" ? 5 : exitCodeForError(e), err.message); }
   if (!item) die(1, `not found: ${name}`);
 
   let metadata: any = null;

@@ -5,6 +5,7 @@ import { dataUriToFile, defaultOutName, fileToDataUri } from "../lib/files.js";
 import { out, die, color, json, exitCodeForError } from "../lib/output.js";
 import { config } from "../../config.js";
 import { createCliRequestId, recoverGeneratedOutputs, formatRecoveryHint } from "../lib/recover-output.js";
+import { canonicalizeImageModel } from "../lib/model-aliases.js";
 
 const MAX_GENERATION_COUNT = Math.max(1, Math.trunc(Number(config.limits.maxGeneratedImages) || 24));
 const MAX_REFERENCE_COUNT = Math.max(1, Math.trunc(Number(config.limits.maxRefCount) || 5));
@@ -13,7 +14,8 @@ const SPEC = {
   flags: {
     quality: { short: "q", type: "string", default: "low" },
     size:    { short: "s", type: "string", default: "1024x1024" },
-    "max-images": { type: "string", default: "4" },
+    "max-images": { type: "string" },
+    count: { short: "n", type: "string" },
     out:     { short: "o", type: "string" },
     "out-dir": { short: "d", type: "string" },
     json:    { type: "boolean" },
@@ -41,11 +43,13 @@ const HELP = `
   Options:
     -q, --quality <low|medium|high>     Default: low
     -s, --size <WxH>                    Default: 1024x1024
-        --max-images <1..${MAX_GENERATION_COUNT}>            Default: 4
+    -n, --count <1..${MAX_GENERATION_COUNT}>                 Default: 4
+        --max-images <1..${MAX_GENERATION_COUNT}>            Alias for --count
     -o, --out <file>                    First image (implies --max-images 1)
     -d, --out-dir <dir>                 Output dir for multiple images
         --json
-        --model <gpt-5.5|gpt-5.4|gpt-5.4-mini|gpt-5.6-sol|gpt-5.6-terra|gpt-5.6-luna|grok-imagine-image|grok-imagine-image-quality|nano-banana-2|nano-banana-pro>
+        --model <gpt-5.5|gpt-5.4|gpt-5.4-mini|gpt-5.6-sol|gpt-5.6-terra|gpt-5.6-luna|gpt-5.3-codex-spark|grok-imagine-image|grok-imagine-image-quality|nano-banana-2|nano-banana-pro>
+                                      Aliases: luna, sol, terra, spark
         --provider <auto|oauth|api|grok|grok-api|agy|gemini-api>
                                       Provider (oauth = GPT OAuth; grok = xAI Grok; agy/gemini-api = Gemini)
         --mode <auto|direct>            Prompt handling mode. Default: auto
@@ -56,9 +60,13 @@ const HELP = `
         --session <id>
         --show-partial                  Print [partial #N received] notices
         --timeout <sec>                 Default: 600
+        --server <url>                  Override server URL
 `;
 
 export default async function multimodeCmd(argv: string[]) {
+  const hasCount = argv.some((value) => value === "-n" || value === "--count" || value.startsWith("--count="));
+  const hasMaxImages = argv.some((value) => value === "--max-images" || value.startsWith("--max-images="));
+  if (hasCount && hasMaxImages) die(2, "--count and --max-images are mutually exclusive");
   const args = parseArgs(argv, SPEC);
   if (args.help) { out(HELP); return; }
   const prompt = args.positional.join(" ");
@@ -82,7 +90,7 @@ export default async function multimodeCmd(argv: string[]) {
   try { server = await resolveServer({ serverFlag: args.server }); }
   catch (e: any) { die(exitCodeForError(e), e.message); throw e; }
 
-  const maxImages = Math.max(1, Math.min(MAX_GENERATION_COUNT, parseInt(String(args["max-images"])) || 4));
+  const maxImages = Math.max(1, Math.min(MAX_GENERATION_COUNT, parseInt(String(args.count ?? args["max-images"])) || 4));
   const refs = (Array.isArray(args.ref) ? args.ref : []) as string[];
   if (refs.length > MAX_REFERENCE_COUNT) die(2, `max ${MAX_REFERENCE_COUNT} --ref attachments`);
   const references = await Promise.all(refs.map((p: string) => fileToDataUri(p)));
@@ -102,7 +110,8 @@ export default async function multimodeCmd(argv: string[]) {
     sessionId: args.session,
     requestId,
   };
-  if (args.model) body.model = args.model;
+  const model = canonicalizeImageModel(args.model);
+  if (model) body.model = model;
   if (args.provider) body.provider = args.provider;
   if (args["reasoning-effort"]) body.reasoningEffort = args["reasoning-effort"];
   if (args["no-web-search"]) body.webSearchEnabled = false;

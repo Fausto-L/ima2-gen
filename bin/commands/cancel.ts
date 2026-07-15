@@ -12,7 +12,7 @@ const SPEC = {
 };
 
 const HELP = `
-  ima2 cancel <requestId> [--json]
+  ima2 cancel <requestId> [--json] [--server <url>]
 
   Mark an in-flight job as canceled in the local ima2 server registry.
 `;

@@ -3,6 +3,7 @@ import { resolveServer, request } from "../lib/client.js";
 import { streamSse } from "../lib/sse.js";
 import { fileToDataUri, dataUriToFile, defaultOutName } from "../lib/files.js";
 import { out, die, color, json, exitCodeForError } from "../lib/output.js";
+import { canonicalizeImageModel } from "../lib/model-aliases.js";
 import { config } from "../../config.js";
 
 const MAX_GENERATION_COUNT = Math.max(1, Math.trunc(Number(config.limits.maxGeneratedImages) || 24));
@@ -78,7 +79,8 @@ async function generateSub(argv: string[]) {
     moderation: args.moderation,
     sessionId: args.session,
   };
-  if (args.model) body.model = args.model;
+  const model = canonicalizeImageModel(args.model);
+  if (model) body.model = model;
   if (args.provider) body.provider = args.provider;
   if (args.parent) body.parentNodeId = args.parent;
   if (args["reasoning-effort"]) body.reasoningEffort = args["reasoning-effort"];

@@ -2,7 +2,15 @@ import { config } from "../../config.js";
 import { backfillThumbnails } from "../../lib/thumbBackfill.js";
 import { invalidateHistoryIndex } from "../../lib/historyIndex.js";
 
-export async function backfillThumbs() {
+export interface BackfillThumbsResult { created: number; skipped: number; failed: number; total: number }
+
+const HELP = `  Usage: ima2 backfill-thumbs\n\n  Generate missing thumbnails for gallery media.`;
+
+export async function backfillThumbs(argv: string[] = []): Promise<BackfillThumbsResult | null> {
+  if (argv.includes("-h") || argv.includes("--help")) {
+    console.log(HELP);
+    return null;
+  }
   const dir = config.storage.generatedDir;
   console.log(`[thumbs] Scanning ${dir} (recursive) for missing thumbnails...`);
 
@@ -11,7 +19,7 @@ export async function backfillThumbs() {
     r = await backfillThumbnails(dir);
   } catch (e) {
     console.error("[thumbs] Backfill failed:", e instanceof Error ? e.message : e);
-    return;
+    throw e;
   }
 
   if (r.created > 0) invalidateHistoryIndex();
@@ -22,4 +30,5 @@ export async function backfillThumbs() {
       console.log(`  - ${failure.kind}: ${failure.file} (${failure.reason})`);
     }
   }
+  return { created: r.created, skipped: r.skipped, failed: r.failed, total: r.total };
 }

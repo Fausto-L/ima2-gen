@@ -86,6 +86,29 @@ export async function request(base: string, path: string, {
   return json;
 }
 
+export interface CliHistoryItem {
+  filename: string;
+  url?: string;
+  createdAt?: string;
+  [key: string]: unknown;
+}
+
+export async function resolveLastHistoryItem(base: string): Promise<CliHistoryItem> {
+  const response = await request(base, "/api/history?limit=1");
+  const item = Array.isArray(response?.items) ? response.items[0] : undefined;
+  if (!item || typeof item.filename !== "string" || !item.filename) {
+    const error = new Error("no history image available for @last") as Error & { code: string };
+    error.code = "HISTORY_EMPTY";
+    throw error;
+  }
+  return item as CliHistoryItem;
+}
+
+export async function resolveHistoryReference(base: string, value: string): Promise<string> {
+  if (value !== "@last") return value;
+  return (await resolveLastHistoryItem(base)).filename;
+}
+
 interface RawImageItem {
   image?: string;
   filename?: string | null;

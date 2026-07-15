@@ -466,7 +466,12 @@ switch (command) {
   }
   case "backfill-thumbs": {
     const { backfillThumbs } = await import("./commands/backfillThumbs.js");
-    await backfillThumbs();
+    try {
+      const result = await backfillThumbs(args.slice(1));
+      if (result && result.failed > 0) process.exitCode = 1;
+    } catch {
+      process.exitCode = 1;
+    }
     break;
   }
   case "storage":

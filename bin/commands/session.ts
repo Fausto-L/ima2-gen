@@ -13,7 +13,7 @@ const HELP = `
     rm <id> [--yes]                        Delete a session
     rename <id> <title>                    Rename a session
     graph save <id> <file>                 Save graph JSON (uses If-Match for concurrency)
-    graph load <id> [--out <file>]         Load graph JSON (stdout or --out)
+    graph load <id> [-o, --out <file>]     Load graph JSON (stdout or --out)
     style-sheet get <id> [--json]
     style-sheet put <id> <file>            Replace full style sheet
     style-sheet enable <id>
@@ -30,7 +30,7 @@ const COMMON_FLAGS = {
   json: { type: "boolean" },
   server: { type: "string" },
   yes: { type: "boolean" },
-  out: { type: "string" },
+  out: { short: "o", type: "string" },
   help: { short: "h", type: "boolean" },
 };
 

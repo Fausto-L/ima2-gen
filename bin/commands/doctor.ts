@@ -77,6 +77,15 @@ function showImageProbeHelp() {
 `);
 }
 
+export function showDoctorHelp() {
+  console.log(`
+  Usage: ima2 doctor [image-probe] [options]
+
+  Diagnose environment, storage, dependencies, and authentication.
+  Run 'ima2 doctor image-probe --help' for live image probe options.
+`);
+}
+
 async function imageProbe(args: string[]) {
   if (args.includes("-h") || args.includes("--help")) {
     showImageProbeHelp();
@@ -213,6 +222,11 @@ async function standardDoctor() {
 }
 
 export async function doctor(args: string[] = []) {
+  if (args.includes("-h") || args.includes("--help")) {
+    if (args[0] === "image-probe") showImageProbeHelp();
+    else showDoctorHelp();
+    return;
+  }
   if (args[0] === "image-probe") {
     await imageProbe(args.slice(1));
     return;

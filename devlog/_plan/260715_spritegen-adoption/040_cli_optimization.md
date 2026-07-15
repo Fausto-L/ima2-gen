@@ -304,6 +304,23 @@ node bin/ima2.js video frame --help
 
 ## 부록 A — 후속 제안(040 구현 제외)
 
+## 부록 B — WP3 audit fold-back (2026-07-15, GO-WITH-FIXES 0 blocker)
+
+1. `@last` runtime 테스트: tests/cli-commands.test.js는 live-server fixture만 있음
+   (`server.ts` spawn, :39-64). `@last` 테스트는 그 live-server fixture를 재사용해
+   실제 history에 이미지를 만든 뒤 검증하거나, 신규 mock HTTP 서버 파일로 분리한다.
+   구현자가 더 싼 쪽 선택 — 단 사용자 실제 gallery는 절대 건드리지 않는다
+   (IMA2_GENERATED_DIR 임시 격리 필수).
+2. doctor top-level dispatch는 doctor.ts:215-220 (문서의 59-83은 image-probe help).
+3. history 응답 키는 `{ items, total, nextCursor }` — `items ?? history` fallback은
+   제거하고 `items`만 사용.
+4. `HISTORY_EMPTY`는 빈 history 전용. resolver가 반환한 filename의 파일 부재는
+   fileToDataUri의 일반 파일 오류 경로로 두되 메시지에 filename 포함 확인.
+5. video frame `-o foo --out bar` 동시 사용의 우선순위가 변경됨(output=foo →
+   out=bar). 하위호환 주장 대신 **동시 사용 시 exit 2** (multimode -n/--count와
+   동일 정책)로 통일. 충돌 감지는 parseArgs 이전 raw argv 검사로 구현.
+   `--count=6` 형태와 옵션 반복도 테스트에 포함.
+
 - prompt-only 기본 서브커맨드: command 오타가 생성 요청으로 바뀌므로 별도 안전성 설계 필요
 - `config`/`defaults` 통합: deprecation 기간과 설정 source-of-truth 결정 필요
 - `ps`/`inflight` 통합: 자동화 사용자 호환성 조사 후 별도 phase로 수행

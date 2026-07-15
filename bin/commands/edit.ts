@@ -1,9 +1,11 @@
 import { parseArgs } from "../lib/args.js";
-import { resolveServer, request } from "../lib/client.js";
+import { resolveServer, request, resolveHistoryReference } from "../lib/client.js";
 import { fileToDataUri, dataUriToFile, defaultOutName } from "../lib/files.js";
 import { out, die, dieWithError, color, json } from "../lib/output.js";
 import { config } from "../../config.js";
 import { createCliRequestId, recoverGeneratedOutputs, formatRecoveryHint } from "../lib/recover-output.js";
+import { canonicalizeImageModel } from "../lib/model-aliases.js";
+import { join } from "node:path";
 
 import { errInfo } from "../../lib/errInfo.js";
 const VALID_MODES = new Set(["auto", "direct"]);
@@ -43,7 +45,8 @@ const HELP = `
     -s, --size <WxH>
     -o, --out <file>
         --json
-        --model <gpt-5.5|gpt-5.4|gpt-5.4-mini|gpt-5.6-sol|gpt-5.6-terra|gpt-5.6-luna|grok-imagine-image|grok-imagine-image-quality|nano-banana-2|nano-banana-pro>
+        --model <gpt-5.5|gpt-5.4|gpt-5.4-mini|gpt-5.6-sol|gpt-5.6-terra|gpt-5.6-luna|gpt-5.3-codex-spark|grok-imagine-image|grok-imagine-image-quality|nano-banana-2|nano-banana-pro>
+                                      Aliases: luna, sol, terra, spark
         --provider <auto|oauth|api|grok|grok-api|agy|gemini-api>
                                       Provider (oauth = GPT OAuth; grok = xAI Grok; agy/gemini-api = Gemini)
         --mode <auto|direct>       Prompt handling mode. Default: auto
@@ -51,6 +54,8 @@ const HELP = `
         --session <id>             Apply session style sheet if enabled
         --reasoning-effort <none|low|medium|high|xhigh|max>
         --web-search / --no-web-search    Override default web-search toggle
+        --timeout <sec>           Default: 180
+        --server <url>            Override server URL
 `;
 
 export default async function editCmd(argv: string[]) {
@@ -64,7 +69,8 @@ export default async function editCmd(argv: string[]) {
   if (args.provider && !VALID_PROVIDERS.has(String(args.provider))) {
     die(2, "--provider must be one of: auto, oauth, api, grok, grok-api, agy, gemini-api");
   }
-  if (args.model && !KNOWN_IMAGE_MODELS.has(String(args.model))) {
+  const model = canonicalizeImageModel(args.model);
+  if (model && !KNOWN_IMAGE_MODELS.has(model)) {
     die(2, "--model must be one of: gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.3-codex-spark, grok-imagine-image, grok-imagine-image-quality, nano-banana-2, nano-banana-pro");
   }
   const VALID_REASONING = new Set(["none", "low", "medium", "high", "xhigh", "max"]);
@@ -83,7 +89,15 @@ export default async function editCmd(argv: string[]) {
     dieWithError(e);
   }
 
-  const imageDataUri = await fileToDataUri(input);
+  let resolvedInput: string;
+  try {
+    const filename = await resolveHistoryReference(server.base, input);
+    resolvedInput = input === "@last" ? join(config.storage.generatedDir, filename) : filename;
+  } catch (e) {
+    const err = errInfo(e);
+    die(err.code === "HISTORY_EMPTY" ? 5 : 1, err.message);
+  }
+  const imageDataUri = await fileToDataUri(resolvedInput);
   const imageB64 = imageDataUri.split(",")[1];
 
   const timeoutMs = (parseInt(String(args.timeout)) || 180) * 1000;
@@ -97,7 +111,7 @@ export default async function editCmd(argv: string[]) {
       image: imageB64,
       quality: args.quality,
       size: args.size,
-      model: args.model,
+      model,
       mode: args.mode,
       moderation: args.moderation,
       sessionId: args.session,

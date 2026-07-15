@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -12,11 +12,27 @@ const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const CLI_ARGS = ["--import", "tsx", join(REPO_ROOT, "bin", "ima2.ts")];
 const tempDirs = [];
 const servers = [];
+// Isolated ima2 home for every spawned CLI. Without this, CLI runs that omit
+// --out/--out-dir fall back to config.storage.generatedDir and write mock
+// downloads (e.g. a 3-byte out.mp4) into the REAL ~/.ima2/generated, which
+// then surfaces in the user's history as a data-less ghost video on startup.
+// IMA2_GENERATED_DIR must be pinned too: it outranks IMA2_CONFIG_DIR in
+// config.ts, so an inherited value would leak past the config-dir override.
+const ISOLATED_HOME = mkdtempSync(join(tmpdir(), "ima2-video-cli-home-"));
+const ISOLATED_GENERATED = join(ISOLATED_HOME, "generated");
+tempDirs.push(ISOLATED_HOME);
 
 function runCLI(args, opts = {}) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [...CLI_ARGS, ...args], {
-      env: { ...process.env, NO_COLOR: "1", IMA2_SERVER: "", ...(opts.env || {}) },
+      env: {
+        ...process.env,
+        NO_COLOR: "1",
+        IMA2_SERVER: "",
+        IMA2_CONFIG_DIR: ISOLATED_HOME,
+        IMA2_GENERATED_DIR: ISOLATED_GENERATED,
+        ...(opts.env || {}),
+      },
       cwd: opts.cwd || process.cwd(),
     });
     let stdout = "";
@@ -134,6 +150,10 @@ describe("ima2 video CLI contracts", () => {
     const base = await listen(server);
     const result = await runCLI(["video", "clip", "--resolution", "1080p", "--model", "grok-imagine-video-1.5", "--server", base, "--json"]);
     assert.equal(result.code, 0);
+    assert.ok(
+      existsSync(join(ISOLATED_GENERATED, "out.mp4")),
+      "default download must land in the isolated generated dir, never the real ~/.ima2/generated",
+    );
     const parsed = JSON.parse(body);
     assert.equal(parsed.model, "grok-imagine-video-1.5");
     assert.equal(parsed.resolution, "1080p");
@@ -162,6 +182,10 @@ describe("ima2 video CLI contracts", () => {
     const base = await listen(server);
     const result = await runCLI(["video", "continue", "camera pans left, rain sound fades, no dialogue, end on a close-up", "--video", "parent.mp4", "--server", base, "--json"]);
     assert.equal(result.code, 0);
+    assert.ok(
+      existsSync(join(ISOLATED_GENERATED, "out.mp4")),
+      "default download must land in the isolated generated dir, never the real ~/.ima2/generated",
+    );
     const parsed = JSON.parse(body);
     assert.equal(parsed.continueFromVideo, "parent.mp4");
     assert.equal(parsed.resolution, "720p");
