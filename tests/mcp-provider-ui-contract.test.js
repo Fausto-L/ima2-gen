@@ -86,6 +86,20 @@ describe("MCP provider UI contract", () => {
     assert.match(select, /setCatalogRetryToken/);
   });
 
+  it("renders the sidebar selector with the shared ctl-select skin, not native selects", () => {
+    const select = readSource("ui/src/components/GenProviderModelSelect.tsx");
+    const kit = readSource("ui/src/components/controls/Select.tsx");
+
+    assert.doesNotMatch(select, /<select/);
+    assert.match(select, /<Select\b/);
+    assert.match(select, /portal/);
+    assert.match(kit, /groups\?: ReadonlyArray<SelectGroup<V>>/);
+    assert.match(kit, /createPortal\(list, document\.body\)/);
+    assert.match(kit, /listRef\.current\?\.contains\(target\)/);
+    assert.match(kit, /window\.addEventListener\("scroll", close, true\)/);
+    assert.match(kit, /triggerRef\.current\?\.focus\(\)/);
+  });
+
   it("shows connected MCP providers only, preserves unknown selection, and locks Higgsfield", () => {
     const select = readSource("ui/src/components/GenProviderModelSelect.tsx");
 

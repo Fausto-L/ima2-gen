@@ -5,6 +5,7 @@ import {
   VIDEO_MODEL_OPTIONS,
 } from "../lib/imageModels";
 import { REASONING_EFFORT_OPTIONS, type ReasoningEffort } from "../lib/reasoning";
+import { Select, type SelectGroup } from "./controls/Select";
 import { getMcpModelCatalog, useMcpProviders, type McpModelCatalog } from "../lib/mcpProviders";
 import {
   encodeMcpModelValue,
@@ -64,6 +65,7 @@ export function GenProviderModelSelect({ compact = false }: { compact?: boolean 
   const setImageModel = useAppStore((state) => state.setImageModel);
   const selectVideoModel = useAppStore((state) => state.selectVideoModel);
   const setReasoningEffort = useAppStore((state) => state.setReasoningEffort);
+  const reasoningEffort = useAppStore((state) => state.reasoningEffort);
   const { providers, loading, error } = useMcpProviders();
   const [mcpCatalog, setMcpCatalog] = useState<McpModelCatalog>(EMPTY_CATALOG);
   const [catalogError, setCatalogError] = useState(false);
@@ -165,103 +167,115 @@ export function GenProviderModelSelect({ compact = false }: { compact?: boolean 
     setImageModel(value as Parameters<typeof setImageModel>[0]);
   };
 
+  const providerGroups: SelectGroup<string>[] = [
+    {
+      label: t("mcp.coreProviders"),
+      items: CORE_PROVIDER_OPTIONS.map((option) => ({
+        value: `${CORE_PREFIX}${option.value}`,
+        label: option.label,
+      })),
+    },
+  ];
+  if (connectedMcpProviders.length > 0) {
+    providerGroups.push({
+      label: t("mcp.connectedProviders"),
+      items: connectedMcpProviders.map((entry) => ({
+        value: `${MCP_PREFIX}${entry.id}`,
+        label: displayProviderId(entry.id),
+        disabled: entry.id === "higgsfield",
+        sub: entry.id === "higgsfield" ? t("mcp.locked") : undefined,
+      })),
+    });
+  }
+  if (mcpProvider && !connectedMcpProviders.some((entry) => entry.id === mcpProvider)) {
+    providerGroups.push({
+      items: [{
+        value: `${MCP_PREFIX}${mcpProvider}`,
+        label: displayProviderId(mcpProvider),
+        sub: t("mcp.unavailable"),
+        disabled: true,
+      }],
+    });
+  }
+
+  const modelGroups: SelectGroup<string>[] = [];
+  if (mcpProvider) {
+    if (mcpModel && !mcpModelKnown) {
+      modelGroups.push({
+        items: [{ value: encodeMcpModelValue(mcpMediaKind, mcpModel), label: mcpModel }],
+      });
+    }
+    modelGroups.push({
+      label: t("mcp.imageModels"),
+      items: mcpCatalog.image.map((model) => ({
+        value: encodeMcpModelValue("image", model),
+        label: model,
+      })),
+    });
+    modelGroups.push({
+      label: t("mcp.videoModels"),
+      items: mcpCatalog.video.map((model) => ({
+        value: encodeMcpModelValue("video", model),
+        label: model,
+      })),
+    });
+    if (selectedMcpRecord?.id === "higgsfield") {
+      modelGroups.push({
+        items: [{ value: "higgsfield-locked", label: t("mcp.higgsfieldLocked"), disabled: true }],
+      });
+    }
+  } else {
+    modelGroups.push({
+      label: videoModel ? t("mcp.videoModels") : t("mcp.imageModels"),
+      items: (videoModel ? VIDEO_MODEL_OPTIONS : coreModels).map((option) => ({
+        value: videoModel ? `${VIDEO_PREFIX}${option.value}` : option.value,
+        label: option.shortLabel,
+      })),
+    });
+    if (isGptFamily) {
+      modelGroups.push({
+        label: t("sidebar.reasoningLabel"),
+        items: REASONING_EFFORT_OPTIONS.map((option) => ({
+          value: `${EFFORT_PREFIX}${option.value}`,
+          label: option.shortLabel,
+          sub: option.value === reasoningEffort ? "●" : undefined,
+        })),
+      });
+    }
+  }
+
+  const currentEffort = REASONING_EFFORT_OPTIONS.find((option) => option.value === reasoningEffort);
+
   return (
     <div
-      className="image-model-select image-model-select--sidebar"
-      style={{ gap: 4, minWidth: 0, maxWidth: compact ? 92 : 178 }}
+      className={`image-model-select image-model-select--sidebar gen-provider-model${compact ? " is-compact" : ""}`}
     >
-      <select
+      <Select
         id="sidebar-generation-provider"
-        className="image-model-select__trigger image-model-select__trigger--pill"
+        className="gen-provider-model__select gen-provider-model__select--provider"
+        groups={providerGroups}
         value={providerValue}
-        onChange={(event) => onProviderChange(event.target.value)}
-        aria-label={t("mcp.providerLabel")}
+        onChange={onProviderChange}
+        ariaLabel={t("mcp.providerLabel")}
         title={unavailableReason ?? t("mcp.providerLabel")}
-        style={{ width: compact ? 42 : 82, minWidth: 0, maxWidth: compact ? 42 : 82 }}
-      >
-        <optgroup label={t("mcp.coreProviders")}>
-          {CORE_PROVIDER_OPTIONS.map((option) => (
-            <option key={option.value} value={`${CORE_PREFIX}${option.value}`}>{option.label}</option>
-          ))}
-        </optgroup>
-        {connectedMcpProviders.length > 0 ? (
-          <optgroup label={t("mcp.connectedProviders")}>
-            {connectedMcpProviders.map((entry) => (
-              <option
-                key={entry.id}
-                value={`${MCP_PREFIX}${entry.id}`}
-                disabled={entry.id === "higgsfield"}
-              >
-                {displayProviderId(entry.id)}{entry.id === "higgsfield" ? ` — ${t("mcp.locked")}` : ""}
-              </option>
-            ))}
-          </optgroup>
-        ) : null}
-        {mcpProvider && !connectedMcpProviders.some((entry) => entry.id === mcpProvider) ? (
-          <option value={`${MCP_PREFIX}${mcpProvider}`} disabled>
-            {displayProviderId(mcpProvider)} — {t("mcp.unavailable")}
-          </option>
-        ) : null}
-      </select>
+        portal
+      />
 
-      <select
+      <Select
         id="sidebar-generation-model"
-        className="image-model-select__trigger image-model-select__trigger--pill"
+        className="gen-provider-model__select gen-provider-model__select--model"
+        groups={modelGroups}
         value={modelValue}
-        onChange={(event) => onModelChange(event.target.value)}
-        aria-label={t("mcp.modelLabel")}
+        onChange={onModelChange}
+        ariaLabel={t("mcp.modelLabel")}
         title={unavailableReason ?? t("mcp.modelLabel")}
         disabled={Boolean(unavailableReason)}
-        style={{ width: compact ? 46 : 92, minWidth: 0, maxWidth: compact ? 46 : 92 }}
-      >
-        {mcpProvider ? (
-          <>
-            {mcpModel && !mcpModelKnown ? (
-              <option value={encodeMcpModelValue(mcpMediaKind, mcpModel)}>{mcpModel}</option>
-            ) : null}
-            {!mcpModel ? <option value="">{modelsLoading ? t("mcp.loadingModels") : t("mcp.chooseModel")}</option> : null}
-            {mcpCatalog.image.length > 0 ? (
-              <optgroup label={t("mcp.imageModels")}>
-                {mcpCatalog.image.map((model) => (
-                  <option key={`img-${model}`} value={encodeMcpModelValue("image", model)}>{model}</option>
-                ))}
-              </optgroup>
-            ) : null}
-            {mcpCatalog.video.length > 0 ? (
-              <optgroup label={t("mcp.videoModels")}>
-                {mcpCatalog.video.map((model) => (
-                  <option key={`vid-${model}`} value={encodeMcpModelValue("video", model)}>{model}</option>
-                ))}
-              </optgroup>
-            ) : null}
-            {selectedMcpRecord?.id === "higgsfield" ? (
-              <option value="" disabled>{t("mcp.higgsfieldLocked")}</option>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <optgroup label={videoModel ? t("mcp.videoModels") : t("mcp.imageModels")}>
-              {(videoModel ? VIDEO_MODEL_OPTIONS : coreModels).map((option) => (
-                <option
-                  key={`${option.value}-${"providerHint" in option ? option.providerHint ?? "" : ""}`}
-                  value={videoModel ? `${VIDEO_PREFIX}${option.value}` : option.value}
-                >
-                  {option.shortLabel}
-                </option>
-              ))}
-            </optgroup>
-            {isGptFamily ? (
-              <optgroup label={t("sidebar.reasoningLabel")}>
-                {REASONING_EFFORT_OPTIONS.map((option) => (
-                  <option key={option.value} value={`${EFFORT_PREFIX}${option.value}`}>
-                    {option.shortLabel}
-                  </option>
-                ))}
-              </optgroup>
-            ) : null}
-          </>
-        )}
-      </select>
+        placeholder={mcpProvider
+          ? (modelsLoading ? t("mcp.loadingModels") : t("mcp.chooseModel"))
+          : undefined}
+        triggerSub={isGptFamily && currentEffort ? currentEffort.shortLabel : undefined}
+        portal
+      />
 
       {(unavailableReason || error || catalogError) ? (
         <span className="image-model-select__trigger-effort" role="status">

@@ -232,6 +232,62 @@
   letter-spacing: 0.02em;
 }
 
+/* 020 — sidebar provider|model custom dropdowns (ctl-select skin) */
+.gen-provider-model {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 178px;
+  flex-wrap: wrap;
+}
+.gen-provider-model.is-compact {
+  max-width: 92px;
+}
+.gen-provider-model__select--provider {
+  width: 82px;
+}
+.gen-provider-model__select--model {
+  width: 92px;
+}
+.gen-provider-model.is-compact .gen-provider-model__select--provider {
+  width: 42px;
+}
+.gen-provider-model.is-compact .gen-provider-model__select--model {
+  width: 46px;
+}
+.gen-provider-model .ctl-select__trigger {
+  gap: 3px;
+  padding: 4px 7px;
+  border: 1.5px solid var(--blue);
+  border-radius: 8px;
+  background: var(--accent-soft);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.2;
+  transition: border-color 0.15s, background 0.15s;
+}
+.gen-provider-model .ctl-select__trigger:hover,
+.gen-provider-model .ctl-select__trigger:focus-visible,
+.gen-provider-model .ctl-select__trigger.is-open {
+  border-color: var(--accent-bright);
+  background: var(--accent-soft);
+}
+.gen-provider-model .ctl-select__trigger:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.gen-provider-model .ctl-select__value {
+  font-size: 10.5px;
+}
+.gen-provider-model .ctl-select__value-sub {
+  font-size: 9px;
+}
+.gen-provider-model .ctl-select__caret {
+  width: 8px;
+  height: 8px;
+}
+
 .image-model-select--settings select {
   color: inherit;
   font: inherit;

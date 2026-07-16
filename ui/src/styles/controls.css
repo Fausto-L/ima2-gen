@@ -103,6 +103,34 @@
   min-width: 0;
 }
 
+/* ---- Select groups (020: grouped options + portal panel) ---- */
+.ctl-select__group {
+  display: block;
+  padding: 0;
+}
+.ctl-select__group + .ctl-select__group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--hairline-soft);
+}
+.ctl-select__group-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ctl-select__group-label {
+  padding: 4px 8px 2px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  user-select: none;
+}
+.ctl-select__list--portal {
+  z-index: 90;
+}
+
 /* ---- Toggle (switch) ---- */
 .ctl-toggle {
   display: inline-flex;
