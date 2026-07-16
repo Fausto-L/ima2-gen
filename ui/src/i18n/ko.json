@@ -81,7 +81,16 @@
     "decoding": "마무리 중",
     "canceling": "취소 중",
     "noPrompt": "프롬프트 없음",
-    "cancelAria": "생성 취소: {prompt}"
+    "cancelAria": "생성 취소: {prompt}",
+    "title": "생성 중",
+    "badgeOpen": "진행 중인 생성 {n}건 보기",
+    "badgeClose": "진행 중인 생성 {n}건 숨기기",
+    "footerHint": "이 패널을 닫아도 생성은 계속됩니다.",
+    "kindImage": "이미지",
+    "kindVideo": "비디오",
+    "kindNode": "노드",
+    "kindMcp": "MCP",
+    "progressAria": "생성 진행률: {n}%"
   },
   "size": {
     "title": "크기",

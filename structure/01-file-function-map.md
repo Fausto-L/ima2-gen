@@ -72,9 +72,9 @@ routes/
 
 | File | Lines | Responsibility |
 |---|---:|---|
-| `server.ts` | 496 | Express bootstrap, middleware wiring, OAuth startup, runtime advertisement, port fallback, route registration, static serving |
+| `server.ts` | 516 | Express bootstrap, middleware wiring, OAuth startup, runtime advertisement, port fallback, route registration, static serving |
 | `config.ts` | 376 | Centralized runtime config (env > `~/.ima2/config.json` > defaults), prompt import/index caps, web-search/reasoning-effort defaults, API-provider defaults, and backward-compatible flat re-exports |
-| `routes/index.ts` | 83 | Route registration hub: health, capabilities, events, storage, metadata, history, imageImport, sessions, edit, nodes, multimode, generate, agent, prompt builder, generationRequestLog, annotations, canvasVersions, comfy, prompts, prompt import, keys, auth, quota, grok, agy, video, videoExtended, and (when `features.cardNews`) cardNews |
+| `routes/index.ts` | 85 | Route registration hub: health, capabilities, events, storage, metadata, history, imageImport, sessions, edit, nodes, multimode, generate, agent, prompt builder, generationRequestLog, annotations, canvasVersions, comfy, prompts, prompt import, keys, auth, quota, grok, agy, video, videoExtended, and (when `features.cardNews`) cardNews |
 | `routes/capabilities.ts` | 35 | `GET /api/capabilities` — agent-facing runtime defaults; `GET/PATCH /api/config/grok-planner` — Grok planner model query/update |
 | `routes/generate.ts` | 13 | Classic generation API route wiring |
 | `routes/edit.ts` | 407 | Edit API, mask validation, cancellation, OAuth/API edit response save, provider/web-search/reasoning-effort plumbing |
@@ -104,7 +104,7 @@ routes/
 | `ui/src/lib/eventChannel.ts` | 128 | Browser singleton `EventSource` for `/api/events`; exponential backoff reconnect; `subscribe(jobId)` routing; connection state callbacks; `armStreamTimeout`; `ensureConnected` |
 | `ui/src/lib/sseStreamError.ts` | 25 | Shared `parseSseErrorPayload` — normalizes flat/nested SSE error shapes |
 | `bin/ima2.ts` | 498 | CLI setup, serve, status, doctor, open, reset, command dispatch (`serve --dev` enables verbose diagnostics) |
-| `bin/commands/gen.ts` | 266 | CLI image-generation client with references, provider override, model, mode, moderation, web-search, reasoning-effort, session, timeout recovery, background preset (`--bg`), and output-dir options |
+| `bin/commands/gen.ts` | 299 | CLI image-generation client with references, provider override, model, mode, moderation, web-search, reasoning-effort, session, timeout recovery, background preset (`--bg`), and output-dir options |
 | `bin/commands/edit.ts` | 166 | CLI image-edit client with provider override, model, mode, moderation, web-search, reasoning-effort, session, timeout recovery, and output options |
 | `bin/commands/multimode.ts` | 210 | CLI multimode SSE client with provider override, references, prompt mode, incremental image save, timeout recovery, web-search, reasoning-effort, and session options |
 | `bin/commands/node.ts` | 171 | CLI node-mode generate/show client with references, provider override, parent node, web-search, reasoning-effort, and SSE support |
@@ -128,7 +128,7 @@ routes/
 | `bin/commands/ls.ts` | 65 | History list client (legacy alias); supports session and server-side favorites filtering via `favoritesOnly=1` |
 | `bin/commands/ps.ts` | 82 | Inflight job list client, including optional terminal job snapshots; accepts arbitrary `kind` and documents `classic|node|multimode` |
 | `bin/commands/show.ts` | 77 | Single history item display/reveal client |
-| `bin/commands/video.ts` | 347 | Video CLI surface: generate, edit, extend, frame, analyze, and branch-local `continue` |
+| `bin/commands/video.ts` | 354 | Video CLI surface: generate, edit, extend, frame, analyze, and branch-local `continue` |
 | `bin/commands/ping.ts` | 32 | Server health probe client |
 | `bin/lib/client.ts` | 146 | Server discovery, HTTP request wrapper, response normalization |
 | `bin/lib/platform.ts` | 129 | Browser-open and binary-resolution helpers |
@@ -281,7 +281,7 @@ Backed by `routes/agent.ts`; no CLI wrapper. Session/turn/queue persistence and 
 | Entry | `ui/src/main.tsx` | 44 | React mount |
 | Types | `ui/src/types.ts` | 256 | Provider, quality, size, image model, embedded metadata, response types, web-search, reasoning effort, multimode |
 | Canvas types | `ui/src/types/canvas.ts` | 98 | Canvas Mode shared types (annotations, versions, masks, brushes) |
-| Store | `ui/src/store/useAppStore.ts` | 584 | Zustand facade; classic/node/video/multimode/inflight/history/asset-gen logic split into `ui/src/store/store*Impl.ts` modules |
+| Store | `ui/src/store/useAppStore.ts` | 598 | Zustand facade; classic/node/video/multimode/inflight/history/asset-gen logic split into `ui/src/store/store*Impl.ts` modules |
 | Persistence registry | `ui/src/store/persistenceRegistry.ts` | 83 | Single source of truth for `ima2.*` localStorage key names — covers gallery scope, gallery default scope, and settings keys (theme keys removed in Phase 010); prevents drift between hydration helpers and setters (#43) |
 | Card-news store | `ui/src/store/cardNewsStore.ts` | 417 | Card-news plan, role/image template selection, planner draft, job polling, regenerate actions |
 | Mode/dev gates | `ui/src/lib/devMode.ts` | 16 | `IS_DEV_UI`, `ENABLE_NODE_MODE`, `ENABLE_CARD_NEWS_MODE` build-time flags |

@@ -1,6 +1,7 @@
 import { useI18n } from "../../i18n";
 import type { McpModelEntry, McpModelParameter, McpPresetValue } from "../../lib/mcpProviders";
 import { DurationSlider } from "../controls/DurationSlider";
+import { McpReferenceSlots } from "./McpReferenceSlots";
 
 const CORE_PARAMETERS = new Set(["duration", "resolution", "quality", "mode"]);
 
@@ -131,6 +132,9 @@ export function McpModelPresetControls({ entry, ratio, parameters, disabled, onR
   const renderable = entry.capabilities.parameters.filter((parameter) => parameterPresetValues(parameter).length > 0);
   const core = renderable.filter((parameter) => CORE_PARAMETERS.has(parameter.name));
   const advanced = renderable.filter((parameter) => !CORE_PARAMETERS.has(parameter.name));
+  const hasReferenceInputs = entry.capabilities.inputRoles.some((role) => (
+    role === "start_image" || role === "end_image" || role === "image_references" || role === "video_references"
+  ));
   return (
     <div className="mcp-model-presets" data-capability-source={entry.capabilities.source}>
       {ratios.length > 0 ? (
@@ -143,10 +147,10 @@ export function McpModelPresetControls({ entry, ratio, parameters, disabled, onR
         </div>
       ) : null}
       <ParameterRows entries={core} parameters={parameters} disabled={disabled} onParameter={onParameter} />
-      {entry.capabilities.inputRoles.length > 0 ? (
+      {hasReferenceInputs ? (
         <div className="mcp-tool-inputs">
           <div className="section-title">{t("mcp.toolInputsLabel")}</div>
-          <div className="mcp-tool-inputs__tags">{entry.capabilities.inputRoles.map((role) => <span key={role}>{role.replace(/_/g, " ")}</span>)}</div>
+          <McpReferenceSlots inputRoles={entry.capabilities.inputRoles} disabled={disabled} />
         </div>
       ) : null}
       {advanced.length > 0 ? (

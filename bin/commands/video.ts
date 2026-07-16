@@ -85,7 +85,10 @@ const SPEC = {
     bg:            { type: "string" },
     storyboard:    { type: "boolean" },
     topic:         { type: "string" },
+    start:         { type: "string" },
+    end:           { type: "string" },
     ref:           { type: "string", repeatable: true },
+    "video-ref":   { type: "string" },
     out:           { short: "o", type: "string" },
     "out-dir":     { short: "d", type: "string" },
     json:          { type: "boolean" },
@@ -125,7 +128,11 @@ const HELP = `
         --planner-model <name>          Planner model override (e.g. grok-4.3, gpt-5.5)
         --storyboard                    Enable storyboard mode (maintains character/scene continuity)
         --topic <text>                  Series topic for prompt chain continuity
-        --ref <file|@last>              Attach source/reference image (repeatable, max 7)
+        --start <generated-filename>    MCP start frame
+        --end <generated-filename>      MCP end frame; requires --start
+        --ref <file|@last|file:tag>     Grok image input or MCP tagged image reference
+                                        Repeatable: Grok max 7, MCP max 3
+        --video-ref <generated-filename> MCP V2V/restyle reference video
     -o, --out <file>                    Output file path
     -d, --out-dir <dir>                 Output directory
         --json                          Print JSON result to stdout
@@ -137,7 +144,7 @@ const HELP = `
         --video <value>                 HTTPS URL, xAI file_id, data URL, or generated filename
         --duration <2..10>              Extension duration only. Default: 6
 
-  Modes (auto-detected from --ref count):
+  Grok modes (auto-detected from --ref count):
     0 refs  → text-to-video
     1 ref   → image-to-video
     2-7 refs → reference-to-video (max 10s duration)

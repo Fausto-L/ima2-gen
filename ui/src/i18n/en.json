@@ -81,7 +81,16 @@
     "decoding": "Finalizing",
     "canceling": "Canceling",
     "noPrompt": "No prompt",
-    "cancelAria": "Cancel generation: {prompt}"
+    "cancelAria": "Cancel generation: {prompt}",
+    "title": "IN FLIGHT",
+    "badgeOpen": "Show {n} generations in flight",
+    "badgeClose": "Hide {n} generations in flight",
+    "footerHint": "You can close this panel — generations will continue.",
+    "kindImage": "Image",
+    "kindVideo": "Video",
+    "kindNode": "Node",
+    "kindMcp": "MCP",
+    "progressAria": "Generation progress: {n}%"
   },
   "size": {
     "title": "Size",

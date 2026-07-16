@@ -1,7 +1,7 @@
 // WP5 (050): adapter mappings verified against the sanitized fixture schemas.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { runwayAdapter } from "../lib/mcp/adapters/runway.js";
+import { RUNWAY_MODEL_CATALOG, runwayAdapter } from "../lib/mcp/adapters/runway.js";
 import { higgsfieldAdapter, HIGGSFIELD_BILLING_DENYLIST } from "../lib/mcp/adapters/higgsfield.js";
 
 test("runway image request maps to generate_image with rationale and count=1", () => {
@@ -17,6 +17,46 @@ test("runway video request maps startFrame for image-to-video", () => {
   const plan = runwayAdapter.buildGenerateCall({ kind: "video", prompt: "camera pans", startFrameUrl: "https://x.example/a.png" });
   assert.equal(plan.toolName, "generate_video");
   assert.deepEqual(plan.args.startFrame, { url: "https://x.example/a.png" });
+});
+
+test("runway video input roles gate every declared reference surface", () => {
+  const roleRequests = {
+    start_image: { startFrameUrl: "https://cdn.example.com/start.png" },
+    end_image: {
+      startFrameUrl: "https://cdn.example.com/start.png",
+      endFrameUrl: "https://cdn.example.com/end.png",
+    },
+    image_references: { referenceImages: [{ url: "https://cdn.example.com/ref.png" }] },
+    video_references: { referenceVideoUrl: "https://cdn.example.com/ref.mp4" },
+  };
+  for (const entry of RUNWAY_MODEL_CATALOG.video) {
+    for (const [role, fields] of Object.entries(roleRequests)) {
+      const build = () => runwayAdapter.buildGenerateCall({
+        kind: "video", prompt: "x", model: entry.id, ...fields,
+      });
+      if (entry.capabilities.inputRoles.includes(role)) assert.doesNotThrow(build, `${entry.id}:${role}`);
+      else assert.throws(build, new RegExp(`MCP_INPUT_ROLE_UNSUPPORTED:${entry.id}:${role}`), `${entry.id}:${role}`);
+    }
+  }
+});
+
+test("runway requires a start frame whenever an end frame is present", () => {
+  assert.throws(() => runwayAdapter.buildGenerateCall({
+    kind: "video", prompt: "x", model: "seedance-2",
+    endFrameUrl: "https://cdn.example.com/end.png",
+  }), /MCP_END_FRAME_REQUIRES_START:seedance-2/);
+});
+
+test("runway maps end frame and reference video into generate_video args", () => {
+  const plan = runwayAdapter.buildGenerateCall({
+    kind: "video", prompt: "restyle", model: "seedance-2",
+    startFrameUrl: "https://cdn.example.com/start.png",
+    endFrameUrl: "https://cdn.example.com/end.png",
+    referenceVideoUrl: "https://cdn.example.com/source.mp4",
+  });
+  assert.deepEqual(plan.args.startFrame, { url: "https://cdn.example.com/start.png" });
+  assert.deepEqual(plan.args.endFrame, { url: "https://cdn.example.com/end.png" });
+  assert.deepEqual(plan.args.referenceVideo, { url: "https://cdn.example.com/source.mp4" });
 });
 
 test("runway forwards only model-declared video presets", () => {
@@ -69,7 +109,7 @@ test("reference images ride the image_references input role only", () => {
   assert.throws(() => runwayAdapter.buildGenerateCall({
     kind: "video", prompt: "x", model: "gen-4-turbo",
     referenceImages: [{ url: "https://cdn.example.com/a.png" }],
-  }), /MCP_PARAMETER_UNSUPPORTED:gen-4-turbo:referenceImages/);
+  }), /MCP_INPUT_ROLE_UNSUPPORTED:gen-4-turbo:image_references/);
   // image models with image_references accept them too.
   const image = runwayAdapter.buildGenerateCall({
     kind: "image", prompt: "x", model: "gen-4",

@@ -10,8 +10,42 @@ import type {
 
 export type McpMediaKind = "image" | "video";
 
+export type McpReferenceItem = {
+  filename: string;
+  tag?: string;
+  /** Client-only source. The store replaces this with a temp gallery filename before generation. */
+  dataUrl?: string;
+  displayName?: string;
+};
+export type McpReferenceSelection = {
+  startFrameFilename: string | null;
+  endFrameFilename: string | null;
+  references: McpReferenceItem[];
+  referenceVideoFilename: string | null;
+};
+
+export function emptyMcpReferenceSelection(): McpReferenceSelection {
+  return {
+    startFrameFilename: null,
+    endFrameFilename: null,
+    references: [],
+    referenceVideoFilename: null,
+  };
+}
+
 const VIDEO_VALUE_PREFIX = "vid:";
 const IMAGE_VALUE_PREFIX = "img:";
+const MCP_REFERENCE_TAG_PATTERN = /^[\p{L}\p{N}_-]{1,32}$/u;
+
+export function isValidMcpReferenceTag(tag: string): boolean {
+  return MCP_REFERENCE_TAG_PATTERN.test(tag);
+}
+
+export function hasInvalidMcpReferenceTags(selection: McpReferenceSelection): boolean {
+  return selection.references.some((reference) => (
+    reference.tag !== undefined && !isValidMcpReferenceTag(reference.tag)
+  ));
+}
 
 /** Legacy/unknown persisted values normalize to "image". */
 export function resolveMcpMediaKind(value: unknown): McpMediaKind {
@@ -76,6 +110,69 @@ export function sameMcpPresetSelection(a: McpPresetSelection, b: McpPresetSelect
   return a.ratio === b.ratio && JSON.stringify(a.parameters) === JSON.stringify(b.parameters);
 }
 
+function normalizeMcpReferenceItem(value: unknown): McpReferenceItem | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as { filename?: unknown; tag?: unknown; dataUrl?: unknown; displayName?: unknown };
+  if (typeof candidate.filename !== "string" || candidate.filename.length === 0) return null;
+  const tag = typeof candidate.tag === "string" ? candidate.tag.slice(0, 128) : "";
+  const dataUrl = typeof candidate.dataUrl === "string" && /^data:image\/(?:png|jpeg|webp);base64,/i.test(candidate.dataUrl)
+    ? candidate.dataUrl
+    : null;
+  const displayName = typeof candidate.displayName === "string" && candidate.displayName
+    ? candidate.displayName.slice(0, 180)
+    : null;
+  return {
+    filename: candidate.filename,
+    ...(tag ? { tag } : {}),
+    ...(dataUrl ? { dataUrl } : {}),
+    ...(displayName ? { displayName } : {}),
+  };
+}
+
+export function normalizeMcpReferenceSelection(value: unknown): McpReferenceSelection {
+  if (!value || typeof value !== "object") return emptyMcpReferenceSelection();
+  const candidate = value as Partial<McpReferenceSelection>;
+  const references = Array.isArray(candidate.references)
+    ? candidate.references.map(normalizeMcpReferenceItem).filter((item): item is McpReferenceItem => Boolean(item))
+    : [];
+  return {
+    startFrameFilename: typeof candidate.startFrameFilename === "string" && candidate.startFrameFilename
+      ? candidate.startFrameFilename
+      : null,
+    endFrameFilename: typeof candidate.endFrameFilename === "string" && candidate.endFrameFilename
+      ? candidate.endFrameFilename
+      : null,
+    references: references.filter((item, index) => (
+      references.findIndex((candidateItem) => candidateItem.filename === item.filename) === index
+    )).slice(0, 3),
+    referenceVideoFilename: typeof candidate.referenceVideoFilename === "string" && candidate.referenceVideoFilename
+      ? candidate.referenceVideoFilename
+      : null,
+  };
+}
+
+export function reconcileMcpReferenceSelection(
+  inputRoles: readonly string[],
+  value: unknown,
+): McpReferenceSelection {
+  const selection = normalizeMcpReferenceSelection(value);
+  const startFrameFilename = inputRoles.includes("start_image") ? selection.startFrameFilename : null;
+  return {
+    startFrameFilename,
+    endFrameFilename: inputRoles.includes("end_image") && startFrameFilename
+      ? selection.endFrameFilename
+      : null,
+    references: inputRoles.includes("image_references") ? selection.references : [],
+    referenceVideoFilename: inputRoles.includes("video_references")
+      ? selection.referenceVideoFilename
+      : null,
+  };
+}
+
+export function sameMcpReferenceSelection(a: McpReferenceSelection, b: McpReferenceSelection): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 export type McpSelection = {
   provider: string | null;
   model: string | null;
@@ -129,6 +226,10 @@ export type McpGenerationBuildState = {
   mcpParameters?: Record<string, McpPresetValue>;
   /** Filename of the currently viewed image, used as the video start frame. */
   currentImageFilename?: string | null;
+  /** Declared roles for the selected model; omitted only for legacy callers. */
+  mcpInputRoles?: readonly string[];
+  /** Explicit gallery/history attachments selected in the MCP slots. */
+  mcpReferenceSelection?: McpReferenceSelection;
   /** Tagged references from @element mentions; tag = @alias in the prompt. */
   elementReferences?: Array<{ filename: string; tag?: string }>;
 };
@@ -154,9 +255,29 @@ export function buildMcpGenerationInput(
   const kind = resolveMcpMediaKind(state.mcpMediaKind);
   const ratio = normalizeMcpRatio(state.mcpRatio);
   const parameters = normalizeMcpParameters(state.mcpParameters);
-  const references = (state.elementReferences ?? [])
-    .filter((entry) => typeof entry?.filename === "string" && entry.filename)
+  const hasExplicitSelection = state.mcpReferenceSelection !== undefined;
+  const inputRoles = state.mcpInputRoles;
+  const allows = (role: string) => inputRoles === undefined || inputRoles.includes(role);
+  const selected = normalizeMcpReferenceSelection(state.mcpReferenceSelection);
+  const startFrameFilename = hasExplicitSelection
+    ? (allows("start_image") ? selected.startFrameFilename : null)
+    : (kind === "video" ? state.currentImageFilename ?? null : null);
+  const selectedReferences = hasExplicitSelection && allows("image_references") ? selected.references : [];
+  const elementReferences = allows("image_references") ? state.elementReferences ?? [] : [];
+  const references = [...selectedReferences, ...elementReferences]
+    .map(normalizeMcpReferenceItem)
+    .filter((entry): entry is McpReferenceItem => Boolean(entry))
+    .filter((entry, index, entries) => entries.findIndex((candidate) => candidate.filename === entry.filename) === index)
     .slice(0, 3);
+  if (references.some((entry) => entry.dataUrl || (entry.tag !== undefined && !isValidMcpReferenceTag(entry.tag)))) {
+    return null;
+  }
+  const endFrameFilename = hasExplicitSelection && allows("end_image") && startFrameFilename
+    ? selected.endFrameFilename
+    : null;
+  const referenceVideoFilename = hasExplicitSelection && allows("video_references")
+    ? selected.referenceVideoFilename
+    : null;
   return {
     provider,
     kind,
@@ -166,8 +287,10 @@ export function buildMcpGenerationInput(
     // upstream model applies its own default.
     ...(ratio ? { ratio } : {}),
     ...(Object.keys(parameters).length > 0 ? { parameters } : {}),
-    startFrameFilename: kind === "video" ? state.currentImageFilename ?? undefined : undefined,
-    ...(references.length > 0 ? { references } : {}),
+    startFrameFilename: startFrameFilename ?? undefined,
+    ...(endFrameFilename ? { endFrameFilename } : {}),
+    ...(references.length > 0 ? { references: references.map(({ filename, tag }) => ({ filename, ...(tag ? { tag } : {}) })) } : {}),
+    ...(referenceVideoFilename ? { referenceVideoFilename } : {}),
     ...(requestId ? { requestId } : {}),
   };
 }

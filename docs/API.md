@@ -895,6 +895,15 @@ live only in `${configDir}/mcp/<provider>.json` (0600).
 
 List registry providers with per-provider connection status.
 
+### `POST /api/mcp/temp-references`
+
+Stage local reference sources (data URLs) as a temporary gallery batch so MCP
+generation can upload them by filename. Returns `{ ok, batchId, files[] }`.
+
+### `DELETE /api/mcp/temp-references/:batchId`
+
+Delete a staged temp-reference batch after the MCP job finishes.
+
 ### `GET /api/models`
 
 Canonical lane catalog for CLI/agent routing. Returns

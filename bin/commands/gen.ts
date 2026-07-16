@@ -17,6 +17,7 @@ const VALID_MODERATION = new Set(["auto", "low"]);
 const MAX_GENERATION_COUNT = Math.max(1, Math.trunc(Number(config.limits.maxGeneratedImages) || 24));
 const MAX_REFERENCE_COUNT = Math.max(1, Math.trunc(Number(config.limits.maxRefCount) || 5));
 const MCP_IMAGE_TIMEOUT_MS = 5 * 60_000 + 120_000 + 30_000;
+const MCP_LANES = new Set(["runway", "higgsfield"]);
 
 const SPEC = {
   flags: {
@@ -50,7 +51,7 @@ const HELP = `
     -q, --quality <low|medium|high>         Core lanes only. Default: low
     -s, --size <WxH | auto>                 Core lanes only. Default: 1024x1024
     -n, --count <1..${MAX_GENERATION_COUNT}>                     MCP lanes: 1 only
-        --ref <file|generated-filename>     Local file on core; generated filename on MCP
+        --ref <file|generated-file[:tag]>   Local file on core; generated filename on MCP
     -o, --out <file>                        Single-image output path
     -d, --out-dir <dir>                     Output directory
         --json                              Print one JSON result to stdout
@@ -139,15 +140,47 @@ function rejectUnsupportedMcpFlags(argv: string[], args: ParsedArgs): void {
   if (!Number.isInteger(count) || count !== 1) fail({ json: Boolean(args.json), code: "FLAG_NOT_SUPPORTED", message: "MCP image lanes support --count 1 only", extra: { flag: "--count" } });
 }
 
-function validateMcpRefs(refs: string[], roles: string[], jsonMode: boolean): void {
-  const invalid = refs.find((ref) => !generatedFilename(ref));
-  if (invalid) fail({ json: jsonMode, code: "MCP_REF_MUST_BE_GENERATED", message: `MCP references must be generated filenames: ${invalid}` });
+type McpImageReference = { filename: string; tag?: string };
+
+function parseMcpReference(value: string, jsonMode: boolean): McpImageReference {
+  const separator = value.lastIndexOf(":");
+  const filename = separator > 0 ? value.slice(0, separator) : value;
+  const tag = separator > 0 ? value.slice(separator + 1) : undefined;
+  if (!generatedFilename(filename)) {
+    fail({ json: jsonMode, code: "MCP_REF_MUST_BE_GENERATED", message: `MCP references must be generated filenames: ${filename}` });
+  }
+  if (tag !== undefined && !/^[\p{L}\p{N}_-]{1,32}$/u.test(tag)) {
+    fail({ json: jsonMode, code: "MCP_REF_TAG_INVALID", message: `MCP reference tag is invalid: ${tag || "(empty)"}` });
+  }
+  return { filename, ...(tag ? { tag } : {}) };
+}
+
+function supportingModels(catalog: ModelCatalog, role: string): string[] {
+  const supported: string[] = [];
+  for (const [lane, info] of Object.entries(catalog.lanes)) {
+    if (!MCP_LANES.has(lane)) continue;
+    for (const entry of info.models.image) {
+      if (inputRoles(entry).includes(role)) supported.push(`${lane}/${entry.id}`);
+    }
+  }
+  return supported;
+}
+
+function validateMcpRefs(refs: string[], context: ImageContext, roles: string[], jsonMode: boolean): McpImageReference[] {
+  const parsed = refs.map((ref) => parseMcpReference(ref, jsonMode));
   if (refs.length > 0 && !roles.includes("image_references")) {
-    fail({ json: jsonMode, code: "MCP_PARAMETER_UNSUPPORTED", message: "selected model does not support image references", extra: { parameter: "references" } });
+    const supportedModels = supportingModels(context.catalog, "image_references");
+    const support = supportedModels.length ? supportedModels.join(", ") : "none listed";
+    fail({
+      json: jsonMode, code: "INPUT_ROLE_UNSUPPORTED",
+      message: `${context.target.lane}/${context.target.model} does not support --ref; supporting MCP models: ${support}`,
+      extra: { flag: "--ref", role: "image_references", supportedModels },
+    });
   }
   if (refs.length === 0 && roles.includes("start_image") && !roles.includes("text")) {
     fail({ json: jsonMode, code: "MISSING_START_FRAME", message: "selected model requires a generated start image" });
   }
+  return parsed;
 }
 
 async function downloadMcpResult(serverBase: string, url: string, target: string): Promise<void> {
@@ -161,10 +194,10 @@ async function runMcpImage(argv: string[], args: ParsedArgs, context: ImageConte
   rejectUnsupportedMcpFlags(argv, args);
   const refs = (Array.isArray(args.ref) ? args.ref : []) as string[];
   const entry = context.catalog.lanes[context.target.lane]?.models.image.find((item) => item.id === context.target.model);
-  validateMcpRefs(refs, inputRoles(entry), Boolean(args.json));
+  const references = validateMcpRefs(refs, context, inputRoles(entry), Boolean(args.json));
   const requestId = createCliRequestId("req_cli_gen");
   const body = { provider: context.target.lane, kind: "image", prompt: context.prompt, model: context.target.model,
-    requestId, parameters: {}, ...(refs.length ? { references: refs.map((filename) => ({ filename })) } : {}) };
+    requestId, parameters: {}, ...(references.length ? { references } : {}) };
   try {
     const result = await runMcpJob({ serverBase: context.server.base, kind: "image", body, requestId,
       timeoutMs: MCP_IMAGE_TIMEOUT_MS, json: Boolean(args.json), onProgress: (phase: unknown) => err(`[${String(phase)}]`) });

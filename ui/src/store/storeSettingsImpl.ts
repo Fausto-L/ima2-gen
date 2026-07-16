@@ -16,17 +16,102 @@ import {
 } from "./storePersistence";
 import type { StoreSet, StoreGet } from "./storeTypes";
 import { startMcpGeneration, type McpModelCapabilities, type McpPresetValue } from "../lib/mcpProviders";
+import { jsonFetch } from "../lib/api-core";
+import { isVideoItem } from "../lib/videoMedia";
 import {
   buildMcpGenerationInput,
   defaultMcpPresetSelection,
+  emptyMcpReferenceSelection,
+  hasInvalidMcpReferenceTags,
   mcpReferenceTag,
+  normalizeMcpReferenceSelection,
+  reconcileMcpReferenceSelection,
   reconcileMcpPresetSelection,
+  sameMcpReferenceSelection,
   sameMcpPresetSelection,
+  type McpReferenceSelection,
   type McpMediaKind,
 } from "../lib/mcpSelection";
 import { t } from "../i18n";
 
 let coreGenerateAction: ReturnType<StoreGet>["generate"] | null = null;
+type McpTempReferenceBatch = {
+  ok: boolean;
+  batchId: string;
+  files: Array<{ filename: string; tag?: string }>;
+};
+function mcpGenerationErrorMessage(error: unknown): string {
+  const candidate = error as { code?: string; message?: string };
+  const code = candidate.code ?? candidate.message ?? "";
+  if (code.startsWith("MCP_INPUT_ROLE_UNSUPPORTED") || candidate.message?.startsWith("MCP_INPUT_ROLE_UNSUPPORTED")) {
+    return t("mcp.errorUnsupportedInput");
+  }
+  if (code === "MCP_END_FRAME_REQUIRES_START") return t("mcp.errorEndRequiresStart");
+  if (code === "INVALID_MCP_REFERENCES") return t("mcp.errorInvalidReferences");
+  if (code === "INVALID_START_FRAME") return t("mcp.errorInvalidFrame");
+  if (code.startsWith("INVALID_MCP_TEMP_REFERENCE") || code === "MCP_TEMP_REFERENCES_FAILED") {
+    return t("mcp.errorTempReferences");
+  }
+  if (code === "MCP_NOT_CONNECTED" || code === "MCP_PROVIDER_UNKNOWN") return t("mcp.selectionUnavailable");
+  return t("mcp.generateFailed");
+}
+async function prepareMcpTempReferences(selection: McpReferenceSelection): Promise<{
+  selection: McpReferenceSelection;
+  batchId: string | null;
+}> {
+  const local = selection.references.filter((reference) => reference.dataUrl);
+  if (local.length === 0) return { selection, batchId: null };
+  const batch = await jsonFetch<McpTempReferenceBatch>("/api/mcp/temp-references", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ images: local.map((reference) => ({ dataUrl: reference.dataUrl, ...(reference.tag ? { tag: reference.tag } : {}) })) }),
+  });
+  if (batch.files.length !== local.length) throw new Error("MCP_TEMP_REFERENCES_FAILED");
+  let localIndex = 0;
+  const references = selection.references.map((reference) => {
+    if (!reference.dataUrl) return reference;
+    const uploaded = batch.files[localIndex++];
+    return { filename: uploaded.filename, ...(reference.tag ? { tag: reference.tag } : {}) };
+  });
+  return { selection: { ...selection, references }, batchId: batch.batchId };
+}
+
+async function deleteMcpTempReferences(batchId: string): Promise<void> {
+  try {
+    await jsonFetch(`/api/mcp/temp-references/${encodeURIComponent(batchId)}`, { method: "DELETE" });
+  } catch (error) {
+    console.error("[mcp] temporary reference cleanup failed", error);
+  }
+}
+
+async function submitMcpGeneration(input: NonNullable<ReturnType<typeof buildMcpGenerationInput>>, get: StoreGet, waitForSettlement: boolean): Promise<void> {
+  let settleGeneration = () => {};
+  const generationSettled = new Promise<void>((resolve) => { settleGeneration = resolve; });
+  await startMcpGeneration(input, {
+    onDone: () => {
+      get().hydrateHistory();
+      settleGeneration();
+    },
+    onError: (error) => {
+      get().showToast(mcpGenerationErrorMessage(error), true);
+      settleGeneration();
+    },
+  });
+  if (!waitForSettlement) {
+    await get().reconcileInflight();
+    get().startInFlightPolling();
+    return;
+  }
+  let followupError: unknown = null;
+  try {
+    await get().reconcileInflight();
+    get().startInFlightPolling();
+  } catch (error) {
+    followupError = error;
+  }
+  await generationSettled;
+  if (followupError) throw followupError;
+}
 
 async function runMcpGenerate(get: StoreGet): Promise<void> {
   const state = get();
@@ -37,6 +122,12 @@ async function runMcpGenerate(get: StoreGet): Promise<void> {
     return;
   }
   const prompt = composePrompt(state.prompt, state.insertedPrompts);
+  if (!prompt) return;
+  const referenceSelection = state.mcpReferenceSelection ?? emptyMcpReferenceSelection();
+  if (hasInvalidMcpReferenceTags(referenceSelection)) {
+    get().showToast(t("mcp.referenceTagInvalid"), true);
+    return;
+  }
   // @element mentions: map selected element assets to tagged references
   // (Runway multi-reference syntax). tag = sanitized element name, so the
   // prompt can address each image as @tag; the server uploads the files and
@@ -53,35 +144,22 @@ async function runMcpGenerate(get: StoreGet): Promise<void> {
         .map((filename) => ({ filename, ...(tag ? { tag } : {}) }));
     })
     .slice(0, 3);
-  const input = buildMcpGenerationInput(
-    {
-      mcpProvider: state.mcpProvider,
-      mcpModel: state.mcpModel,
-      mcpMediaKind: state.mcpMediaKind,
-      mcpRatio: state.mcpRatio,
-      mcpParameters: state.mcpParameters,
-      currentImageFilename: state.currentImage?.filename ?? null,
-      ...(elementReferences.length > 0 ? { elementReferences } : {}),
-    },
-    prompt,
-    `mcp_ui_${Date.now()}`,
-  );
-  if (!input) return;
+  let tempBatchId: string | null = null;
   try {
-    await startMcpGeneration(input, {
-      onDone: () => get().hydrateHistory(),
-      onError: () => get().showToast(t("mcp.generateFailed"), true),
-    });
-    await get().reconcileInflight();
-    get().startInFlightPolling();
+    const prepared = await prepareMcpTempReferences(referenceSelection);
+    tempBatchId = prepared.batchId;
+    const input = buildMcpGenerationInput({
+      mcpProvider: state.mcpProvider, mcpModel: state.mcpModel, mcpMediaKind: state.mcpMediaKind,
+      mcpRatio: state.mcpRatio, mcpParameters: state.mcpParameters, mcpInputRoles: state.mcpInputRoles ?? [],
+      mcpReferenceSelection: prepared.selection, currentImageFilename: state.currentImage?.filename ?? null,
+      ...(elementReferences.length > 0 ? { elementReferences } : {}),
+    }, prompt, `mcp_ui_${Date.now()}`);
+    if (!input) return;
+    await submitMcpGeneration(input, get, Boolean(tempBatchId));
   } catch (error) {
-    const code = (error as { code?: string }).code;
-    get().showToast(
-      code === "MCP_NOT_CONNECTED" || code === "MCP_PROVIDER_UNKNOWN"
-        ? t("mcp.selectionUnavailable")
-        : t("mcp.generateFailed"),
-      true,
-    );
+    get().showToast(mcpGenerationErrorMessage(error), true);
+  } finally {
+    if (tempBatchId) await deleteMcpTempReferences(tempBatchId);
   }
 }
 
@@ -96,6 +174,8 @@ function clearMcpLane(set: StoreSet): void {
     mcpMediaKind: "image",
     mcpRatio: null,
     mcpParameters: {},
+    mcpInputRoles: [],
+    mcpReferenceSelection: emptyMcpReferenceSelection(),
     ...(coreGenerateAction ? { generate: coreGenerateAction } : {}),
   });
 }
@@ -129,7 +209,12 @@ export function setMcpProviderImpl(
     mcpProvider,
     mcpModel,
     mcpMediaKind,
-    ...(switchingProvider ? { mcpRatio: null, mcpParameters: {} } : {}),
+    ...(switchingProvider ? {
+      mcpRatio: null,
+      mcpParameters: {},
+      mcpInputRoles: [],
+      mcpReferenceSelection: emptyMcpReferenceSelection(),
+    } : {}),
     count: 1,
     multimode: false,
     generate: () => runMcpGenerate(get),
@@ -139,7 +224,13 @@ export function setMcpProviderImpl(
 export function setMcpModelImpl(mcpModel: string | null, set: StoreSet, get: StoreGet): void {
   saveMcpSelection(get().mcpProvider ?? null, mcpModel, get().mcpMediaKind ?? "image");
   saveGenerationDefaultsPatch({ mcpRatio: null, mcpParameters: {} });
-  set({ mcpModel, mcpRatio: null, mcpParameters: {} });
+  set({
+    mcpModel,
+    mcpRatio: null,
+    mcpParameters: {},
+    mcpInputRoles: [],
+    mcpReferenceSelection: emptyMcpReferenceSelection(),
+  });
 }
 
 export function setMcpModelWithKindImpl(
@@ -150,9 +241,28 @@ export function setMcpModelWithKindImpl(
   capabilities?: McpModelCapabilities,
 ): void {
   const presets = defaultMcpPresetSelection(capabilities);
+  let referenceSelection = capabilities
+    ? reconcileMcpReferenceSelection(capabilities.inputRoles, get().mcpReferenceSelection)
+    : emptyMcpReferenceSelection();
+  const currentImage = get().currentImage;
+  if (
+    capabilities?.inputRoles.includes("start_image")
+    && !referenceSelection.startFrameFilename
+    && currentImage?.filename
+    && !isVideoItem(currentImage)
+  ) {
+    referenceSelection = { ...referenceSelection, startFrameFilename: currentImage.filename };
+  }
   saveMcpSelection(get().mcpProvider ?? null, mcpModel, kind);
   saveGenerationDefaultsPatch({ mcpRatio: presets.ratio, mcpParameters: presets.parameters });
-  set({ mcpModel, mcpMediaKind: kind, mcpRatio: presets.ratio, mcpParameters: presets.parameters });
+  set({
+    mcpModel,
+    mcpMediaKind: kind,
+    mcpRatio: presets.ratio,
+    mcpParameters: presets.parameters,
+    mcpInputRoles: capabilities ? [...capabilities.inputRoles] : [],
+    mcpReferenceSelection: referenceSelection,
+  });
 }
 
 export function setMcpMediaKindImpl(kind: McpMediaKind, set: StoreSet, get: StoreGet): void {
@@ -160,7 +270,14 @@ export function setMcpMediaKindImpl(kind: McpMediaKind, set: StoreSet, get: Stor
   // Switching kind invalidates the previous kind's model selection.
   saveMcpSelection(get().mcpProvider ?? null, null, kind);
   saveGenerationDefaultsPatch({ mcpRatio: null, mcpParameters: {} });
-  set({ mcpMediaKind: kind, mcpModel: null, mcpRatio: null, mcpParameters: {} });
+  set({
+    mcpMediaKind: kind,
+    mcpModel: null,
+    mcpRatio: null,
+    mcpParameters: {},
+    mcpInputRoles: [],
+    mcpReferenceSelection: emptyMcpReferenceSelection(),
+  });
 }
 
 export function setMcpRatioImpl(ratio: string | null, set: StoreSet): void {
@@ -182,6 +299,19 @@ export function setMcpParameterImpl(
   set({ mcpParameters: parameters });
 }
 
+export function setMcpReferenceSelectionImpl(
+  selection: McpReferenceSelection,
+  set: StoreSet,
+  get: StoreGet,
+): void {
+  const next = reconcileMcpReferenceSelection(
+    get().mcpInputRoles ?? [],
+    normalizeMcpReferenceSelection(selection),
+  );
+  const current = get().mcpReferenceSelection ?? emptyMcpReferenceSelection();
+  if (!sameMcpReferenceSelection(current, next)) set({ mcpReferenceSelection: next });
+}
+
 /** Called once by the sidebar catalog completion event. It is deliberately not
  * a state-watching effect, and writes only when persisted values are stale. */
 export function reconcileMcpPresetStateImpl(
@@ -191,9 +321,18 @@ export function reconcileMcpPresetStateImpl(
 ): void {
   const current = { ratio: get().mcpRatio ?? null, parameters: get().mcpParameters ?? {} };
   const next = reconcileMcpPresetSelection(capabilities, current.ratio, current.parameters);
-  if (sameMcpPresetSelection(current, next)) return;
-  saveGenerationDefaultsPatch({ mcpRatio: next.ratio, mcpParameters: next.parameters });
-  set({ mcpRatio: next.ratio, mcpParameters: next.parameters });
+  const currentReferences = get().mcpReferenceSelection ?? emptyMcpReferenceSelection();
+  const nextReferences = reconcileMcpReferenceSelection(capabilities.inputRoles, currentReferences);
+  const rolesChanged = JSON.stringify(get().mcpInputRoles ?? []) !== JSON.stringify(capabilities.inputRoles);
+  const presetsChanged = !sameMcpPresetSelection(current, next);
+  const referencesChanged = !sameMcpReferenceSelection(currentReferences, nextReferences);
+  if (!presetsChanged && !referencesChanged && !rolesChanged) return;
+  if (presetsChanged) saveGenerationDefaultsPatch({ mcpRatio: next.ratio, mcpParameters: next.parameters });
+  set({
+    ...(presetsChanged ? { mcpRatio: next.ratio, mcpParameters: next.parameters } : {}),
+    mcpInputRoles: [...capabilities.inputRoles],
+    mcpReferenceSelection: nextReferences,
+  });
 }
 
 export function hydrateMcpSelectionImpl(set: StoreSet, get: StoreGet): void {

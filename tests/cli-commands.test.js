@@ -119,6 +119,7 @@ describe("ima2 CLI commands (live server)", () => {
     assert.match(stdout, /--mode/);
     assert.match(stdout, /--moderation/);
     assert.match(stdout, /--session/);
+    assert.match(stdout, /file\[:tag\]/);
     assert.match(stdout, /Batch\/async note:/);
     assert.match(stdout, /Use -n <N>/);
     assert.match(stdout, /ima2 ps --json/);
@@ -179,9 +180,10 @@ describe("ima2 CLI commands (live server)", () => {
       res.setHeader("Content-Type", "application/json");
       if (req.url === "/api/health") { res.end('{"ok":true}'); return; }
       if (req.url === "/api/models") { res.end(JSON.stringify({ ok: true, lanes: { runway: {
-        status: "ready", defaults: { image: "gen-4" }, models: { image: [{ id: "gen-4", capabilities: {
-          parameters: [], inputRoles: ["text", "image_references"],
-        } }], video: [] },
+        status: "ready", defaults: { image: "gen-4" }, models: { image: [
+          { id: "gen-4", capabilities: { parameters: [], inputRoles: ["text", "image_references"] } },
+          { id: "text-only", capabilities: { parameters: [], inputRoles: ["text"] } },
+        ], video: [] },
       } } })); return; }
       res.writeHead(500).end();
     });
@@ -194,6 +196,12 @@ describe("ima2 CLI commands (live server)", () => {
       const ref = await runCLI(["gen", "hi", "--model", "runway/gen-4", "--ref", "./local.png", "--json", "--server", base]);
       assert.strictEqual(ref.code, 2);
       assert.strictEqual(JSON.parse(ref.stdout).code, "MCP_REF_MUST_BE_GENERATED");
+      const unsupportedRole = await runCLI(["gen", "hi", "--model", "runway/text-only", "--ref", "1780000000000_abcd.png", "--json", "--server", base]);
+      assert.strictEqual(unsupportedRole.code, 2);
+      const rolePayload = JSON.parse(unsupportedRole.stdout);
+      assert.strictEqual(rolePayload.code, "INPUT_ROLE_UNSUPPORTED");
+      assert.deepStrictEqual(rolePayload.supportedModels, ["runway/gen-4"]);
+      assert.match(rolePayload.message, /runway\/gen-4/);
     } finally {
       await new Promise((resolve) => fake.close(resolve));
     }
@@ -223,14 +231,14 @@ describe("ima2 CLI commands (live server)", () => {
     await new Promise((resolve) => fake.listen(0, "127.0.0.1", resolve));
     const base = `http://127.0.0.1:${fake.address().port}`;
     try {
-      const result = await runCLI(["gen", "hi", "--model", "runway/gen-4", "--ref", "1780000000000_abcd.png", "--json", "--server", base]);
+      const result = await runCLI(["gen", "hi", "--model", "runway/gen-4", "--ref", "1780000000000_abcd.png:hero", "--json", "--server", base]);
       assert.strictEqual(result.code, 0, result.stderr);
       assert.strictEqual(result.stdout.trim().split("\n").length, 1);
       assert.strictEqual(JSON.parse(result.stdout).url, "/generated/out.png");
       assert.strictEqual(submitted.provider, "runway");
       assert.strictEqual(submitted.model, "gen-4");
       assert.deepStrictEqual(submitted.parameters, {});
-      assert.deepStrictEqual(submitted.references, [{ filename: "1780000000000_abcd.png" }]);
+      assert.deepStrictEqual(submitted.references, [{ filename: "1780000000000_abcd.png", tag: "hero" }]);
     } finally {
       await new Promise((resolve) => fake.close(resolve));
     }

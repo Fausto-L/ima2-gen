@@ -47,7 +47,7 @@ export const RUNWAY_MODEL_CATALOG: Record<"image" | "video", McpModelEntry[]> = 
     { id: "gen-4", label: "Gen-4 Image", capabilities: ratioCapabilities(["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"], ["text", "image_references"]) },
   ],
   video: [
-    { id: "seedance-2", label: "Seedance 2", capabilities: { ...ratioCapabilities(["16:9", "9:16", "1:1"], ["text", "start_image", "end_image", "image_references", "video_references", "audio_references"]), parameters: [durationRange(4, 15, 10), resolutionOptions(["480p", "720p", "1080p"]), audioParameter()] } },
+    { id: "seedance-2", label: "Seedance 2", capabilities: { ...ratioCapabilities(["16:9", "9:16", "1:1"], ["text", "start_image", "end_image", "image_references", "video_references"]), parameters: [durationRange(4, 15, 10), resolutionOptions(["480p", "720p", "1080p"]), audioParameter()] } },
     { id: "kling-o3-pro", label: "Kling O3 Pro", capabilities: { ...ratioCapabilities(["16:9", "9:16", "1:1"], ["text", "start_image", "end_image", "image_references", "video_references"]), parameters: [durationOptions([5, 10, 15], 10), audioParameter()] } },
     { id: "kling-3-pro", label: "Kling 3 Pro", capabilities: { ...ratioCapabilities(["16:9", "9:16", "1:1"], ["text", "start_image", "end_image"]), parameters: [durationOptions([5, 10, 15], 10), audioParameter()] } },
     { id: "gen-4.5", label: "Gen-4.5", capabilities: { ...ratioCapabilities(["16:9", "9:16", "1:1"], ["text", "start_image"]), parameters: [durationRange(2, 10, 10), audioParameter()] } },
@@ -92,20 +92,33 @@ function validatedParameters(request: MediaJobRequest, entry: McpModelEntry): Re
 
 function validateRequest(request: MediaJobRequest): Record<string, McpPresetValue> {
   const entry = modelEntry(request);
+  const roles = entry.capabilities.inputRoles;
   if (request.ratio && !entry.capabilities.aspectRatios.includes(request.ratio)) {
     throw new Error(`MCP_PARAMETER_INVALID:${entry.id}:ratio`);
+  }
+  if (request.endFrameUrl && !roles.includes("end_image")) {
+    throw new Error(`MCP_INPUT_ROLE_UNSUPPORTED:${entry.id}:end_image`);
+  }
+  if (request.endFrameUrl && !request.startFrameUrl) {
+    throw new Error(`MCP_END_FRAME_REQUIRES_START:${entry.id}`);
+  }
+  if (request.referenceVideoUrl && !roles.includes("video_references")) {
+    throw new Error(`MCP_INPUT_ROLE_UNSUPPORTED:${entry.id}:video_references`);
+  }
+  if (request.startFrameUrl && !roles.includes("start_image")) {
+    throw new Error(`MCP_INPUT_ROLE_UNSUPPORTED:${entry.id}:start_image`);
   }
   // Reference images ride the model's declared image_references input role;
   // the tool schema caps them to seedance-2 / kling-o3-pro for video.
   if (request.referenceImages && request.referenceImages.length > 0
-    && !entry.capabilities.inputRoles.includes("image_references")) {
-    throw new Error(`MCP_PARAMETER_UNSUPPORTED:${entry.id}:referenceImages`);
+    && !roles.includes("image_references")) {
+    throw new Error(`MCP_INPUT_ROLE_UNSUPPORTED:${entry.id}:image_references`);
   }
   return validatedParameters(request, entry);
 }
 
 /** Tags follow the Runway @alias convention: word characters only, <=32. */
-const REFERENCE_TAG_PATTERN = /^[\p{L}\p{N}_-]{1,32}$/u;
+export const REFERENCE_TAG_PATTERN = /^[\p{L}\p{N}_-]{1,32}$/u;
 
 function referenceImagesArg(request: MediaJobRequest): Record<string, unknown> {
   const entries = (request.referenceImages ?? [])
@@ -145,7 +158,9 @@ function buildGenerateCall(request: MediaJobRequest): ToolCallPlan {
       ...(parameters.resolution !== undefined ? { resolution: parameters.resolution } : {}),
       ...(parameters.generateAudio !== undefined ? { generateAudio: parameters.generateAudio } : {}),
       ...(request.startFrameUrl ? { startFrame: { url: request.startFrameUrl } } : {}),
+      ...(request.endFrameUrl ? { endFrame: { url: request.endFrameUrl } } : {}),
       ...referenceImagesArg(request),
+      ...(request.referenceVideoUrl ? { referenceVideo: { url: request.referenceVideoUrl } } : {}),
     },
   };
 }

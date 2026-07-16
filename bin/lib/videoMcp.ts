@@ -24,6 +24,9 @@ type ModelCapabilities = { parameters: Parameter[]; aspectRatios: string[]; inpu
 type ResolvedTarget = Extract<ResolveResult, { ok: true }>;
 type VideoContext = { server: { base: string }; catalog: ModelCatalog; target: ResolvedTarget; prompt: string };
 type CoreOptions = { duration: number; resolution: string; aspectRatio: string };
+type McpImageReference = { filename: string; tag?: string };
+
+const MCP_LANES = new Set(["runway", "higgsfield"]);
 
 function parseInteger(value: unknown, fallback: number, label: string): number {
   const raw = value === undefined ? String(fallback) : String(value);
@@ -31,8 +34,12 @@ function parseInteger(value: unknown, fallback: number, label: string): number {
   return Number(raw);
 }
 
-function generatedFilename(value: string): boolean {
+function generatedImageFilename(value: string): boolean {
   return /^\d{10,}_[A-Za-z0-9_-]+\.(?:png|jpe?g|webp)$/i.test(value);
+}
+
+function generatedVideoFilename(value: string): boolean {
+  return /^\d{10,}_[A-Za-z0-9_-]+\.(?:mp4|mov)$/i.test(value);
 }
 
 function renderBar(pct: number): string {
@@ -192,6 +199,14 @@ function rejectMcpOnlyFlags(argv: string[], args: ParsedArgs): void {
   if (flag) fail({ json: Boolean(args.json), code: "FLAG_NOT_SUPPORTED", message: `${flag} is only supported on Grok lanes`, extra: { flag } });
 }
 
+function rejectMcpInputFlagsOnCore(argv: string[], args: ParsedArgs): void {
+  const flag = ["--start", "--end", "--video-ref"].find((name) => wasFlagPassed(argv, name));
+  if (flag) fail({
+    json: Boolean(args.json), code: "FLAG_NOT_SUPPORTED",
+    message: `${flag} is only supported on MCP video lanes`, extra: { flag },
+  });
+}
+
 function parameterFor(parameters: Parameter[], flag: string): Parameter | undefined {
   const names = flag === "aspect-ratio" ? ["ratio", "aspect_ratio", "aspect-ratio"] : [flag];
   return parameters.find((parameter) => names.includes(parameter.name));
@@ -222,16 +237,72 @@ function mcpParameters(argv: string[], args: ParsedArgs, capabilities: ModelCapa
   return { parameters: body, ratio };
 }
 
-function mcpReferences(refs: string[], roles: string[], jsonMode: boolean) {
-  const invalid = refs.find((ref) => !generatedFilename(ref));
-  if (invalid) fail({ json: jsonMode, code: "MCP_REF_MUST_BE_GENERATED", message: `MCP references must be generated filenames: ${invalid}` });
-  const supportsStart = roles.includes("start_image");
-  if (!refs.length && supportsStart && !roles.includes("text")) fail({ json: jsonMode, code: "MISSING_START_FRAME", message: "selected model requires a generated start frame" });
-  const first = supportsStart ? refs[0] : undefined;
-  const remaining = supportsStart ? refs.slice(1) : refs;
-  if (remaining.length && !roles.includes("image_references")) fail({ json: jsonMode, code: "MCP_PARAMETER_UNSUPPORTED", message: "selected model does not support additional image references" });
-  return { ...(first ? { startFrameFilename: first } : {}),
-    ...(remaining.length ? { references: remaining.map((filename) => ({ filename })) } : {}) };
+function parseMcpReference(value: string, jsonMode: boolean): McpImageReference {
+  const separator = value.lastIndexOf(":");
+  const filename = separator > 0 ? value.slice(0, separator) : value;
+  const tag = separator > 0 ? value.slice(separator + 1) : undefined;
+  if (!generatedImageFilename(filename)) {
+    fail({ json: jsonMode, code: "MCP_REF_MUST_BE_GENERATED", message: `MCP references must be generated filenames: ${filename}` });
+  }
+  if (tag !== undefined && !/^[\p{L}\p{N}_-]{1,32}$/u.test(tag)) {
+    fail({ json: jsonMode, code: "MCP_REF_TAG_INVALID", message: `MCP reference tag is invalid: ${tag || "(empty)"}` });
+  }
+  return { filename, ...(tag ? { tag } : {}) };
+}
+
+function supportingModels(catalog: ModelCatalog, role: string): string[] {
+  const supported: string[] = [];
+  for (const [lane, info] of Object.entries(catalog.lanes)) {
+    if (!MCP_LANES.has(lane)) continue;
+    for (const entry of info.models.video) {
+      if (modelCapabilities(entry).inputRoles.includes(role)) supported.push(`${lane}/${entry.id}`);
+    }
+  }
+  return supported;
+}
+
+function requireInputRole(context: VideoContext, roles: string[], role: string, flag: string, used: boolean, jsonMode: boolean): void {
+  if (!used || roles.includes(role)) return;
+  const supportedModels = supportingModels(context.catalog, role);
+  const support = supportedModels.length ? supportedModels.join(", ") : "none listed";
+  fail({
+    json: jsonMode, code: "INPUT_ROLE_UNSUPPORTED",
+    message: `${context.target.lane}/${context.target.model} does not support ${flag}; supporting MCP models: ${support}`,
+    extra: { flag, role, supportedModels },
+  });
+}
+
+function mcpMediaInputs(args: ParsedArgs, context: VideoContext, roles: string[]) {
+  const jsonMode = Boolean(args.json);
+  const explicitStart = args.start ? String(args.start) : undefined;
+  const end = args.end ? String(args.end) : undefined;
+  const videoRef = args["video-ref"] ? String(args["video-ref"]) : undefined;
+  const rawRefs = (Array.isArray(args.ref) ? args.ref : []) as string[];
+  if (rawRefs.length > 3) fail({ json: jsonMode, code: "MCP_REF_LIMIT", message: "MCP video lanes support up to 3 --ref attachments" });
+  if (explicitStart && !generatedImageFilename(explicitStart)) fail({ json: jsonMode, code: "MCP_REF_MUST_BE_GENERATED", message: `--start must be a generated image filename: ${explicitStart}` });
+  if (end && !generatedImageFilename(end)) fail({ json: jsonMode, code: "MCP_REF_MUST_BE_GENERATED", message: `--end must be a generated image filename: ${end}` });
+  if (videoRef && !generatedVideoFilename(videoRef)) fail({ json: jsonMode, code: "MCP_REF_MUST_BE_GENERATED", message: `--video-ref must be a generated .mp4 or .mov filename: ${videoRef}` });
+  const parsedRefs = rawRefs.map((ref) => parseMcpReference(ref, jsonMode));
+  const promotedIndex = !explicitStart && roles.includes("start_image")
+    ? parsedRefs.findIndex((reference) => !reference.tag)
+    : -1;
+  const promotedStart = promotedIndex >= 0 ? parsedRefs[promotedIndex].filename : undefined;
+  const start = explicitStart ?? promotedStart;
+  const references = promotedIndex >= 0
+    ? parsedRefs.filter((_reference, index) => index !== promotedIndex)
+    : parsedRefs;
+  if (end && !start) fail({ json: jsonMode, code: "END_FRAME_REQUIRES_START", message: "--end requires --start or an untagged --ref" });
+  requireInputRole(context, roles, "start_image", "--start", Boolean(explicitStart), jsonMode);
+  requireInputRole(context, roles, "end_image", "--end", Boolean(end), jsonMode);
+  requireInputRole(context, roles, "image_references", "--ref", references.length > 0, jsonMode);
+  requireInputRole(context, roles, "video_references", "--video-ref", Boolean(videoRef), jsonMode);
+  if (!start && roles.includes("start_image") && !roles.includes("text")) {
+    fail({ json: jsonMode, code: "MISSING_START_FRAME", message: "selected model requires --start or an untagged --ref with a generated image" });
+  }
+  return {
+    ...(start ? { startFrameFilename: start } : {}), ...(end ? { endFrameFilename: end } : {}),
+    ...(references.length ? { references } : {}), ...(videoRef ? { referenceVideoFilename: videoRef } : {}),
+  };
 }
 
 async function downloadMcpVideo(serverBase: string, url: string, target: string): Promise<void> {
@@ -245,8 +316,7 @@ async function runMcpVideo(argv: string[], args: ParsedArgs, context: VideoConte
   const entry = context.catalog.lanes[context.target.lane]?.models.video.find((item) => item.id === context.target.model);
   const capabilities = modelCapabilities(entry);
   const selected = mcpParameters(argv, args, capabilities);
-  const refs = (Array.isArray(args.ref) ? args.ref : []) as string[];
-  const references = mcpReferences(refs, capabilities.inputRoles, Boolean(args.json));
+  const references = mcpMediaInputs(args, context, capabilities.inputRoles);
   const requestId = createCliRequestId("req_cli_video");
   const body = { provider: context.target.lane, kind: "video", prompt: context.prompt, model: context.target.model,
     requestId, parameters: selected.parameters, ...(selected.ratio ? { ratio: selected.ratio } : {}), ...references };
@@ -269,5 +339,6 @@ export async function runVideoGenerate(argv: string[], args: ParsedArgs, prompt:
   const target = resolveVideoTarget(args, catalog);
   const context = { server, catalog, target, prompt };
   if (target.transport === "mcp") return runMcpVideo(argv, args, context);
+  rejectMcpInputFlagsOnCore(argv, args);
   return runCoreVideo(args, context);
 }

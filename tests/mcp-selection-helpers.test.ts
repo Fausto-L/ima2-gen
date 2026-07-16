@@ -4,6 +4,8 @@ import {
   buildMcpGenerationInput,
   defaultMcpPresetSelection,
   encodeMcpModelValue,
+  hasInvalidMcpReferenceTags,
+  isValidMcpReferenceTag,
   normalizeMcpRatio,
   parseMcpModelValue,
   reconcileMcpPresetSelection,
@@ -82,6 +84,38 @@ describe("mcpSelection pure helpers", () => {
     };
     assert.equal(buildMcpGenerationInput({ ...base, mcpProvider: null }, "prompt"), null);
     assert.equal(buildMcpGenerationInput({ ...base, mcpProvider: "runway" }, ""), null);
+  });
+
+  it("validates Runway reference tags without silently dropping invalid input", () => {
+    for (const tag of ["hero", "인물_1", "scene-2"]) assert.equal(isValidMcpReferenceTag(tag), true);
+    for (const tag of ["", "two words", "bad!", "x".repeat(33)]) assert.equal(isValidMcpReferenceTag(tag), false);
+    assert.equal(hasInvalidMcpReferenceTags({
+      startFrameFilename: null,
+      endFrameFilename: null,
+      references: [{ filename: "ref.png", tag: "two words" }],
+      referenceVideoFilename: null,
+    }), true);
+    assert.equal(buildMcpGenerationInput({
+      mcpProvider: "runway",
+      mcpReferenceSelection: {
+        startFrameFilename: null,
+        endFrameFilename: null,
+        references: [{ filename: "ref.png", tag: "two words" }],
+        referenceVideoFilename: null,
+      },
+    }, "prompt"), null);
+  });
+
+  it("requires local references to be resolved to gallery filenames before payload assembly", () => {
+    assert.equal(buildMcpGenerationInput({
+      mcpProvider: "runway",
+      mcpReferenceSelection: {
+        startFrameFilename: null,
+        endFrameFilename: null,
+        references: [{ filename: "local:1", displayName: "portrait.png", dataUrl: "data:image/png;base64,AAAA" }],
+        referenceVideoFilename: null,
+      },
+    }, "prompt"), null);
   });
 
   it("defaults a missing kind to image (legacy state)", () => {

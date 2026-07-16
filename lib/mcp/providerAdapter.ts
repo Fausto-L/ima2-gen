@@ -13,10 +13,14 @@ export interface MediaJobRequest {
   parameters?: Record<string, McpPresetValue>;
   /** Image-to-video start frame (public HTTPS or provider-hosted URL). */
   startFrameUrl?: string;
+  /** Image-to-video end frame. Requires startFrameUrl and the end_image role. */
+  endFrameUrl?: string;
   /** Style/subject reference images (provider-hosted URLs). Models must
    * declare the image_references input role to receive them. `tag` is the
    * @alias usable inside promptText (Runway multi-reference syntax). */
   referenceImages?: Array<{ url: string; tag?: string }>;
+  /** Video-to-video/restyle source (public HTTPS or provider-hosted URL). */
+  referenceVideoUrl?: string;
   /** Free-text purpose forwarded to providers that require a rationale field. */
   rationale?: string;
 }

@@ -30,10 +30,12 @@ const MODEL_CATALOG = {
       { id: "grok-imagine-video-1.5", capabilities: { parameters: [], inputRoles: ["text", "start_image", "image_references"] } },
     ] } },
     runway: { status: "ready", defaults: { video: "veo-3.1" }, models: { image: [], video: [
+      { id: "seedance-2", capabilities: { parameters: [], aspectRatios: ["16:9", "9:16"],
+        inputRoles: ["text", "start_image", "end_image", "image_references", "video_references"] } },
       { id: "veo-3.1", capabilities: { parameters: [
         { name: "duration", type: "number", options: [4, 6, 8] },
         { name: "resolution", type: "string", options: ["720p", "1080p"] },
-      ], aspectRatios: ["16:9", "9:16"], inputRoles: ["text", "start_image"] } },
+      ], aspectRatios: ["16:9", "9:16"], inputRoles: ["text", "start_image", "end_image"] } },
       { id: "gen-4.5", capabilities: { parameters: [{ name: "duration", type: "number", min: 2, max: 10 }],
         aspectRatios: ["16:9"], inputRoles: ["text", "start_image"] } },
     ] } },
@@ -114,6 +116,10 @@ describe("ima2 video CLI contracts", () => {
     assert.match(stdout, /grok-imagine-video-1\.5/);
     assert.match(stdout, /preview alias accepted/);
     assert.match(stdout, /--provider <grok\|grok-api\|runway\|higgsfield>/);
+    assert.match(stdout, /--start <generated-filename>/);
+    assert.match(stdout, /--end <generated-filename>/);
+    assert.match(stdout, /--video-ref <generated-filename>/);
+    assert.match(stdout, /file:tag/);
     assert.match(stdout, /ima2 models/);
   });
 
@@ -140,7 +146,7 @@ describe("ima2 video CLI contracts", () => {
     assert.equal(localRef.code, 2); assert.equal(JSON.parse(localRef.stdout).code, "MCP_REF_MUST_BE_GENERATED");
   });
 
-  it("passes explicit MCP parameters and generated start-frame refs through the async job bridge", async () => {
+  it("passes explicit MCP parameters and generated start frames through the async job bridge", async () => {
     let eventResponse;
     let submitted;
     const server = makeServer((req, res) => {
@@ -163,7 +169,7 @@ describe("ima2 video CLI contracts", () => {
     });
     const base = await listen(server);
     const result = await runCLI(["video", "clip", "--model", "runway/veo-3.1", "--duration", "8",
-      "--aspect-ratio", "16:9", "--ref", "1780000000000_abcd.png", "--json", "--server", base]);
+      "--aspect-ratio", "16:9", "--start", "1780000000000_abcd.png", "--json", "--server", base]);
     assert.equal(result.code, 0, result.stderr);
     assert.equal(result.stdout.trim().split("\n").length, 1);
     assert.equal(JSON.parse(result.stdout).url, "/generated/out.mp4");
@@ -173,6 +179,113 @@ describe("ima2 video CLI contracts", () => {
     assert.equal(submitted.ratio, "16:9");
     assert.equal(submitted.startFrameFilename, "1780000000000_abcd.png");
     assert.equal(submitted.references, undefined);
+  });
+
+  it("promotes the first untagged --ref to the MCP start frame when --start is absent", async () => {
+    let eventResponse;
+    let submitted;
+    const server = makeServer((req, res) => {
+      if (req.url === "/api/events") {
+        eventResponse = res;
+        res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+        res.flushHeaders();
+        return;
+      }
+      if (req.url === "/api/mcp/generate" && req.method === "POST") {
+        let raw = ""; req.on("data", (chunk) => { raw += chunk; }); req.on("end", () => {
+          submitted = JSON.parse(raw);
+          res.writeHead(202, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true, requestId: submitted.requestId }));
+          eventResponse.end(`event: done\ndata: ${JSON.stringify({ jobId: submitted.requestId, filename: "out.mp4", url: "/generated/out.mp4" })}\n\n`);
+        });
+        return;
+      }
+      res.writeHead(404).end();
+    });
+    const base = await listen(server);
+    const result = await runCLI([
+      "video", "clip", "--model", "runway/veo-3.1",
+      "--ref", "1780000000000_abcd.png", "--json", "--server", base,
+    ]);
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(submitted.startFrameFilename, "1780000000000_abcd.png");
+    assert.equal(submitted.references, undefined);
+
+    const tagged = await runCLI([
+      "video", "clip", "--model", "runway/veo-3.1",
+      "--ref", "1780000000001_hero.png:hero", "--json", "--server", base,
+    ]);
+    assert.equal(tagged.code, 2);
+    const taggedPayload = JSON.parse(tagged.stdout);
+    assert.equal(taggedPayload.code, "INPUT_ROLE_UNSUPPORTED");
+    assert.equal(taggedPayload.role, "image_references");
+  });
+
+  it("maps MCP start/end/tagged-image/video reference flags to role fields", async () => {
+    let eventResponse;
+    let submitted;
+    const server = makeServer((req, res) => {
+      if (req.url === "/api/events") {
+        eventResponse = res; res.writeHead(200, { "Content-Type": "text/event-stream" }); res.flushHeaders(); return;
+      }
+      if (req.url === "/api/mcp/generate" && req.method === "POST") {
+        let raw = ""; req.on("data", (chunk) => { raw += chunk; }); req.on("end", () => {
+          submitted = JSON.parse(raw); res.writeHead(202, { "Content-Type": "application/json" }); res.end('{"ok":true}');
+          eventResponse.end(`event: done\ndata: ${JSON.stringify({ jobId: submitted.requestId, filename: "out.mp4", url: "/generated/out.mp4" })}\n\n`);
+        }); return;
+      }
+      res.writeHead(404).end();
+    });
+    const base = await listen(server);
+    const result = await runCLI([
+      "video", "restyle", "--model", "runway/seedance-2",
+      "--start", "1780000000000_start.png", "--end", "1780000000001_end.webp",
+      "--ref", "1780000000002_hero.jpg:hero", "--ref", "1780000000003_scene.png:scene",
+      "--video-ref", "1780000000004_source.mov", "--json", "--server", base,
+    ]);
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(submitted.startFrameFilename, "1780000000000_start.png");
+    assert.equal(submitted.endFrameFilename, "1780000000001_end.webp");
+    assert.deepEqual(submitted.references, [
+      { filename: "1780000000002_hero.jpg", tag: "hero" },
+      { filename: "1780000000003_scene.png", tag: "scene" },
+    ]);
+    assert.equal(submitted.referenceVideoFilename, "1780000000004_source.mov");
+  });
+
+  it("returns INPUT_ROLE_UNSUPPORTED with supporting catalog models and requires start before end", async () => {
+    const server = makeServer((_req, res) => res.writeHead(404).end());
+    const base = await listen(server);
+    const unsupported = await runCLI([
+      "video", "clip", "--model", "runway/gen-4.5", "--video-ref", "1780000000000_source.mp4",
+      "--json", "--server", base,
+    ]);
+    assert.equal(unsupported.code, 2);
+    const payload = JSON.parse(unsupported.stdout);
+    assert.equal(payload.code, "INPUT_ROLE_UNSUPPORTED");
+    assert.deepEqual(payload.supportedModels, ["runway/seedance-2"]);
+    assert.match(payload.message, /runway\/seedance-2/);
+
+    const missingStart = await runCLI([
+      "video", "clip", "--model", "runway/seedance-2", "--end", "1780000000001_end.png",
+      "--json", "--server", base,
+    ]);
+    assert.equal(missingStart.code, 2);
+    assert.equal(JSON.parse(missingStart.stdout).code, "END_FRAME_REQUIRES_START");
+  });
+
+  it("rejects MCP-only reference-role flags on Grok lanes", async () => {
+    const server = makeServer((_req, res) => res.writeHead(404).end());
+    const base = await listen(server);
+    for (const [flag, value] of [
+      ["--start", "1780000000000_start.png"],
+      ["--end", "1780000000001_end.png"],
+      ["--video-ref", "1780000000002_source.mp4"],
+    ]) {
+      const result = await runCLI(["video", "clip", "--model", "grok/grok-imagine-video", flag, value, "--json", "--server", base]);
+      assert.equal(result.code, 2, flag);
+      assert.equal(JSON.parse(result.stdout).code, "FLAG_NOT_SUPPORTED", flag);
+    }
   });
 
   it("rejects invalid generate and extend durations before network calls", async () => {

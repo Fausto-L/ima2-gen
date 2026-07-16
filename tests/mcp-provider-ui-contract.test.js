@@ -34,9 +34,26 @@ describe("MCP provider UI contract", () => {
     assert.match(api, /event === "done"/);
     assert.match(api, /filename: data\.filename/);
     assert.match(api, /mediaType: data\.mediaType/);
-    assert.match(settings, /onDone: \(\) => get\(\)\.hydrateHistory\(\)/);
+    assert.match(settings, /onDone: \(\) => \{\s*get\(\)\.hydrateHistory\(\);\s*settleGeneration\(\)/);
     assert.match(settings, /`mcp_ui_\$\{Date\.now\(\)\}`/);
     assert.doesNotMatch(settings, /res\.image|addGeneratedHistoryItem/);
+  });
+
+  it("merges asset candidates and owns temporary local-reference cleanup through SSE settlement", () => {
+    const slots = readSource("ui/src/components/settings/McpReferenceSlots.tsx");
+    const settings = readSource("ui/src/store/storeSettingsImpl.ts");
+
+    assert.match(slots, /state\.assets/);
+    assert.match(slots, /asset\.kind === "image" \|\| asset\.kind === "element"/);
+    assert.match(slots, /mp4\|mov/);
+    assert.match(slots, /readFileAsDataURL/);
+    assert.match(slots, /referenceTagInvalid/);
+    assert.match(settings, /"\/api\/mcp\/temp-references"/);
+    assert.match(settings, /body: JSON\.stringify\(\{ images:/);
+    assert.match(settings, /await generationSettled;\s*if \(followupError\) throw followupError/);
+    assert.match(settings, /hasInvalidMcpReferenceTags\(referenceSelection\)/);
+    assert.match(settings, /finally \{\s*if \(tempBatchId\) await deleteMcpTempReferences\(tempBatchId\)/);
+    assert.match(settings, /\/api\/mcp\/temp-references\/\$\{encodeURIComponent\(batchId\)\}/);
   });
 
   it("keeps core and MCP lanes exclusive and persists opaque provider ids", () => {
