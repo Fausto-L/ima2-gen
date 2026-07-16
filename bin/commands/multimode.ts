@@ -48,7 +48,7 @@ const HELP = `
     -o, --out <file>                    First image (implies --max-images 1)
     -d, --out-dir <dir>                 Output dir for multiple images
         --json
-        --model <gpt-5.5|gpt-5.4|gpt-5.4-mini|gpt-5.6-sol|gpt-5.6-terra|gpt-5.6-luna|gpt-5.3-codex-spark|grok-imagine-image|grok-imagine-image-quality|nano-banana-2|nano-banana-pro>
+        --model <gpt-5.5|gpt-5.4|gpt-5.4-mini|gpt-5.6-sol|gpt-5.6-terra|gpt-5.6-luna|gpt-5.3-codex-spark|grok-imagine-image|grok-imagine-image-quality|nano-banana-2|nano-banana-pro>  Default: gpt-5.6-luna
                                       Aliases: luna, sol, terra, spark
         --provider <auto|oauth|api|grok|grok-api|agy|gemini-api>
                                       Provider (oauth = GPT OAuth; grok = xAI Grok; agy/gemini-api = Gemini)

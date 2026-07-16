@@ -171,7 +171,7 @@ candidates and select the best:
 
 ```bash
 # Generate 4 candidates in one request
-ima2 gen "<detailed prompt>" -n 4 -d ./candidates --quality high
+ima2 gen "<detailed prompt>" --model oauth/luna -n 4 -d ./candidates --quality high
 
 # Or use multimode for structurally different directions
 ima2 multimode "<detailed prompt>" --max-images 4 -d ./candidates
@@ -186,7 +186,7 @@ ima2 supports three parallel generation strategies. Choose by intent:
 
 | Strategy | Command | When to Use | Server Behavior |
 |----------|---------|-------------|-----------------|
-| **Single-request batch** | `ima2 gen "<prompt>" -n 4 -d ./out` | Same prompt, want quick variations | One request, server returns N images |
+| **Single-request batch** | `ima2 gen "<prompt>" --model oauth/luna -n 4 -d ./out` | Same prompt, want quick variations | One request, server returns N images |
 | **Multimode** | `ima2 multimode "<prompt>" --max-images 4` | Same prompt, want structurally different directions | SSE streaming, slot-by-slot progress, each slot is an independent generation |
 | **Independent CLI parallel** | Multiple `ima2 gen` in background | Different prompts, or mixed providers/models | Each is a separate server request, fully independent |
 
@@ -199,9 +199,9 @@ prompts or provider/model mixes.
 
 ```bash
 # Launch 3 different prompts concurrently
-ima2 gen "editorial hero with serif headline" --quality high -o ./out/editorial.png &
-ima2 gen "product-led hero with device mockup" --quality high -o ./out/product.png &
-ima2 gen "abstract gradient hero with floating shapes" --quality high -o ./out/abstract.png &
+ima2 gen "editorial hero with serif headline" --model oauth/luna --quality high -o ./out/editorial.png &
+ima2 gen "product-led hero with device mockup" --model oauth/luna --quality high -o ./out/product.png &
+ima2 gen "abstract gradient hero with floating shapes" --model oauth/luna --quality high -o ./out/abstract.png &
 
 # Monitor active jobs
 ima2 ps --json
@@ -235,7 +235,10 @@ is near the limit, wait or cancel low-priority jobs first.
 
 #### `ima2 gen` Fallback
 
-When ima2 is unavailable, the `ima2 gen` tool generates one image per call.
+Before CLI generation, run `ima2 models --kind image` and configure
+`ima2 defaults set image <lane>/<model>` or pass `--model <lane>/<model>` on
+every call. When ima2 is unavailable, the native image-generation fallback
+generates one image per call.
 For parallel exploration, generate sequentially and inspect each before the
 next. Multimode and independent CLI parallel have no `ima2 gen` equivalent;
 degrade to single-image iteration with prompt refinement between rounds.
@@ -285,7 +288,7 @@ When ima2 is available with multiple providers configured, choose by asset type:
 | High-fidelity product photo | GPT OAuth + `--quality high` | Best detail, lighting, material rendering |
 | Korean text in image | GPT OAuth + `--mode direct` | Best Hangul rendering with exact-text prompts |
 
-Override per-request only: `ima2 gen "prompt" --provider grok --model grok-imagine-image-quality`
+Override per-request only: `ima2 gen "prompt" --model grok/grok-imagine-image-quality`
 
 #### `ima2 gen` Fallback
 
@@ -299,10 +302,10 @@ When a design reference, brand guide, or existing asset exists, always attach it
 
 ```bash
 # Style reference
-ima2 gen "<prompt>" --ref style-guide.png --quality high
+ima2 gen "<prompt>" --model oauth/luna --ref style-guide.png --quality high
 
 # Multiple references (composition + style)
-ima2 gen "<prompt>" --ref layout-ref.png --ref brand-colors.png --quality high
+ima2 gen "<prompt>" --model oauth/luna --ref layout-ref.png --ref brand-colors.png --quality high
 ```
 
 Label each reference's role in the prompt text: "Use Image 1 as composition
@@ -336,19 +339,19 @@ ima2 gen "3D render of a liquid chrome splash blob, organic starburst shape, \
   Floating on a PURE SOLID BLACK background. The background must be 100% flat \
   pure black hex #000000. No checkerboard, no transparency pattern, no gradient, \
   no floor plane, no shadow, no vignette, no ambient glow on the background." \
-  --quality high --size 1024x1024 --mode direct -o chrome-splash.png
+  --model oauth/luna --quality high --size 1024x1024 --mode direct -o chrome-splash.png
 
 # Pure white background — best for dark/opaque subjects (products, dark UI elements)
 ima2 gen "Clean product photo of a matte black wireless earbud, centered, \
   floating at slight angle. PURE SOLID WHITE background hex #ffffff. \
   No shadow, no gradient, no surface, no reflection plane." \
-  --quality high --size 1024x1024 --mode direct -o earbud-cutout.png
+  --model oauth/luna --quality high --size 1024x1024 --mode direct -o earbud-cutout.png
 
 # Solid brand color background — when the target surface color is known
 ima2 gen "Flat illustration of a coffee cup with steam, centered. \
   PURE SOLID background hex #f5f0eb (exact match required). \
   No gradient, no texture, no shadow." \
-  --quality medium --size 512x512 --mode direct -o coffee-icon.png
+  --model oauth/luna --quality medium --size 512x512 --mode direct -o coffee-icon.png
 ```
 
 **Background prompt rules:**
@@ -409,23 +412,23 @@ solid-background strategy above.
 **Hero image (landing page):**
 ```bash
 ima2 gen "Use case: product-mockup. Asset type: landing page hero. A premium wireless headphone floating at a slight angle against a soft warm-gray studio backdrop. Matte black finish with brushed aluminum accents. Soft three-point studio lighting, key light from upper-left. Shallow depth of field. Wide composition with generous negative space on the right for headline overlay. No text, no logos, no watermark." \
-  --quality high --size 1536x1024 -o hero.png
+  --model oauth/luna --quality high --size 1536x1024 -o hero.png
 ```
 
 **OG / social share image:**
 ```bash
 ima2 gen "Use case: ads-marketing. Asset type: social share card. Clean product flat-lay of a notebook, pen, and ceramic mug on a white marble desk. Overhead shot. Soft diffused daylight. Space in the upper third for title overlay. Warm neutral palette. No text, no logos, no watermark." \
-  --quality high --size 1200x640 -o og-image.png
+  --model oauth/luna --quality high --size 1200x640 -o og-image.png
 ```
 
 **App screenshot mockup background:**
 ```bash
 ima2 gen "Use case: stylized-concept. Asset type: hero background for device mockup. Soft abstract gradient from #f0f4f8 to #dbeafe with subtle geometric shapes at 5% opacity. Clean, modern, minimal. No objects, no patterns, no text." \
-  --quality medium --size 1920x1088 -o mockup-bg.png
+  --model oauth/luna --quality medium --size 1920x1088 -o mockup-bg.png
 ```
 
 **Avatar / profile placeholder:**
 ```bash
 ima2 gen "Use case: stylized-concept. Asset type: user avatar. Friendly stylized portrait of a young professional, neutral expression, looking slightly left. Flat illustration style with subtle shadows. Solid #e5e7eb background. Circular crop safe. No text." \
-  --quality medium --size 512x512 -o avatar.png
+  --model oauth/luna --quality medium --size 512x512 -o avatar.png
 ```

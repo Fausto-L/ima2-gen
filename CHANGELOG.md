@@ -5,6 +5,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-07-16
+
+### Breaking
+
+- **Fail-closed CLI generation** — bare `ima2 gen` and generate-mode `ima2 video` now require a persisted target from `ima2 defaults set image|video <lane>/<model>`; without one they exit 2 with `NO_DEFAULT_MODEL`. A per-call `--model <lane>/<model>` or explicit `--provider <lane>` remains valid.
+- **Lane-qualified model namespace** — provider routes are explicit lanes (`oauth`, `api`, `grok`, `grok-api`, `agy`, `gemini-api`, `runway`, and `higgsfield`). Bare model IDs resolve only when unique; image aliases such as `oauth/luna` are accepted in the model segment.
+- **`--provider auto` removed from `gen` and generate-mode `video`** — it exits 2 with `PROVIDER_AUTO_REMOVED` instead of silently selecting a lane.
+- **Stable CLI failure contract** — `--json` failures emit exactly one `{ "ok": false, "code": "...", "message": "..." }` document. User-fixable routing/flag errors exit 2, server/connectivity errors exit 3, and generation failures exit 1.
+- **MCP generation lanes** — Runway, and Higgsfield once unlocked, use `POST /api/mcp/generate` plus SSE completion. MCP lanes accept one output per command, generated-gallery filenames for references, and reject unsupported core-only flags with `FLAG_NOT_SUPPORTED`.
+
+### Added
+
+- `ima2 models [--kind image|video] [--lane <lane>] [--json]` lists live lane status, models, and capabilities; the JSON shape is stable as `{ ok, kinds: { image: [], video: [] } }`.
+- `ima2 defaults set image|video <lane>/<model>` and `ima2 defaults reset image|video` manage the fail-closed CLI targets, which are also exposed as `defaults.cli` in JSON output.
+
 ## [2.0.17] - 2026-07-13
 
 ### Fixed

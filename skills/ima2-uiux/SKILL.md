@@ -2,7 +2,7 @@
 name: ima2-uiux
 description: "Design direction discovery and UX judgment for ima2 users. Use for UI/UX direction and design judgment — vague visual briefs, onboarding, empty/error/loading states, layout vocabulary, typography breaks, favicons, logos, and brand identity choices. Pairs with ima2-front: this skill decides the design direction, then load ima2-front to implement it. Triggers: make it look good, modern, clean, aesthetic, onboarding, empty state, error state, favicon, logo, design system, 깔끔하게, 모던하게, 감성적으로."
 metadata:
-  last-verified: "2026-07-02"
+  last-verified: "2026-07-14"
   short-description: "ima2-powered design judgment for vague briefs, UX states, typography, layout patterns, logos, and brand vocabulary."
 ---
 
@@ -71,7 +71,10 @@ fetch/open/text/get-dom/snapshot only after candidate URLs exist.
 
 | File | When to Read | What It Covers |
 |------|-------------|----------------|
-| `references/design-isms.md` | User names a style/movement | 15 design movements with CSS signatures, incl. Liquid Glass + Liquid Editorial default kit (2025-2026) + AI Serif Editorial + Organic Capsule (verified 2026-07-09) |
+| `references/design-isms.md` | User names a style/movement | 16 design movements with CSS signatures, incl. Liquid Glass + Liquid Editorial default kit (2025-2026) + AI Serif Editorial + Organic Capsule (verified 2026-07-09) |
+| `references/design-award-sources.md` | Looking for real-world design references | Tiered sourcing guide: award and gallery sites, what each is best for, and how to search |
+| `references/compositional-patterns.md` | Composing hero, navigation, motion, or content structure | Canonical compositional patterns from award research with responsive and accessibility gates |
+| `references/design-trends.md` | Checking dated prevalence, emerging techniques, or promotion status | 2026-07-14 axis-frequency snapshot, technique signals, signature ledger, and re-crawl protocol |
 | `references/design-read-example.md` | Learning or reviewing Design Read format | Filled-in Design Read + dial setting example |
 | `references/product-personalities.md` | User references a product | 10 product DNA profiles with exact tokens, incl. 2026 AI-product pastel + OpenAI warm-sans organic + Anthropic serif bookish |
 | `references/layout-macrostructures.md` | Choosing page/component layout | Component layouts + page-level compositions |
@@ -150,7 +153,7 @@ beige-default taste under a new label.
 
 Default kit for expressive surfaces: **Liquid Editorial** (2026 composite,
 decided 2026-07-07 from Tier-2 trend research — see `references/design-isms.md`
-§1.13 for the full signature):
+§1.14 for the full signature):
 
 - Structure: type-led editorial composition (oversized authored headline
   scale, grotesk default, serif display only with editorial rationale per
@@ -161,10 +164,10 @@ decided 2026-07-07 from Tier-2 trend research — see `references/design-isms.md
   content layer stays solid (`ima2-front` FE-LIQUID-LAYER-01). Children
   inside pill chrome carry no capsule borders/outlines at rest — emphasis via
   fills/tints only (`ima2-front` FE-PILL-NEST-01); top-bar scroll states per
-  `ima2-front` `top-bar.md` FE-TOPBAR-STATE-01.
+  `ima2-front/references/top-bar.md` FE-TOPBAR-STATE-01.
 - Motion: feedback baseline + one signature moment (pointer-proximity chips or
   scroll-driven reveal) + >= 1 supporting scroll reveal on landing-bucket
-  surfaces (floor 2, ceiling ~4 — `ima2-front` `motion.md`
+  surfaces (floor 2, ceiling ~4 — `ima2-front/references/motion.md`
   FE-MOTION-BUCKET-01); feedback-only elsewhere, per motion domain gates.
 - Color: OKLCH-derived single accent + tinted neutrals (hue budget,
   `references/color-system.md`).
@@ -271,8 +274,10 @@ utility CRUD/dashboard screens are exempt.
 
 0. **Probe, start, then choose the generator.** Run `ima2 status` first. If the
    server is down, attempt `ima2 serve` in the background, then re-run
-   `ima2 status` before skipping or falling back. Use `ima2 gen` only when
-   `ima2` is truly unavailable after that serve attempt. State the chosen
+   `ima2 status`, then inspect `ima2 models --kind image` and configure
+   `ima2 defaults set image <lane>/<model>` before a bare CLI generation.
+   Use the native image generator only when `ima2` is truly unavailable after
+   that serve attempt. State the chosen
    generator in the deliverable; if generation is skipped, state the exact skip
    reason and persist it in the devlog.
 0.5. **If the ism/direction is unclear, go IMAGE-FIRST (UX-IMAGE-FIRST-01, DEFAULT).**
@@ -297,16 +302,16 @@ utility CRUD/dashboard screens are exempt.
      oversized light-weight serif headline 'Artisan Coffee', warm stone palette \
      #f5f0eb/#2c2420/#c4956a, asymmetric layout, editorial photography of pour-over \
      coffee, generous whitespace, matte paper texture at 3% opacity. No icons, no \
-     cards. Dense footer with serif nav." --quality high --size 1536x1024 \
+     cards. Dense footer with serif nav." --model oauth/luna --quality high --size 1536x1024 \
      -o ./concepts/01_editorial_serif.png &
    ima2 gen "Use case: landing page. Geometric grotesk direction. ..." \
-     -o ./concepts/02_geometric_grotesk.png &
+     --model oauth/luna -o ./concepts/02_geometric_grotesk.png &
    ima2 gen "Use case: landing page. Product-led device mockup direction. ..." \
-     -o ./concepts/03_product_mockup.png &
+     --model oauth/luna -o ./concepts/03_product_mockup.png &
    ima2 gen "Use case: landing page. Dark premium minimal direction. ..." \
-     -o ./concepts/04_dark_premium.png &
+     --model oauth/luna -o ./concepts/04_dark_premium.png &
    ima2 gen "Use case: landing page. Warm organic capsule direction. ..." \
-     -o ./concepts/05_warm_capsule.png &
+     --model oauth/luna -o ./concepts/05_warm_capsule.png &
    ima2 ps --json   # monitor all 5
    wait
    ```
@@ -315,9 +320,9 @@ utility CRUD/dashboard screens are exempt.
    ima2 gen "Use case: landing page. Editorial serif direction. Full-bleed hero, \
      oversized light-weight serif 'Artisan Coffee', warm stone #f5f0eb/#2c2420, \
      asymmetric layout, editorial pour-over photo, matte paper 3%." \
-     --quality high --size 1536x1024 -o ./concepts/01_editorial.png &
-   ima2 gen "Use case: landing page. Geometric grotesk direction. ..." -o ./concepts/02_grotesk.png &
-   ima2 gen "Use case: landing page. Product-led mockup direction. ..." -o ./concepts/03_product.png &
+     --model oauth/luna --quality high --size 1536x1024 -o ./concepts/01_editorial.png &
+   ima2 gen "Use case: landing page. Geometric grotesk direction. ..." --model oauth/luna -o ./concepts/02_grotesk.png &
+   ima2 gen "Use case: landing page. Product-led mockup direction. ..." --model oauth/luna -o ./concepts/03_product.png &
    # ... (2 more ism directions)
    ima2 ps --json  # monitor
    wait
@@ -335,8 +340,8 @@ utility CRUD/dashboard screens are exempt.
    ```bash
    # Round 2: 3-4 refinements of the winning ism, anchored to Round 1 best
    ima2 gen "Same editorial direction. Vary: latte art hero, accent #b8860b gold, \
-     proof bar below fold." --ref ./concepts/01_editorial.png --quality high -o ./concepts/06_a.png &
-   ima2 gen "Same direction. Vary: weight 300 headline, ..." --ref ./concepts/01_editorial.png -o ./concepts/07_b.png &
+     proof bar below fold." --model oauth/luna --ref ./concepts/01_editorial.png --quality high -o ./concepts/06_a.png &
+   ima2 gen "Same direction. Vary: weight 300 headline, ..." --model oauth/luna --ref ./concepts/01_editorial.png -o ./concepts/07_b.png &
    # ... (1-2 more refinement variations)
    wait
    ```
@@ -373,8 +378,8 @@ utility CRUD/dashboard screens are exempt.
    intent, and density. Vague prompts ("modern clean landing page") are banned:
   a reader must be able to reconstruct the layout from the prompt alone.
 2. **Generate into the active devlog unit assets directory.** For page-level
-   surfaces, keep the 5-render process: run `ima2 gen <prompt> -n 1 -o <path>`
-   five times concurrently (or `ima2 gen <prompt> -n 5 -d <dir>` for a single
+   surfaces, keep the 5-render process: run `ima2 gen <prompt> --model <lane>/<model> -n 1 -o <path>`
+   five times concurrently (or `ima2 gen <prompt> --model <lane>/<model> -n 5 -d <dir>` for a single
    request) and monitor with `ima2 ps --json`. For component-level surfaces,
    generate about 3 context-strip renders of the component within its top
    viewport context. If the mockup needs motion material, use `ima2 video`.
@@ -403,7 +408,7 @@ utility CRUD/dashboard screens are exempt.
    WHY. Show the user the images (markdown image tags with absolute paths) with
    the synthesis ledger and let them confirm/adjust the per-token picks; in
    autonomous/goal mode make the picks with stated reasoning and record it.
-   Use the selection scorecard from `asset-requirements.md` FE-ASSET-SELECT-01
+   Use the selection scorecard from `ima2-front/references/asset-requirements.md` FE-ASSET-SELECT-01
    (subject fidelity, composition, palette, text render, asset-type fit,
    technical quality) as a structured rubric for per-token evaluation.
 4. **Make the SYNTHESIZED DESIGN.md the Design Read basis.** Extract palette,
@@ -412,11 +417,11 @@ utility CRUD/dashboard screens are exempt.
    source variant. Never pixel-copy any single render (generated text/logos are
    unreliable) -- the synthesis is a direction lock assembled from the best
    parts, not one asset. A mockup is not render verification; visual verification
-   remains owned by `visual-verification.md`.
+   remains owned by `ima2-front/references/visual-verification.md`.
 
 Precedence: UX-CONCEPT-GEN-01 governs the PRE-CODE concept stage. After code
-exists, `iterative-design.md` Alive/Dead governs POST-CODE iteration rounds.
-When structural variants are still needed, `prototype-variants.md` runs AFTER
+exists, `ima2-front/references/iterative-design.md` Alive/Dead governs POST-CODE iteration rounds.
+When structural variants are still needed, `ima2-front/references/prototype-variants.md` runs AFTER
 the concept lock.
 
 Skip (state the skip): user handed a FINISHED design to implement; an existing
@@ -443,17 +448,17 @@ ima2 gen "3D render of [subject], [material], [composition]. \
   Floating on a PURE SOLID BLACK background hex #000000. \
   No checkerboard, no transparency pattern, no gradient, \
   no floor plane, no shadow, no vignette, no ambient glow." \
-  --quality high --size 1024x1024 --mode direct -o concept-asset.png
+  --model oauth/luna --quality high --size 1024x1024 --mode direct -o concept-asset.png
 
 # Dark/matte subjects → PURE WHITE bg
 ima2 gen "[subject], centered, floating. PURE SOLID WHITE background \
   hex #ffffff. No shadow, no gradient, no surface." \
-  --quality high --size 1024x1024 --mode direct -o concept-asset.png
+  --model oauth/luna --quality high --size 1024x1024 --mode direct -o concept-asset.png
 
 # Known destination color → match it
 ima2 gen "[subject], centered. PURE SOLID background hex #[target]. \
   No gradient, no texture, no shadow." \
-  --quality medium --size 512x512 --mode direct -o concept-asset.png
+  --model oauth/luna --quality medium --size 512x512 --mode direct -o concept-asset.png
 ```
 
 **CSS removal (zero post-processing):**

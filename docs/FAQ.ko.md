@@ -271,8 +271,8 @@ ima2 doctor image-probe --json > ima2-image-probe.json
 `ima2 serve`가 실행 중이면 검색을 끈 생성과 일반 생성 결과도 하나씩 저장하세요.
 
 ```bash
-ima2 gen "고양이" --no-web-search --json > ima2-cat-no-search.json
-ima2 gen "고양이" --json > ima2-cat-current.json
+ima2 gen "고양이" --model oauth/gpt-5.6-luna --no-web-search --json > ima2-cat-no-search.json
+ima2 gen "고양이" --model oauth/gpt-5.6-luna --json > ima2-cat-current.json
 ```
 
 probe JSON은 공개 이슈에 첨부할 수 있도록 설계되어 있습니다. 진단 코드,

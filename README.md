@@ -30,12 +30,18 @@ ima2 serve
 
 Then open `http://localhost:3333`.
 
-To generate a video from the CLI:
+To generate from the CLI, inspect the live lane catalog and choose explicit image/video defaults once:
 
 ```bash
+ima2 models
+ima2 defaults set image oauth/gpt-5.6-luna
+ima2 defaults set video grok/grok-imagine-video
+ima2 gen "a clean product photo of a red guitar pedal"
 ima2 video "a cat playing piano" --duration 5 --resolution 720p
 ima2 video "animate this scene" --ref photo.png --duration 10
 ```
+
+`ima2 gen` and generate-mode `ima2 video` fail closed with `NO_DEFAULT_MODEL` until a CLI target is configured, unless that call passes `--model <lane>/<model>` or an explicit `--provider <lane>`. This prevents an upgrade from silently switching providers or billing lanes.
 
 If `3333` is already occupied, `ima2-gen` binds the next available port and writes the actual URL to `~/.ima2/server.json`. Use `ima2 open` or the URL printed in the terminal instead of assuming the port.
 
@@ -238,10 +244,13 @@ These require a running `ima2 serve`. The CLI covers every server route. The mos
 
 | Command | Description |
 |---|---|
-| `ima2 gen <prompt>` | Generate from the CLI |
+| `ima2 models [--kind image\|video] [--lane <lane>] [--json]` | List live lanes, status, model IDs, and capabilities |
+| `ima2 defaults set image\|video <lane>/<model>` | Persist the fail-closed CLI target for image or video generation |
+| `ima2 defaults reset image\|video` | Remove a persisted CLI generation target |
+| `ima2 gen <prompt> [--model <lane>/<model>]` | Generate from the CLI; requires an explicit target or saved image default |
 | `ima2 edit <file> --prompt <text>` | Edit an existing image |
 | `ima2 multimode <prompt>` | Multi-image SSE generation |
-| `ima2 video <prompt>` | Video generation via Grok (SSE streaming with progress) |
+| `ima2 video <prompt> [--model <lane>/<model>]` | Generate video through a Grok or MCP lane; requires an explicit target or saved video default |
 | `ima2 ls [--session <id>] [--favorites]` | List recent history |
 | `ima2 show <name> [--metadata]` | Reveal a generated asset |
 | `ima2 prompt ls -q <search>` | Search the prompt library |
@@ -252,11 +261,12 @@ These require a running `ima2 serve`. The CLI covers every server route. The mos
 The server advertises its actual port at `~/.ima2/server.json`. If `3333` is busy, the backend falls back to `3334+` and CLI commands follow the advertised URL. Override discovery with `--server <url>` or `IMA2_SERVER=http://localhost:3333`.
 
 ```bash
-ima2 gen "poster" --model gpt-5.4 --reasoning-effort high
+ima2 models --kind image
+ima2 gen "poster" --model oauth/gpt-5.6-luna --reasoning-effort high
 ima2 edit input.png --prompt "make it rainy" --web-search
 ima2 multimode "two cats playing" -n 2
-ima2 video "a cat playing piano" --duration 5 --resolution 720p
-ima2 video "animate this" --ref photo.png --aspect-ratio 16:9
+ima2 video "a cat playing piano" --model grok/grok-imagine-video --duration 5 --resolution 720p
+ima2 video "animate this" --model grok/grok-imagine-video --ref photo.png --aspect-ratio 16:9
 ima2 inflight ls --terminal
 ima2 config set imageModels.reasoningEffort high
 ```
@@ -341,7 +351,7 @@ Check that the local OAuth proxy is reachable. On networks that require a proxy,
 Set `OPENAI_API_KEY` or configure an API key before using `provider: "api"`. The default GPT OAuth path still works without an API key.
 
 **Image generation returns `EMPTY_RESPONSE` or no image data**
-Run `ima2 doctor image-probe --json > ima2-image-probe.json` and attach the safe JSON when opening an issue. For GPT OAuth cases, also capture `ima2 gen "고양이" --no-web-search --json` and `ima2 gen "고양이" --json` while `ima2 serve` is running. Do not share ChatGPT cookies, OAuth token files, API keys, raw upstream responses, prompt history, or generated base64. See the [FAQ support bundle](docs/FAQ.md#what-should-i-share-when-oauth-image-generation-returns-no-image).
+Run `ima2 doctor image-probe --json > ima2-image-probe.json` and attach the safe JSON when opening an issue. For GPT OAuth cases, also capture `ima2 gen "고양이" --model oauth/gpt-5.6-luna --no-web-search --json` and `ima2 gen "고양이" --model oauth/gpt-5.6-luna --json` while `ima2 serve` is running. Do not share ChatGPT cookies, OAuth token files, API keys, raw upstream responses, prompt history, or generated base64. See the [FAQ support bundle](docs/FAQ.md#what-should-i-share-when-oauth-image-generation-returns-no-image).
 
 **A large reference image fails**
 The app compresses large JPEG/PNG references before upload. If a file still fails, convert it to JPEG or PNG at a lower resolution and try again. HEIC/HEIF files are not supported by the browser path.

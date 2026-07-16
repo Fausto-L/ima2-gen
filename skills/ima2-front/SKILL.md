@@ -2,7 +2,7 @@
 name: ima2-front
 description: "Frontend implementation skill for ima2 users. Use for any frontend, web UI, or visual implementation work — building, styling, or redesigning pages/components, responsive layouts, motion, component architecture, and production-surface polish. Pairs with ima2-uiux: load it first when design direction is vague; this skill implements the chosen direction. Triggers: 'frontend', 'UI', 'component', 'CSS', 'responsive', 'animation', 'React', 'Vue', 'Svelte', 'Tailwind', 'layout', 'styling', 'redesign', 'mockup', 'anti-slop', '프론트엔드', 'UI 작업', '반응형', '디자인 수정'."
 metadata:
-  last-verified: "2026-07-02"
+  last-verified: "2026-07-14"
   short-description: "ima2-powered production-grade frontend implementation with responsive, accessible, anti-slop UI guidance."
   keywords: [frontend, UI, component, CSS, responsive, layout, animation, design implementation]
 ---
@@ -75,6 +75,10 @@ wiring, visual verification, and frontend platform rules.
 | `references/logo-sections.md`        | Integration/partner logo display     | Marquee CSS, static grid, orphan cell fix, grayscale treatment, no individual hover |
 | `references/brand-asset-sourcing.md` | Brand logos in UI                    | Simple Icons/SVGL sourcing, AI agent strategy, placeholder hierarchy, legal guide  |
 | `references/reference-capture.md`    | Cloning/analyzing other sites        | HTML+asset capture mechanics (pageAssets/curl), analysis-only legal line, provenance manifest, never-ship gate |
+| `references/section-level-sourcing.md` | Section-level design work (hero, pricing, testimonials, etc.) | Per-section-type reference sources from Land-book, One Page Love, and Lapa.ninja |
+| `../ima2-uiux/references/compositional-patterns.md` | Implementing an award-informed composition | Canonical hero, navigation, motion, and content-structure patterns with implementation gates |
+| `../ima2-uiux/references/design-award-sources.md` | Sourcing real-world design references | Tiered award/gallery source guide and search tactics |
+| `../ima2-uiux/references/design-trends.md` | Implementing a dated trend or checking whether a technique is stable | 2026-07-14 prevalence, maturity, signature status, risks, and re-crawl rules |
 | `references/dropdown-layer.md`       | Dropdowns, selects, menus, pickers   | Unified dropdown design layer (FE-DROPDOWN-LAYER-01): one skin over headless primitives, DS-detection precedence, scope table, mobile sheet |
 | `references/layout-discipline.md`    | Landing/marketing pages              | Hero, eyebrow, section repetition, bento, zigzag, per-section responsive transforms, hero composition grammar (2026) |
 | `references/consistency-locks.md`    | Any multi-section page               | Color, shape, theme consistency per page                                           |
@@ -182,7 +186,9 @@ If the user cannot answer these questions, use the `ima2-uiux` skill's structure
 **Concept pass before code (stub — canonical: `ima2-uiux` §2.5 UX-CONCEPT-GEN-01):**
 for a C2+ new/redesigned expressive or brand-visible surface (page, hero, key
 chrome like a top bar) with open design direction — probe `ima2 status`, attempt
-`ima2 serve` if down, `ima2 gen` only as true fallback — then
+`ima2 serve` if down, then run `ima2 models --kind image` and configure
+`ima2 defaults set image <lane>/<model>` before any bare `ima2 gen`; use the
+native image generator only as a true fallback — then
 generate 5 highly specific candidate mockups of ONE locked concept, then SYNTHESIZE the
 best elements across all 5 (NOT pick a single winner) into DESIGN.md and implement from
 that synthesis — do not start coding the layout blind.
@@ -220,7 +226,7 @@ Read `references/aesthetics.md` for full guidelines. Summary:
 - **Motion**: See `references/motion.md`. One signature moment + a few
   supporting reveals > 10 scattered effects; landing-bucket floor/ceiling per
   FE-MOTION-BUCKET-01.
-- **Assets**: Use screenshots, product images, diagrams, charts, illustrations, generated bitmaps, or soft 3D only when they add product meaning. When a real bitmap is needed (icon, hero, illustration), generate it with `ima2` — probe `ima2 status`, attempt `ima2 serve` if down — falling back to the native `imagegen` tool only when ima2 is truly unavailable; never ship a placeholder. `ima2` is preferred because it supports reference images, multi-candidate generation (`-n N`, multimode, independent CLI parallel — see `asset-requirements.md` FE-ASSET-PARALLEL-01), prompt builder, session style sheets, provider routing (GPT/Grok/Gemini — see `asset-requirements.md` FE-ASSET-PROVIDER-01), variant selection with element-ledger synthesis (`asset-requirements.md` FE-ASSET-SELECT-01), cutout asset background strategy (`asset-requirements.md` FE-ASSET-BG-01), and video (`ima2 video` — see `motion.md` FE-MOTION-VIDEO-01) for motion assets. For parallel generation, monitor with `ima2 ps --json` and cancel unwanted jobs with `ima2 cancel <id>`. Write **very explicit long prompts** (subject, composition, palette, lighting, style, aspect) per `asset-requirements.md`; prefer real/generated image or video assets over CSS gradient washes. Read any design reference or captured screenshot back into context with `view_image` before matching it. Third-party captures follow `reference-capture.md` (analysis-only, provenance manifest).
+- **Assets**: Use screenshots, product images, diagrams, charts, illustrations, generated bitmaps, or soft 3D only when they add product meaning. When a real bitmap is needed (icon, hero, illustration), generate it with `ima2` — probe `ima2 status`, attempt `ima2 serve` if down, inspect `ima2 models --kind image`, and set `ima2 defaults set image <lane>/<model>` before using bare generation — falling back to the native `imagegen` tool only when ima2 is truly unavailable; never ship a placeholder. `ima2` is preferred because it supports reference images, multi-candidate generation (`-n N`, multimode, independent CLI parallel — see `asset-requirements.md` FE-ASSET-PARALLEL-01), prompt builder, session style sheets, provider routing (GPT/Grok/Gemini — see `asset-requirements.md` FE-ASSET-PROVIDER-01), variant selection with element-ledger synthesis (`asset-requirements.md` FE-ASSET-SELECT-01), cutout asset background strategy (`asset-requirements.md` FE-ASSET-BG-01), and video (`ima2 video` — see `motion.md` FE-MOTION-VIDEO-01) for motion assets. For parallel generation, monitor with `ima2 ps --json` and cancel unwanted jobs with `ima2 cancel <id>`. Write **very explicit long prompts** (subject, composition, palette, lighting, style, aspect) per `asset-requirements.md`; prefer real/generated image or video assets over CSS gradient washes. Read any design reference or captured screenshot back into context with `view_image` before matching it. Third-party captures follow `reference-capture.md` (analysis-only, provenance manifest).
 - **Visual verification**: after UI changes, exercise the flow per visual verification (screenshot -> view_image) — `browser:control-in-app-browser` on the dev server, screenshot, `view_image` — instead of claiming visual correctness from code alone.
 
 ### Cutout Asset Generation (FE-ASSET-BG-01 surface — STRICT)
@@ -240,17 +246,17 @@ ima2 gen "3D render of [subject], [material/style details], [composition]. \
   Floating on a PURE SOLID BLACK background. The background must be 100% flat \
   pure black hex #000000. No checkerboard, no transparency pattern, no gradient, \
   no floor plane, no shadow, no vignette, no ambient glow on the background." \
-  --quality high --size 1024x1024 --mode direct -o asset.png
+  --model oauth/luna --quality high --size 1024x1024 --mode direct -o asset.png
 
 # Dark/opaque subjects → PURE WHITE bg
 ima2 gen "[subject description], centered, floating. PURE SOLID WHITE background \
   hex #ffffff. No shadow, no gradient, no surface, no reflection plane." \
-  --quality high --size 1024x1024 --mode direct -o asset.png
+  --model oauth/luna --quality high --size 1024x1024 --mode direct -o asset.png
 
 # Known destination color → match it exactly
 ima2 gen "[subject description], centered. PURE SOLID background hex #[target]. \
   No gradient, no texture, no shadow." \
-  --quality medium --size 512x512 --mode direct -o asset.png
+  --model oauth/luna --quality medium --size 512x512 --mode direct -o asset.png
 ```
 
 **Quick reference — CSS removal (zero post-processing):**

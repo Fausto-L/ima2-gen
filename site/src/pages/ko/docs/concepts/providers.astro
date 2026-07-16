@@ -95,7 +95,19 @@ const d = (slug: string) => docsPath(import.meta.env.BASE_URL, 'ko', slug);
     비디오 설정 또는 CLI
     <code>--planner-model</code>로 플래너 모델을 고를 수 있습니다. 엔드포인트
     <code>POST /api/video/generate</code>는 SSE 이벤트를 스트리밍합니다: planning → submitted →
-    progress → done. CLI: <code>ima2 video "prompt" --duration 5 --resolution 720p</code>.
+    progress → done. CLI: <code>ima2 video "prompt" --model grok/grok-imagine-video --duration 5 --resolution 720p</code>
+    (한 번만 <code>ima2 defaults set video grok/grok-imagine-video</code>로 기본값을 잡아두면 이후엔 생략 가능).
+  </p>
+
+  <h2>MCP 레인 (Runway, Higgsfield)</h2>
+  <p>
+    3.0.0부터 CLI는 원격 MCP 프로바이더 두 레인을 추가로 라우팅합니다:
+    <code>runway</code>(Gen-4/4.5, Veo 3.1, Seedance 2, Kling — 이미지·비디오)와
+    <code>higgsfield</code>(유료 플랜 전까지 카탈로그 전용). <code>ima2 models</code>로 레인 상태와
+    모델별 capability를 확인한 뒤 다른 레인처럼 지정하면 됩니다:
+    <code>ima2 video "prompt" --model runway/veo-3.1 --duration 8</code>. MCP 작업은 비동기라서
+    CLI가 <code>POST /api/mcp/generate</code>로 제출하고 공용 SSE 이벤트 스트림에서 완료를 기다린 뒤
+    갤러리에 파일이 저장됩니다.
   </p>
 
   <h2>Grok 청구 &amp; 계정 전환</h2>

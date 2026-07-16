@@ -298,8 +298,8 @@ If `ima2 serve` is running, also capture one search-off and one normal cat
 generation result:
 
 ```bash
-ima2 gen "고양이" --no-web-search --json > ima2-cat-no-search.json
-ima2 gen "고양이" --json > ima2-cat-current.json
+ima2 gen "고양이" --model oauth/gpt-5.6-luna --no-web-search --json > ima2-cat-no-search.json
+ima2 gen "고양이" --model oauth/gpt-5.6-luna --json > ima2-cat-current.json
 ```
 
 The probe JSON is designed to be safe to attach to a public issue. It reports

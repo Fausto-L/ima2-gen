@@ -69,7 +69,14 @@ Agents should start from the packaged skill and capability commands instead of g
 | `ima2 node generate` | Node-mode generate (SSE; supports `--no-stream`) |
 | `ima2 node show <nodeId>` | Read node metadata |
 
-Generation flags include `--provider <auto|oauth|api|grok|grok-api|agy|gemini-api>`, `--reasoning-effort {none\|low\|medium\|high\|xhigh\|max}`, `--web-search` / `--no-web-search`, `--model`, `--mode`, `--moderation`, `--ref <file>` (repeatable, up to 5 where supported), `-q low|medium|high`, `-n <count>`, `-o <file>`.
+Since 3.0.0, `ima2 gen` and generate-mode `ima2 video` are **fail-closed**: they resolve their
+target through the lane catalog (`GET /api/models`) and exit 2 with `NO_DEFAULT_MODEL` when no
+`--model <lane>/<model>`, `--provider <lane>`, or persisted `ima2 defaults set image|video`
+target applies. Their `--provider` accepts explicit lanes only
+(`oauth|api|grok|grok-api|agy|gemini-api|runway|higgsfield`); `--provider auto` exits 2 with
+`PROVIDER_AUTO_REMOVED`. Inspect lanes and models with `ima2 models [--kind image|video] [--lane <lane>] [--json]`.
+
+`edit`, `multimode`, and `node generate` keep the legacy surface for now: `--provider <auto|oauth|api|grok|grok-api|agy|gemini-api>`, `--reasoning-effort {none\|low\|medium\|high\|xhigh\|max}`, `--web-search` / `--no-web-search`, `--model`, `--mode`, `--moderation`, `--ref <file>` (repeatable, up to 5 where supported), `-q low|medium|high`, `-n <count>`, `-o <file>`.
 
 Provider override semantics:
 
@@ -78,7 +85,8 @@ Provider override semantics:
 - `grok` uses the bundled progrok xAI proxy (`127.0.0.1:18645`). Classic generation first runs mandatory xAI Web Search through Responses API, then asks `grok-4.3` to call ima2's local `generate_image` tool, then ima2 executes xAI `/v1/images/generations`. If `--ref` images are attached, the final step uses xAI `/v1/images/edits` instead so image-to-image/reference context is preserved. Models: `grok-imagine-image`, `grok-imagine-image-quality`. Size is mapped to xAI `aspect_ratio` and `resolution`; the UI web-search toggle is OpenAI-provider-only because Grok search is always on in this path.
 - `agy` spawns the Antigravity CLI to generate via Google Gemini (`nano-banana-2`). Fixed 1024×1024 JPEG output, max 3 refs. No web search, quality, size, or mask controls. If `agy` is not on the server process PATH, ima2 also checks common user-local installs such as `~/.local/bin/agy`; set `IMA2_AGY_BIN=/absolute/path/to/agy` to force a specific binary.
 - `gemini-api` calls the Google Generative Language API directly. Models: `nano-banana-2` (Gemini 3.1 Flash Image) and `nano-banana-pro` (Gemini 3 Pro Image). Use `--model nano-banana-2` or `--model nano-banana-pro` to select. Supports `--size` for aspect ratio and resolution (512px–4K) on the direct API path; Vertex AI ignores aspect/size. Requires `GEMINI_API_KEY` or a Vertex AI service account (`VERTEX_SERVICE_ACCOUNT_JSON`). Switching from `agy` or `gemini-api` provider auto-selects the corresponding Gemini model; switching away resets to the GPT default.
-- `auto` preserves route default behavior and currently resolves to GPT OAuth unless server routing changes.
+- `runway` / `higgsfield` (gen/video only) route through the MCP async pipeline (`POST /api/mcp/generate` + SSE wait). Runway requires an MCP connection; Higgsfield stays catalog-only (`locked`) until a paid plan. MCP lanes accept `-n 1` only, gallery filenames for `--ref`, and reject core-only flags with `FLAG_NOT_SUPPORTED`.
+- `auto` preserves route default behavior and currently resolves to GPT OAuth unless server routing changes (edit/multimode/node only; removed from gen/video in 3.0.0).
 
 `ima2 serve` starts the bundled Grok proxy automatically. No separate `progrok`
 install is required. Use `ima2 grok login` once to authorize xAI OAuth. Login
@@ -99,9 +107,12 @@ three Grok references are rejected with `GROK_REF_TOO_MANY`, matching xAI's
 documented multi-image editing limit.
 
 ```bash
-ima2 gen "a poster of a samurai cat" --model gpt-5.4 --provider api --reasoning-effort high
+ima2 models --kind image
+ima2 defaults set image oauth/gpt-5.6-luna
+ima2 gen "a poster of a samurai cat" --model api/gpt-5.4 --reasoning-effort high
 ima2 grok login
-ima2 gen "a cinematic neon city" --provider grok --model grok-imagine-image-quality
+ima2 gen "a cinematic neon city" --model grok/grok-imagine-image-quality
+ima2 gen "campaign still" --model runway/gen-4 --ref 1780000000000_abcd.png
 ima2 edit input.png --prompt "make it rainy" --provider oauth --web-search
 ima2 multimode "two cats playing" --max-images 2 --ref cat.png --mode direct
 ima2 node generate --node n_abc --prompt "add neon lights" --no-stream
@@ -195,10 +206,12 @@ Video mode is auto-detected from `--ref` count:
 SSE events: `planning` → `submitted` → `progress` (0–100%) → `done` or `error`.
 
 ```bash
+ima2 defaults set video grok/grok-imagine-video   # once; bare calls fail closed without it
 ima2 video "a cat playing piano"
 ima2 video "animate this" --ref photo.png --duration 10
 ima2 video "animate this in high detail" --ref photo.png --model grok-imagine-video-1.5 --resolution 1080p
-ima2 video "cinematic" --resolution 720p --aspect-ratio 16:9 -o out.mp4
+ima2 video "cinematic" --model grok/grok-imagine-video --resolution 720p --aspect-ratio 16:9 -o out.mp4
+ima2 video "product reveal, slow dolly-in" --model runway/veo-3.1 --duration 8
 ima2 video "style transfer" --ref a.png --ref b.png --ref c.png --model grok-imagine-video
 ima2 video edit "make the lighting warm sunset" --video 1780226256355_50252101.mp4 -o edited.mp4
 ima2 video extend "camera slowly pulls back" --video 1780226256355_50252101.mp4 --duration 6
@@ -246,8 +259,8 @@ For GPT OAuth no-image reports, a useful support bundle is:
 ```bash
 ima2 doctor
 ima2 doctor image-probe --json > ima2-image-probe.json
-ima2 gen "고양이" --no-web-search --json > ima2-cat-no-search.json
-ima2 gen "고양이" --json > ima2-cat-current.json
+ima2 gen "고양이" --model oauth/gpt-5.6-luna --no-web-search --json > ima2-cat-no-search.json
+ima2 gen "고양이" --model oauth/gpt-5.6-luna --json > ima2-cat-current.json
 ```
 
 Do not share ChatGPT cookies, OAuth token files, API keys, prompt history, raw
@@ -362,8 +375,11 @@ Card News requires the server to be started with `IMA2_CARD_NEWS=1` (or `feature
 | `ima2 defaults --local --json` | Read local effective config only |
 | `ima2 defaults set model <model>` | Write `imageModels.default` and `apiProvider.defaultImageModel` |
 | `ima2 defaults set reasoning <effort>` | Write `imageModels.reasoningEffort` and `apiProvider.defaultReasoningEffort` |
+| `ima2 defaults set image <lane>/<model>` | Persist the fail-closed CLI image target (`defaults.image`); validated against `ima2 models`, locked lanes rejected |
+| `ima2 defaults set video <lane>/<model>` | Persist the fail-closed CLI video target (`defaults.video`) |
 | `ima2 defaults reset model` | Remove persisted model defaults |
 | `ima2 defaults reset reasoning` | Remove persisted reasoning defaults |
+| `ima2 defaults reset image` / `reset video` | Remove the persisted CLI generation targets |
 
 Allowed keys (whitelist):
 

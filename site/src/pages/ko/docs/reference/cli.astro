@@ -41,10 +41,10 @@ const cliMd = 'https://github.com/lidge-jun/ima2-gen/blob/main/docs/CLI.md';
   <table>
     <thead><tr><th>명령</th><th>설명</th></tr></thead>
     <tbody>
-      <tr><td><code>ima2 gen &lt;prompt&gt;</code></td><td>CLI에서 생성.</td></tr>
+      <tr><td><code>ima2 gen &lt;prompt&gt; [--model &lt;lane&gt;/&lt;model&gt;]</code></td><td>저장했거나 직접 지정한 이미지 레인으로 생성.</td></tr>
       <tr><td><code>ima2 edit &lt;file&gt; --prompt &lt;text&gt;</code></td><td>기존 이미지 편집.</td></tr>
       <tr><td><code>ima2 multimode &lt;prompt&gt;</code></td><td>멀티 이미지 SSE 생성 (<code>phase</code> / <code>partial</code> / <code>image</code> 스트리밍).</td></tr>
-      <tr><td><code>ima2 video &lt;prompt&gt;</code></td><td>Grok을 통한 비디오 생성 (SSE 스트리밍, 진행률 표시).</td></tr>
+      <tr><td><code>ima2 video &lt;prompt&gt; [--model &lt;lane&gt;/&lt;model&gt;]</code></td><td>저장했거나 직접 지정한 Grok/MCP 레인으로 비디오 생성.</td></tr>
       <tr><td><code>ima2 video edit &lt;prompt&gt; --video &lt;value&gt;</code></td><td>비디오-투-비디오 편집. HTTPS URL, xAI file_id, data URL, generated MP4 지원.</td></tr>
       <tr><td><code>ima2 video extend &lt;prompt&gt; --video &lt;value&gt;</code></td><td>비디오 마지막 프레임에서 이어붙이기. extension duration은 2–10초.</td></tr>
       <tr><td><code>ima2 video frame &lt;generated-file&gt;</code></td><td>generated MP4에서 PNG 프레임 추출.</td></tr>
@@ -54,22 +54,45 @@ const cliMd = 'https://github.com/lidge-jun/ima2-gen/blob/main/docs/CLI.md';
     </tbody>
   </table>
   <p>
-    생성 플래그: <code>--provider &lt;auto|oauth|api|grok|grok-api|agy|gemini-api&gt;</code>, <code>--reasoning-effort</code>
+    <code>gen</code>의 레인 플래그는 <code>--provider &lt;oauth|api|grok|grok-api|agy|gemini-api|runway|higgsfield&gt;</code>입니다. 그 밖에 <code>--reasoning-effort</code>
     (none, low, medium, high, xhigh), <code>--web-search</code> / <code>--no-web-search</code>,
     <code>--model</code>, <code>--mode</code>, <code>--moderation</code>,
     <code>--ref &lt;file&gt;</code> (반복 가능, 최대 5), <code>-q low|medium|high</code>,
     <code>-n &lt;count&gt;</code>, <code>-o &lt;file&gt;</code>.
-    비디오 명령에는 <code>--planner-model &lt;name&gt;</code>(기본 <code>grok-4.3</code>)와
+    생성 모드 <code>video</code>는 <code>--provider &lt;grok|grok-api|runway|higgsfield&gt;</code>를 받습니다.
+    Grok 비디오 명령에는 <code>--planner-model &lt;name&gt;</code>(기본 <code>grok-4.3</code>)와
     순차 클립 간 연속성을 위한 <code>--storyboard</code>도 있습니다.
   </p>
   <p><code>ima2 grok login</code>은 manual-paste 로그인 흐름을 기본으로 씁니다.</p>
-  <pre><code>ima2 gen "a poster of a samurai cat" --model gpt-5.4 --provider api --reasoning-effort high
+  <pre><code>ima2 gen "a poster of a samurai cat" --model api/gpt-5.4 --reasoning-effort high
 ima2 grok login
-ima2 gen "a cinematic neon city" --provider grok --model grok-imagine-image-quality
-ima2 video "고양이가 피아노 치는 영상" --duration 5 --resolution 720p
-ima2 video "이 장면을 애니메이트" --ref scene.png --planner-model grok-4.3 --storyboard
+ima2 gen "a cinematic neon city" --model grok/grok-imagine-image-quality
+ima2 video "고양이가 피아노 치는 영상" --model grok/grok-imagine-video --duration 5 --resolution 720p
+ima2 video "이 장면을 애니메이트" --model grok/grok-imagine-video --ref scene.png --planner-model grok-4.3 --storyboard
 ima2 edit input.png --prompt "make it rainy" --provider oauth --web-search
 ima2 multimode "two cats playing" --max-images 2 --ref cat.png --mode direct</code></pre>
+
+  <h2>명시적 타깃 계약</h2>
+  <p>
+    이제 bare <code>ima2 gen</code>과 생성 모드 <code>ima2 video</code>는 프로바이더를 임의로 고르지 않습니다.
+    먼저 <code>ima2 defaults set image|video &lt;lane&gt;/&lt;model&gt;</code>로 기본 타깃을 저장하거나,
+    호출할 때 <code>--model &lt;lane&gt;/&lt;model&gt;</code>을 지정하세요. 레인 없이 쓴 모델 ID는 전체 레인에서
+    하나뿐일 때만 허용됩니다. <code>oauth/luna</code>처럼 코어 이미지 alias를 모델 구간에 쓸 수도 있습니다.
+    두 명령에서 <code>--provider auto</code>는 제거됐으며 <code>PROVIDER_AUTO_REMOVED</code>로 끝납니다.
+  </p>
+  <p>
+    코어 레인은 <code>oauth</code>, <code>api</code>, <code>grok</code>, <code>grok-api</code>,
+    <code>agy</code>, <code>gemini-api</code>이고, 구독형 MCP 레인은 <code>runway</code>와
+    <code>higgsfield</code>입니다. MCP 작업은 비동기로 접수된 뒤 CLI가 SSE 완료 이벤트를 기다립니다.
+    한 번에 결과 한 개만 만들 수 있고, <code>--ref</code>에는 갤러리에서 생성된 파일명만 쓸 수 있으며,
+    코어 전용 플래그는 <code>FLAG_NOT_SUPPORTED</code>로 거부됩니다.
+  </p>
+  <div class="docs-callout docs-callout-info">
+    <strong>JSON 오류 형식.</strong> <code>--json</code> 실패는
+    <code>{`{"ok":false,"code":"...","message":"..."}`}</code> 문서 하나만 출력합니다.
+    종료 코드 2는 <code>NO_DEFAULT_MODEL</code> 같은 사용자 수정 가능 오류, 3은 서버 연결 오류,
+    1은 제출 뒤 발생한 생성 실패입니다.
+  </div>
 
   <h2>에이전트 디스커버리</h2>
   <p>에이전트는 흩어진 도움말을 추측하지 말고 패키징된 skill·capability 명령에서 시작해야 합니다.</p>
@@ -87,6 +110,7 @@ ima2 multimode "two cats playing" --max-images 2 --ref cat.png --mode direct</co
       <tr><td><code>ima2 skill install --dir &lt;path&gt;</code></td><td>에이전트의 스킬 디렉토리에 설치.</td></tr>
       <tr><td><code>ima2 skill install --tmp</code></td><td><code>$TMPDIR/ima2-skills/</code>에 설치 (임시 폴백).</td></tr>
       <tr><td><code>ima2 capabilities --json</code></td><td>지원 명령, 모델/품질/reasoning 값, 권고 한도.</td></tr>
+      <tr><td><code>ima2 models [--kind image|video] [--lane &lt;lane&gt;] [--json]</code></td><td>실행 중인 서버의 레인 상태·모델 ID·capability 요약. JSON은 <code>{`{ ok, kinds: { image: [], video: [] } }`}</code> 형식으로 고정됩니다.</td></tr>
       <tr><td><code>ima2 defaults --json</code></td><td>유효 모델/reasoning 기본값(서버 우선, 로컬 설정 폴백).</td></tr>
     </tbody>
   </table>
@@ -124,6 +148,8 @@ ima2 multimode "two cats playing" --max-images 2 --ref cat.png --mode direct</co
       <tr><td><code>ima2 config keys [--json]</code></td><td>쓰기 가능 키와 이를 오버라이드하는 env 변수 목록.</td></tr>
       <tr><td><code>ima2 defaults set model &lt;model&gt;</code></td><td>두 프로바이더 경로 모두에 기본 이미지 모델 영속화.</td></tr>
       <tr><td><code>ima2 defaults set reasoning &lt;effort&gt;</code></td><td>두 프로바이더 경로 모두에 기본 reasoning effort 영속화.</td></tr>
+      <tr><td><code>ima2 defaults set image|video &lt;lane&gt;/&lt;model&gt;</code></td><td>레인 상태와 모델을 검증한 뒤 CLI 생성 타깃 저장.</td></tr>
+      <tr><td><code>ima2 defaults reset image|video</code></td><td>저장한 CLI 타깃 삭제. 다음 bare 생성은 다시 fail-closed.</td></tr>
     </tbody>
   </table>
 

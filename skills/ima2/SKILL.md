@@ -29,6 +29,7 @@ ima2 skill install --tmp          # install to temp dir (ephemeral fallback)
 ima2 skill front refs             # list frontend reference modules
 ima2 skill front ref motion       # load one reference module
 ima2 capabilities --json
+ima2 models --json
 ima2 defaults --json
 ima2 ping
 ```
@@ -44,22 +45,31 @@ Use `ima2 doctor` when setup, GPT OAuth, storage, or package integrity is unclea
 
 ## Generate Images
 
-Basic text-to-image:
+List ready image lanes, choose a persistent CLI target, then generate:
 
 ```bash
+ima2 models --kind image
+ima2 defaults set image oauth/gpt-5.6-luna
 ima2 gen "a clean product photo of a red guitar pedal"
 ```
+
+Bare `ima2 gen` fails closed when no CLI image target is configured. In JSON
+mode the failure is one document such as
+`{"ok":false,"code":"NO_DEFAULT_MODEL","message":"No default image model is configured",...}`
+and exits 2. Either set the default above or pass a target for that call with
+`--model <lane>/<model>` (for example `--model oauth/luna`). Never rely on an
+implicit provider; `--provider auto` was removed.
 
 Use high quality when output fidelity matters:
 
 ```bash
-ima2 gen "a print-ready poster" --quality high
+ima2 gen "a print-ready poster" --model oauth/luna --quality high
 ```
 
 Use direct mode when the prompt should be passed with minimal rewriting:
 
 ```bash
-ima2 gen "exact prompt text" --mode direct
+ima2 gen "exact prompt text" --model oauth/luna --mode direct
 ```
 
 **`--mode` explained:**
@@ -72,7 +82,7 @@ ima2 gen "exact prompt text" --mode direct
 Use request-level overrides only for that one call:
 
 ```bash
-ima2 gen "cinematic mountain" --model gpt-5.5 --reasoning-effort high
+ima2 gen "cinematic mountain" --model oauth/gpt-5.5 --reasoning-effort high
 ```
 
 Use Grok when the request should run through bundled progrok, mandatory xAI Web
@@ -81,7 +91,7 @@ Search, planner pass (default: `grok-4.3`), and xAI Images API:
 ```bash
 ima2 grok login
 ima2 grok status
-ima2 gen "cinematic neon city" --provider grok --model grok-imagine-image-quality
+ima2 gen "cinematic neon city" --model grok/grok-imagine-image-quality
 ```
 
 `ima2 grok login` defaults to the manual-paste flow.
@@ -536,7 +546,8 @@ ima2 history import ./local-image.png
 
 ## Defaults
 
-Inspect the running server defaults:
+Inspect the running server defaults, including `defaults.cli.image` and
+`defaults.cli.video` in JSON:
 
 ```bash
 ima2 defaults --json
@@ -548,14 +559,40 @@ Inspect local effective defaults without contacting a server:
 ima2 defaults --local --json
 ```
 
-Persist the default model for GPT OAuth and API provider paths:
+Discover live model IDs and lane status before choosing a CLI target:
 
-The built-in default is `gpt-5.6-luna`; Grok image and video generation default to
-`grok-imagine-image-quality` and `grok-imagine-video-1.5` respectively.
+```bash
+ima2 models
+ima2 models --kind image --lane oauth --json
+ima2 models --kind video --json
+```
+
+`ima2 models --json` has the stable shape
+`{"ok":true,"kinds":{"image":[],"video":[]}}`. It requires the server; an
+unreachable server returns `SERVER_UNREACHABLE` and exits 3.
+
+Persist the server-side model defaults shared by GPT OAuth and API provider paths:
+
+The built-in OAuth image default is `gpt-5.6-luna`; Grok image and video code
+defaults are `grok-imagine-image-quality` and `grok-imagine-video` respectively.
+Use `grok-imagine-video-1.5` explicitly when its quality or 1080p capabilities
+are needed.
 
 ```bash
 ima2 defaults set model gpt-5.5
 ```
+
+Persist the fail-closed CLI image and video targets separately:
+
+```bash
+ima2 defaults set image oauth/gpt-5.6-luna
+ima2 defaults set video grok/grok-imagine-video
+ima2 defaults reset image
+ima2 defaults reset video
+```
+
+Setting a CLI target validates the live catalog. Unknown models and lanes are
+rejected, and locked/disconnected/key-missing lanes cannot become defaults.
 
 Persist the default reasoning policy:
 
@@ -615,15 +652,29 @@ ima2 config keys --json
 
 ## Video Generation
 
-Generate AI videos via Grok (SuperGrok subscription required).
+Generate AI videos through a configured Grok or MCP lane. Grok OAuth requires
+a SuperGrok subscription; MCP lanes require their own connected subscription.
 
 ### Quick Start
 
 ```bash
-ima2 video "a cat playing piano"                    # text-to-video
-ima2 video "animate this" --ref photo.png           # image-to-video
-ima2 video "cinematic" --ref a.png --ref b.png      # reference-to-video (max 7)
+ima2 models --kind video
+ima2 defaults set video grok/grok-imagine-video
+ima2 video "a cat playing piano"                    # text-to-video, uses saved default
+ima2 video "animate this" --model grok/grok-imagine-video --ref photo.png
+ima2 video "cinematic" --model grok/grok-imagine-video --ref a.png --ref b.png
 ```
+
+Targets use `--model <lane>/<model>`; a bare ID is accepted only when it is
+unique across lanes. Generate-mode `video` also accepts an explicit
+`--provider <grok|grok-api|runway|higgsfield>`. `--provider auto` is removed.
+
+Runway and Higgsfield are MCP lanes. They submit `POST /api/mcp/generate` (202)
+and the CLI waits on SSE until completion. MCP generation supports `-n 1` only,
+and `--ref` values must be generated gallery filenames, not arbitrary local
+paths. Core-only planning/session flags are rejected with `FLAG_NOT_SUPPORTED`.
+Runway is available when connected; Higgsfield remains locked until its paid
+lane is enabled. Inspect current state with `ima2 models --kind video`.
 
 ### Modes (auto-detected from --ref count)
 
@@ -642,7 +693,7 @@ ima2 video "cinematic" --ref a.png --ref b.png      # reference-to-video (max 7)
 | `--duration` | 1–15 (seconds) | 5 |
 | `--resolution` | 480p, 720p, 1080p (1.5 T2V canvas shim or I2V) | 480p |
 | `--aspect-ratio` | auto, 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3 | auto |
-| `--model` | grok-imagine-video, grok-imagine-video-1.5 (preview alias accepted) | grok-imagine-video-1.5 |
+| `--model` | `<lane>/<model>`; Grok base or 1.5 (preview alias accepted) | `grok-imagine-video` after selecting the Grok lane |
 | `--topic` | any string | (none) |
 | `--session` | session ID | (none) |
 | `-o, --out` | output file path | saved under configured generated dir |
@@ -657,7 +708,7 @@ video's last frame plus its stored `revisedPrompt` lineage.
 
 ```bash
 ima2 video "episode 1: morning routine" --topic "daily-vlog"
-ima2 video "episode 2: commute" --topic "daily-vlog"
+ima2 video "episode 2: commute" --model grok/grok-imagine-video --topic "daily-vlog"
 ```
 
 ### Planning Layer
@@ -667,8 +718,8 @@ Prompts are NOT sent directly to the video model. A Grok planner rewrites your p
 Override the planner model per-request:
 
 ```bash
-ima2 video "prompt" --planner-model gpt-5.5
-ima2 video "prompt" --planner-model gpt-5.4
+ima2 video "prompt" --model grok/grok-imagine-video --planner-model gpt-5.5
+ima2 video "prompt" --model grok/grok-imagine-video --planner-model gpt-5.4
 ```
 
 ### Grok 4.3 Prompt Surfaces

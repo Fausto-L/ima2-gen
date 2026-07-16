@@ -162,7 +162,19 @@ const d = (slug: string) => docsPath(import.meta.env.BASE_URL, 'en', slug);
     base-model only. Choose the planner model in video settings or pass
     <code>--planner-model</code> on CLI video commands.
     The endpoint <code>POST /api/video/generate</code> streams SSE events: planning → submitted →
-    progress → done. From the CLI: <code>ima2 video "prompt" --duration 5 --resolution 720p</code>.
+    progress → done. From the CLI: <code>ima2 video "prompt" --model grok/grok-imagine-video --duration 5 --resolution 720p</code>
+    (or set a persistent target once with <code>ima2 defaults set video grok/grok-imagine-video</code>).
+  </p>
+
+  <h2>MCP lanes (Runway, Higgsfield)</h2>
+  <p>
+    Since 3.0.0 the CLI routes two additional lanes through remote MCP providers:
+    <code>runway</code> (Gen-4/4.5, Veo 3.1, Seedance 2, Kling — image and video) and
+    <code>higgsfield</code> (catalog-only until a paid plan unlocks execution). Inspect live lane
+    status and per-model capabilities with <code>ima2 models</code>, then target them like any
+    other lane: <code>ima2 video "prompt" --model runway/veo-3.1 --duration 8</code>. MCP jobs are
+    asynchronous — the CLI submits to <code>POST /api/mcp/generate</code> and waits on the shared
+    SSE event stream until the file lands in the gallery.
   </p>
 
   <h2>API-provider defaults</h2>
