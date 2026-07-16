@@ -45,7 +45,9 @@ describe("video continuity UI contracts", () => {
   it("clears pending continuity when its reference or prompt chip is removed", () => {
     const store = readSourceTree("ui/src/store/useAppStore.ts");
     assert.match(store, /!prompt\.id\.startsWith\("video-continuity:"\)/);
-    assert.match(store, /set\(\{ referenceImages: \[\], canvasReferenceImage: null, videoContinuityLineage: null, insertedPrompts, providerUrlReference: null \}\)/);
+    // Tray model (260716_composer-tray 010): clearing references routes
+    // through the tray mutation helper and still resets continuity state.
+    assert.match(store, /canvasReferenceImage: null,\s*videoContinuityLineage: null,\s*insertedPrompts: withoutContinuityPrompts\(state\),\s*providerUrlReference: null/);
     assert.match(store, /id\.startsWith\("video-continuity:"\)/);
     assert.match(store, /set\(\{ insertedPrompts: \[\], videoContinuityLineage: null \}\)/);
   });

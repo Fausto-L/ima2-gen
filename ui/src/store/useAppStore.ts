@@ -98,6 +98,13 @@ import {
 } from "./storeSessionImpl";
 import {
   addReferencesImpl,
+  addTrayAttachmentsImpl,
+  addTrayAttachmentDataUrlImpl,
+  addTrayElementImpl,
+  removeTrayItemImpl,
+  removeTrayElementImpl,
+  clearTrayImpl,
+  addReferenceDataUrlImpl,
   readDroppedImageMetadataImpl,
   applyMetadataRestoreImpl,
   removeReferenceImpl,
@@ -127,7 +134,7 @@ import {
 } from "./storeGenerateEntryImpl";
 import {
   cancelInFlightJobImpl, syncFromStorageImpl, applyMergedCanvasImageImpl,
-  addReferenceDataUrlImpl, addMetadataRestoreAsReferenceImpl,
+  addMetadataRestoreAsReferenceImpl,
   toggleRightPanelImpl, setGalleryScopeImpl, setGalleryDefaultScopeImpl,
   setUIModeImpl, setHistoryStripLayoutImpl,
   showToastImpl, dismissToastImpl, showErrorCardImpl, dismissErrorCardImpl,
@@ -149,6 +156,9 @@ import { approveSpriteAnchorImpl, cancelSpriteJobImpl, generateSpriteAnchorImpl,
 export type { GalleryScope, ComposeSheetTab, ImageNodeStatus, ImageNodeData, GraphNode, GraphEdge, MultimodeSequenceState, AssetItem, AssetFolder, AssetsFilters } from "./storeTypes";
 export { flushGraphSaveBeacon, selectCurrentSessionId } from "./storeGraphSave";
 import type { AppState } from "./storeTypes";
+import { effectiveReferenceLimit } from "../lib/referenceLimits";
+import { physicalVideoSourceCount as countPhysicalVideoSources } from "../lib/referenceTray";
+import { emptyMcpReferenceSelection } from "../lib/mcpSelection";
 const storedGenerationDefaults = loadGenerationDefaults();
 const storedImageModel = loadImageModel();
 const storedVideoDefaults = loadVideoDefaults();
@@ -243,10 +253,23 @@ export const useAppStore = create<AppState>((set, get, store) => ({
   promptMode: storedGenerationDefaults.promptMode ?? "auto",
   prompt: storedGenerationDefaults.prompt ?? "",
   insertedPrompts: storedGenerationDefaults.insertedPrompts ?? [],
+  mcpInputRoles: [],
+  mcpReferenceSelection: emptyMcpReferenceSelection(),
+  trayItems: [],
+  nextAttachmentOrdinal: 1,
+  retiredTags: {},
   referenceImages: [],
+  selectedElementIds: [],
   referenceLimit: DEFAULT_REFERENCE_IMAGE_LIMIT,
+  activeReferenceLimit: () => effectiveReferenceLimit({
+    provider: get().provider,
+    serverLimit: get().referenceLimit,
+    videoModelSelected: Boolean(get().videoModelSelected),
+    mcpProvider: get().mcpProvider ?? null,
+  }),
   providerUrlReference: null,
   canvasReferenceImage: null,
+  physicalVideoSourceCount: () => countPhysicalVideoSources(get().trayItems),
 
   // Workspace Profile
   workspaceProfile: ((): import("../lib/workspaceProfile").WorkspaceProfile => {
@@ -273,6 +296,13 @@ export const useAppStore = create<AppState>((set, get, store) => ({
   canvasExportMatteColor: loadCanvasExportBackground().matteColor,
 
   syncCapabilities: () => syncCapabilitiesImpl(set),
+  addTrayAttachments: async (inputs) => addTrayAttachmentsImpl(inputs, set, get),
+  addTrayAttachmentDataUrl: (dataUrl, origin) => addTrayAttachmentDataUrlImpl(dataUrl, origin, set, get),
+  addTrayElement: (elementId) => addTrayElementImpl(elementId, set, get),
+  removeTrayItem: (tokenId) => removeTrayItemImpl(tokenId, set, get),
+  clearTray: () => clearTrayImpl(set, get),
+  addElementId: (id) => { addTrayElementImpl(id, set, get); },
+  removeElementId: (id) => removeTrayElementImpl(id, set, get),
   addReferences: (files) => addReferencesImpl(files, set, get),
   addReferenceDataUrl: (dataUrl) => addReferenceDataUrlImpl(dataUrl, set, get),
   metadataRestore: null,

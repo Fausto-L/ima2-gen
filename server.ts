@@ -31,6 +31,11 @@ import { reapCardNewsJobs } from "./lib/cardNewsJobStore.js";
 import { reapTerminalJobs } from "./lib/inflight.js";
 import { errInfo } from "./lib/errInfo.js";
 import { timingSafeEqual } from "node:crypto";
+import {
+  cleanupExpiredMcpTempReferences,
+  MCP_TEMP_REFERENCE_JSON_BODY_LIMIT_BYTES,
+  MCP_TEMP_REFERENCE_SWEEP_INTERVAL_MS,
+} from "./lib/mcpTempReferenceStore.js";
 
 type BootRuntimeContext = RuntimeContext & {
   markGrokProxyPort: (info?: { url?: string; port?: number }) => void;
@@ -207,6 +212,7 @@ export function buildApp(ctx: RuntimeContext) {
   configureLogger({ level: ctx.config.log.level });
   app.use(createRequestLogger());
   app.use(createLanApiGuard(ctx.config.server.host, ctx.config.server.lanToken));
+  app.use("/api/mcp/temp-references", express.json({ limit: MCP_TEMP_REFERENCE_JSON_BODY_LIMIT_BYTES }));
   app.use(express.json({ limit: ctx.config.server.bodyLimit }));
   app.use(express.static(join(ctx.rootDir, "ui", "dist"), {
     setHeaders: setUiStaticHeaders,
@@ -379,6 +385,11 @@ export async function startServer(overrides: StartServerOverrides = {}) {
   const ctx = await createRuntimeContext(overrides);
   assertLanAccessConfiguration(ctx.config.server.host, ctx.config.server.lanToken);
   await migrateGeneratedStorage(ctx);
+  try {
+    await cleanupExpiredMcpTempReferences(ctx.config.storage.generatedDir);
+  } catch (error) {
+    console.warn("[mcp.temp-references] startup cleanup failed:", errInfo(error).message);
+  }
   purgeStaleJobs();
   const app = buildApp(ctx);
   const oauthChild =
@@ -416,6 +427,7 @@ export async function startServer(overrides: StartServerOverrides = {}) {
 
   let server: import("node:net").Server;
   let reapTimer: NodeJS.Timeout;
+  let tempReferenceReapTimer: NodeJS.Timeout | undefined;
 
   onShutdown(async () => {
     unadvertise(ctx);
@@ -425,6 +437,7 @@ export async function startServer(overrides: StartServerOverrides = {}) {
     try { grokChild?.kill?.(); } catch {}
     stopAgentQueueWorker();
     clearInterval(reapTimer);
+    if (tempReferenceReapTimer) clearInterval(tempReferenceReapTimer);
     await new Promise<void>((resolve) => {
       if (server) server.close(() => resolve()); else resolve();
     });
@@ -478,6 +491,13 @@ export async function startServer(overrides: StartServerOverrides = {}) {
     reapCardNewsJobs();
   }, 60_000);
   reapTimer.unref?.();
+
+  tempReferenceReapTimer = setInterval(() => {
+    cleanupExpiredMcpTempReferences(ctx.config.storage.generatedDir).catch((error) => {
+      console.warn("[mcp.temp-references] hourly cleanup failed:", errInfo(error).message);
+    });
+  }, MCP_TEMP_REFERENCE_SWEEP_INTERVAL_MS);
+  tempReferenceReapTimer.unref?.();
 
   process.on("uncaughtException", (err) => {
     console.error("[fatal] uncaughtException:", err);

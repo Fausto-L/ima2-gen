@@ -16,6 +16,22 @@ import {
 import { compressReferenceSource } from "./storeHelpers";
 import type { AppState, StoreSet, StoreGet } from "./storeTypes";
 import type { ClientNodeId } from "../lib/graph";
+import { mcpReferenceTag } from "../lib/mcpSelection";
+import {
+  allocateAttachmentTag,
+  hasTrayCapacity,
+  materializeLegacyFields,
+  retireTrayTags,
+  reviveTrayTag,
+  selectAttachmentItems,
+  uniquifyElementTag,
+  type AttachmentInput,
+  type AttachmentMimeType,
+  type AttachmentOrigin,
+  type AttachmentTrayItem,
+  type ElementTrayItem,
+  type TrayItem,
+} from "../lib/referenceTray";
 
 function applyMetadataToState(
   state: AppState,
@@ -42,36 +58,137 @@ function applyMetadataToState(
   return patch;
 }
 
+type TrayMutationPatch = Partial<AppState> & {
+  trayItems?: TrayItem[];
+  nextAttachmentOrdinal?: number;
+  retiredTags?: Record<string, number>;
+};
+
+type TrayMutationOutcome<Result> = {
+  result: Result;
+  patch?: TrayMutationPatch;
+};
+type TrayMutation<Result> = (state: AppState, activeLimit: number) => TrayMutationOutcome<Result>;
+
+function mutateTray<Result>(set: StoreSet, mutation: TrayMutation<Result>): Result {
+  let result!: Result;
+  set((state) => {
+    const outcome = mutation(state, state.activeReferenceLimit());
+    result = outcome.result;
+    if (!outcome.patch) return {};
+    const trayItems = outcome.patch.trayItems ?? state.trayItems;
+    return {
+      ...outcome.patch,
+      trayItems,
+      ...materializeLegacyFields(trayItems),
+    };
+  });
+  return result;
+}
+
+function inferAttachmentMimeType(dataUrl: string): AttachmentMimeType | null {
+  const mimeType = /^data:(image\/(?:png|jpeg|webp));/i.exec(dataUrl)?.[1]?.toLowerCase();
+  if (mimeType === "image/png" || mimeType === "image/jpeg" || mimeType === "image/webp") {
+    return mimeType;
+  }
+  return null;
+}
+
+function createAttachmentItem(input: AttachmentInput, tag: string): AttachmentTrayItem {
+  return {
+    kind: "attachment",
+    tokenId: crypto.randomUUID(),
+    tag,
+    insertedAt: Date.now(),
+    source: input,
+  };
+}
+
+function addPreparedAttachments(inputs: AttachmentInput[], set: StoreSet): TrayItem[] {
+  return mutateTray(set, (state, activeLimit) => {
+    const trayItems = [...state.trayItems];
+    let retiredTags = state.retiredTags;
+    const usedTags = new Set(trayItems.map((item) => item.tag));
+    const added: TrayItem[] = [];
+    let nextAttachmentOrdinal = state.nextAttachmentOrdinal;
+
+    for (const input of inputs) {
+      if (!hasTrayCapacity(trayItems, activeLimit)) break;
+      const allocation = allocateAttachmentTag(nextAttachmentOrdinal, usedTags);
+      const item = createAttachmentItem(input, allocation.tag);
+      trayItems.push(item);
+      added.push(item);
+      usedTags.add(item.tag);
+      retiredTags = reviveTrayTag(retiredTags, item.tag);
+      nextAttachmentOrdinal = allocation.nextAttachmentOrdinal;
+    }
+
+    return added.length === 0
+      ? { result: added }
+      : {
+          result: added,
+          patch: {
+            trayItems,
+            nextAttachmentOrdinal,
+            retiredTags,
+            providerUrlReference: null,
+          },
+        };
+  });
+}
+
+export function addTrayAttachmentsImpl(inputs: AttachmentInput[], set: StoreSet, _get: StoreGet): TrayItem[] {
+  return addPreparedAttachments(inputs, set);
+}
+
+export function addTrayAttachmentDataUrlImpl(
+  dataUrl: string,
+  origin: AttachmentOrigin,
+  set: StoreSet,
+  _get: StoreGet,
+): TrayItem | null {
+  const mimeType = inferAttachmentMimeType(dataUrl);
+  if (!mimeType) return null;
+  return addPreparedAttachments([{ dataUrl, mimeType, origin }], set)[0] ?? null;
+}
+
+export function addReferenceDataUrlImpl(dataUrl: string, set: StoreSet, get: StoreGet): void {
+  addTrayAttachmentDataUrlImpl(dataUrl, "gallery", set, get);
+}
+
 export async function addReferencesImpl(
   files: File[],
   set: StoreSet,
   get: StoreGet,
 ): Promise<void> {
-  const maxReferences = get().referenceLimit;
-  const allowed = maxReferences - get().referenceImages.length;
-  const toAdd = files.slice(0, Math.max(0, allowed));
-  const heicSkipped = toAdd.filter(isHeic);
-  const usable = toAdd.filter((f) => !isHeic(f));
+  const maxReferences = get().activeReferenceLimit();
+  const allowed = Math.max(0, maxReferences - get().trayItems.length);
+  const candidates = files.slice(0, allowed);
+  const heicSkipped = candidates.filter(isHeic);
+  const usable = candidates.filter((f) => !isHeic(f));
   const results = await Promise.all(
-    usable.map(async (f) => {
+    usable.map(async (f): Promise<AttachmentInput | null> => {
       try {
-        return await compressToBase64(f, {
+        const dataUrl = await compressToBase64(f, {
           preserveTransparency: hasAlphaChannel(f),
         });
+        const mimeType = inferAttachmentMimeType(dataUrl);
+        return mimeType
+          ? { dataUrl, mimeType, originalName: f.name, byteSize: f.size, origin: "file" as const }
+          : null;
       } catch (err) {
         console.warn("[addReferences] compress failed", err);
         return null;
       }
     }),
   );
-  const valid = results.filter((x): x is string => !!x);
-  set((s) => ({
-    referenceImages: [...s.referenceImages, ...valid].slice(0, s.referenceLimit),
-    providerUrlReference: valid.length > 0 ? null : s.providerUrlReference,
-  }));
+  const valid = results.filter((input): input is AttachmentInput => input !== null);
+  const added = addPreparedAttachments(valid, set);
   if (heicSkipped.length > 0) get().showToast(t("toast.refHeicUnsupported"), true);
   if (usable.length - valid.length > 0) get().showToast(t("toast.refTooLarge"), true);
-  if (files.length > allowed) get().showToast(t("toast.refLimitExceeded"), true);
+  if (files.length > allowed || valid.length > added.length) {
+    get().showToast(t("toast.refLimitExceeded"), true);
+  }
 }
 
 export async function readDroppedImageMetadataImpl(
@@ -125,32 +242,159 @@ export function applyMetadataRestoreImpl(set: StoreSet, get: StoreGet): void {
   get().showToast(t("metadata.applied"));
 }
 
-export function removeReferenceImpl(index: number, set: StoreSet, _get: StoreGet): void {
-  set((s) => {
-    const referenceImages = s.referenceImages.filter((_, i) => i !== index);
-    const clearContinuity = referenceImages.length === 0;
-    const insertedPrompts = clearContinuity
-      ? s.insertedPrompts.filter((prompt) => !prompt.id.startsWith("video-continuity:"))
-      : s.insertedPrompts;
-    if (insertedPrompts.length !== s.insertedPrompts.length) {
-      saveGenerationDefaultsPatch({ insertedPrompts });
+function elementReferenceFilenames(metadata: Record<string, unknown> | null): string[] {
+  const refs = metadata?.refs;
+  return Array.isArray(refs)
+    ? refs.filter((ref): ref is string => typeof ref === "string" && ref.length > 0)
+    : [];
+}
+
+export function addTrayElementImpl(
+  elementId: string,
+  set: StoreSet,
+  _get: StoreGet,
+): TrayItem | null {
+  return mutateTray(set, (state, activeLimit) => {
+    if (!hasTrayCapacity(state.trayItems, activeLimit)) return { result: null };
+    if (state.trayItems.some((item) => item.kind === "element" && item.source.elementId === elementId)) {
+      return { result: null };
     }
+    const asset = state.assets.find((candidate) => candidate.id === elementId && candidate.kind === "element");
+    const requestedTag = asset ? mcpReferenceTag(asset.name) : null;
+    if (!asset || !requestedTag) return { result: null };
+
+    const tag = uniquifyElementTag(requestedTag, state.trayItems.map((item) => item.tag));
+    const item: ElementTrayItem = {
+      kind: "element",
+      tokenId: crypto.randomUUID(),
+      tag,
+      insertedAt: Date.now(),
+      source: {
+        elementId,
+        nameAtInsertion: asset.name,
+        referenceFilenames: elementReferenceFilenames(asset.metadata),
+      },
+    };
+    const retiredTags = reviveTrayTag(state.retiredTags, tag);
     return {
-      referenceImages,
-      insertedPrompts,
-      videoContinuityLineage: clearContinuity ? null : s.videoContinuityLineage,
-      canvasReferenceImage:
-        s.referenceImages[index] === s.canvasReferenceImage ? null : s.canvasReferenceImage,
+      result: item,
+      patch: { trayItems: [...state.trayItems, item], retiredTags },
     };
   });
 }
 
+function withoutContinuityPrompts(state: AppState): AppState["insertedPrompts"] {
+  return state.insertedPrompts.filter((prompt) => !prompt.id.startsWith("video-continuity:"));
+}
+
+function persistContinuityPromptChange(before: AppState["insertedPrompts"], after: AppState["insertedPrompts"]): void {
+  if (after.length !== before.length) saveGenerationDefaultsPatch({ insertedPrompts: after });
+}
+
+export function removeTrayItemImpl(tokenId: string, set: StoreSet, get: StoreGet): void {
+  const beforePrompts = get().insertedPrompts;
+  mutateTray(set, (state) => {
+    const removed = state.trayItems.find((item) => item.tokenId === tokenId);
+    if (!removed) return { result: undefined };
+    const trayItems = state.trayItems.filter((item) => item.tokenId !== tokenId);
+    const patch: TrayMutationPatch = {
+      trayItems,
+      retiredTags: retireTrayTags(state.retiredTags, [removed]),
+    };
+    if (removed.kind === "attachment") {
+      const clearContinuity = selectAttachmentItems({ trayItems }).length === 0;
+      patch.canvasReferenceImage = removed.source.dataUrl === state.canvasReferenceImage
+        ? null
+        : state.canvasReferenceImage;
+      if (clearContinuity) {
+        patch.insertedPrompts = withoutContinuityPrompts(state);
+        patch.videoContinuityLineage = null;
+      }
+    }
+    return { result: undefined, patch };
+  });
+  persistContinuityPromptChange(beforePrompts, get().insertedPrompts);
+}
+
+export function removeTrayElementImpl(elementId: string, set: StoreSet, get: StoreGet): void {
+  const item = get().trayItems.find(
+    (candidate) => candidate.kind === "element" && candidate.source.elementId === elementId,
+  );
+  if (item) removeTrayItemImpl(item.tokenId, set, get);
+}
+
+export function removeReferenceImpl(index: number, set: StoreSet, get: StoreGet): void {
+  const item = selectAttachmentItems(get())[index];
+  if (item) removeTrayItemImpl(item.tokenId, set, get);
+}
+
 export function clearReferencesImpl(set: StoreSet, get: StoreGet): void {
-  const insertedPrompts = get().insertedPrompts.filter((prompt) => !prompt.id.startsWith("video-continuity:"));
-  if (insertedPrompts.length !== get().insertedPrompts.length) {
-    saveGenerationDefaultsPatch({ insertedPrompts });
-  }
-  set({ referenceImages: [], canvasReferenceImage: null, videoContinuityLineage: null, insertedPrompts, providerUrlReference: null });
+  const beforePrompts = get().insertedPrompts;
+  mutateTray(set, (state) => {
+    const removed = selectAttachmentItems(state);
+    const trayItems = state.trayItems.filter((item) => item.kind !== "attachment");
+    return {
+      result: undefined,
+      patch: {
+        trayItems,
+        retiredTags: retireTrayTags(state.retiredTags, removed),
+        canvasReferenceImage: null,
+        videoContinuityLineage: null,
+        insertedPrompts: withoutContinuityPrompts(state),
+        providerUrlReference: null,
+      },
+    };
+  });
+  persistContinuityPromptChange(beforePrompts, get().insertedPrompts);
+}
+
+export function clearTrayImpl(set: StoreSet, get: StoreGet): void {
+  const beforePrompts = get().insertedPrompts;
+  mutateTray(set, (state) => ({
+    result: undefined,
+    patch: {
+      trayItems: [],
+      retiredTags: {},
+      canvasReferenceImage: null,
+      videoContinuityLineage: null,
+      insertedPrompts: withoutContinuityPrompts(state),
+      providerUrlReference: null,
+    },
+  }));
+  persistContinuityPromptChange(beforePrompts, get().insertedPrompts);
+}
+
+function replaceCanvasAttachment(
+  state: AppState,
+  activeLimit: number,
+  input: AttachmentInput,
+): TrayMutationOutcome<boolean> {
+  const removed = selectAttachmentItems(state).filter(
+    (candidate) => candidate.source.dataUrl === input.dataUrl
+      || candidate.source.dataUrl === state.canvasReferenceImage,
+  );
+  const removedIds = new Set(removed.map((candidate) => candidate.tokenId));
+  const trayItems = state.trayItems.filter((candidate) => !removedIds.has(candidate.tokenId));
+  if (!hasTrayCapacity(trayItems, activeLimit)) return { result: false };
+  const allocation = allocateAttachmentTag(
+    state.nextAttachmentOrdinal,
+    trayItems.map((candidate) => candidate.tag),
+  );
+  const attachment = createAttachmentItem(input, allocation.tag);
+  const retiredTags = reviveTrayTag(
+    retireTrayTags(state.retiredTags, removed),
+    attachment.tag,
+  );
+  return {
+    result: true,
+    patch: {
+      trayItems: [attachment, ...trayItems],
+      nextAttachmentOrdinal: allocation.nextAttachmentOrdinal,
+      retiredTags,
+      canvasReferenceImage: input.dataUrl,
+      providerUrlReference: null,
+    },
+  };
 }
 
 export async function attachCanvasVersionReferenceImpl(
@@ -169,17 +413,24 @@ export async function attachCanvasVersionReferenceImpl(
     get().showToast(t("toast.currentImageLoadFailed"), true);
     throw new Error("canvas_reference_attach_failed");
   }
-  set((s) => {
-    const withoutPrevious = s.canvasReferenceImage
-      ? s.referenceImages.filter((ref) => ref !== s.canvasReferenceImage)
-      : s.referenceImages;
-    const withoutDuplicate = withoutPrevious.filter((ref) => ref !== dataUrl);
-    return {
-      canvasReferenceImage: dataUrl,
-      referenceImages: [dataUrl, ...withoutDuplicate].slice(0, s.referenceLimit),
-      providerUrlReference: null,
-    };
-  });
+  const mimeType = inferAttachmentMimeType(dataUrl);
+  if (!mimeType) {
+    get().showToast(t("toast.currentImageLoadFailed"), true);
+    return;
+  }
+  const added = mutateTray(
+    set,
+    (state, activeLimit) => replaceCanvasAttachment(state, activeLimit, {
+      dataUrl,
+      mimeType,
+      originalName: item.filename || "canvas-version-reference.png",
+      origin: "canvas",
+    }),
+  );
+  if (!added) {
+    get().showToast(t("toast.refSlotFull"), true);
+    return;
+  }
   get().showToast(t("canvas.version.usingAsReference"));
 }
 
@@ -192,14 +443,13 @@ function resolveModelReferenceSrc(item: GenerateItem): string {
   }
   return item.image;
 }
-
 export async function useCurrentAsReferenceImpl(set: StoreSet, get: StoreGet): Promise<void> {
   const cur = get().currentImage;
   if (!cur) {
     get().showToast(t("toast.noCurrentImageForRef"), true);
     return;
   }
-  if (get().referenceImages.length >= get().referenceLimit) {
+  if (get().trayItems.length >= get().activeReferenceLimit()) {
     get().showToast(t("toast.refSlotFull"), true);
     return;
   }
@@ -213,10 +463,11 @@ export async function useCurrentAsReferenceImpl(set: StoreSet, get: StoreGet): P
     get().showToast(t("toast.currentImageLoadFailed"), true);
     return;
   }
-  set((s) => ({
-    referenceImages: [...s.referenceImages, dataUrl].slice(0, s.referenceLimit),
-    providerUrlReference: null,
-  }));
+  const added = addTrayAttachmentDataUrlImpl(dataUrl, "gallery", set, get);
+  if (!added) {
+    get().showToast(t("toast.refSlotFull"), true);
+    return;
+  }
   get().showToast(t("toast.addedCurrentAsRef"));
 }
 
@@ -225,7 +476,7 @@ export async function useImageAsReferenceImpl(
   set: StoreSet,
   get: StoreGet,
 ): Promise<void> {
-  if (get().referenceImages.length >= get().referenceLimit) {
+  if (get().trayItems.length >= get().activeReferenceLimit()) {
     get().showToast(t("toast.refSlotFull"), true);
     return;
   }
@@ -239,9 +490,10 @@ export async function useImageAsReferenceImpl(
     get().showToast(t("toast.currentImageLoadFailed"), true);
     return;
   }
-  set((s) => ({
-    referenceImages: [...s.referenceImages, dataUrl].slice(0, s.referenceLimit),
-    providerUrlReference: null,
-  }));
+  const added = addTrayAttachmentDataUrlImpl(dataUrl, "gallery", set, get);
+  if (!added) {
+    get().showToast(t("toast.refSlotFull"), true);
+    return;
+  }
   get().showToast(t("toast.addedCurrentAsRef"));
 }

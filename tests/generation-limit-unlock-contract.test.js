@@ -97,12 +97,14 @@ test("frontend reference limit syncs from server capabilities", () => {
   assert.match(types, /referenceLimit: number/);
   assert.match(store, /referenceLimit: DEFAULT_REFERENCE_IMAGE_LIMIT/);
   assert.match(helpers, /DEFAULT_REFERENCE_IMAGE_LIMIT = 5/);
-  assert.match(refs, /get\(\)\.referenceLimit/);
+  // Composer surfaces now consume the provider-aware wrapper, which derives
+  // from the server-synced referenceLimit (ui/src/lib/referenceLimits.ts).
+  assert.match(refs, /get\(\)\.activeReferenceLimit\(\)/);
   assert.match(nodeRefs, /get\(\)\.referenceLimit/);
-  assert.match(ui, /get\(\)\.referenceLimit/);
-  assert.match(composer, /const maxRefs = useAppStore\(\(s\) => s\.referenceLimit\)/);
+  assert.match(ui, /get\(\)\.activeReferenceLimit\(\)/);
+  assert.match(composer, /const maxRefs = useAppStore\(\(s\) => s\.activeReferenceLimit\(\)\)/);
+  assert.match(store, /serverLimit: get\(\)\.referenceLimit/);
   assert.doesNotMatch(refs, /MAX_REFERENCE_IMAGES/);
   assert.doesNotMatch(nodeRefs, /MAX_REFERENCE_IMAGES/);
   assert.doesNotMatch(composer, /MAX_REFS|MAX_REFERENCE_IMAGES/);
 });
-

@@ -81,7 +81,9 @@ describe("canvas version frontend contract", () => {
     assert.match(store, /canvasReferenceImage/);
     assert.match(store, /attachCanvasVersionReference.*attachCanvasVersionReferenceImpl/);
     assert.match(store, /compressReferenceSource\(\s*overrideSource \?\? item\.image/);
-    assert.match(store, /withoutPrevious/);
+    // Tray model (260716_composer-tray 010): the previous canvas attachment is
+    // replaced through the single tray mutation helper.
+    assert.match(store, /replaceCanvasAttachment/);
     assert.match(store, /referenceLimit: DEFAULT_REFERENCE_IMAGE_LIMIT/);
     assert.doesNotMatch(store, /referenceImages:\s*\[\s*item\.image/);
   });

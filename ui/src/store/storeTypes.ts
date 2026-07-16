@@ -26,9 +26,11 @@ import type { CustomSizeAdjustmentReason } from "../lib/size";
 import type { ReasoningEffort } from "../lib/reasoning";
 import type { GalleryShortcutAction } from "../lib/galleryShortcuts";
 import type { WorkspaceProfile } from "../lib/workspaceProfile";
-import type { McpPresetValue } from "../lib/mcpProviders";
+import type { McpInputRole, McpPresetValue } from "../lib/mcpProviders";
+import type { McpReferenceSelection } from "../lib/mcpSelection";
 import type { Locale } from "../i18n";
 import type { SpriteRecipeDraft, SpriteRecipeRecord, SpriteRecipeSummary } from "../types/spriteRecipe";
+import type { ReferenceTraySlice } from "../lib/referenceTray";
 export type AssetGenWorkflow = "generate" | "sprite";
 
 export type GalleryScope = "current-session" | "all";
@@ -222,7 +224,7 @@ export type PresetState = {
   restorePresetIds: (ids: string[]) => void;
 };
 
-export type AppState = PresetState & {
+export type AppState = PresetState & ReferenceTraySlice & {
   assetGenWorkflow: AssetGenWorkflow;
   setAssetGenWorkflow: (value: AssetGenWorkflow) => void;
   spriteRecipes: SpriteRecipeSummary[];
@@ -246,6 +248,8 @@ export type AppState = PresetState & {
   cancelSpriteJob: (requestId: string) => Promise<void>;
   assets: AssetItem[];
   assetsFolders: AssetFolder[];
+  addElementId: (id: string) => void;
+  removeElementId: (id: string) => void;
   assetsTags: string[];
   assetsLoading: boolean;
   assetsLoadError: boolean;
@@ -309,7 +313,6 @@ export type AppState = PresetState & {
   multimodePreviewFlightId: string | null;
   promptMode: "auto" | "direct";
   prompt: string;
-  referenceImages: string[];
   referenceLimit: number;
   providerUrlReference: string | null;
   canvasReferenceImage: string | null;
@@ -457,6 +460,8 @@ export type AppState = PresetState & {
   mcpMediaKind?: "image" | "video";
   mcpRatio?: string | null;
   mcpParameters?: Record<string, McpPresetValue>;
+  mcpInputRoles?: McpInputRole[];
+  mcpReferenceSelection?: McpReferenceSelection;
   setQuality: (q: Quality) => void;
   setSizePreset: (s: SizePreset) => void;
   setCustomSize: (w: number, h: number) => void;
