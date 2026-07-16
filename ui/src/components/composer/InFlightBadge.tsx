@@ -44,14 +44,17 @@ export function InFlightBadge({
   useLayoutEffect(() => {
     if (count !== 0) return;
     const activeElement = document.activeElement;
-    if (open && activeElement instanceof HTMLElement && activeElement.closest(".inflight-popup")) {
+    const activePanel = variant === "inline"
+      ? document.getElementById(panelId)
+      : document.querySelector(".inflight-popup");
+    if (open && activeElement instanceof HTMLElement && activePanel?.contains(activeElement)) {
       triggerRef.current?.focus();
     }
     clearTimers();
     setMode("closed");
     setFocusOnOpen(false);
     if (variant === "inline" && expanded) onToggle?.(false);
-  }, [count, expanded, onToggle, open, variant]);
+  }, [count, expanded, onToggle, open, panelId, variant]);
 
   const returningPopupFocus = count === 0 && variant === "popup" && open;
   if ((count === 0 && !returningPopupFocus) || (variant === "popup" && isMobile)) return null;

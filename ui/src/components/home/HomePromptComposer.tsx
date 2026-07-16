@@ -1,4 +1,5 @@
 import { getAllPresets } from "../../lib/presets";
+import type { TrayItem } from "../../lib/referenceTray";
 import { useI18n } from "../../i18n";
 import { useAppStore } from "../../store/useAppStore";
 import type { Provider } from "../../types";
@@ -15,6 +16,15 @@ const PROVIDER_LABELS: Record<Provider, string> = {
   "gemini-api": "Gemini API",
 };
 
+function homeReferenceThumbnail(item: TrayItem): string | undefined {
+  if (item.kind === "attachment") return item.source.dataUrl;
+  if (item.source.thumbnailUrl) return item.source.thumbnailUrl;
+  const filename = item.source.referenceFilenames[0];
+  if (!filename) return undefined;
+  if (filename.startsWith("/generated/")) return filename;
+  return `/generated/${filename.split("/").map(encodeURIComponent).join("/")}`;
+}
+
 export function HomePromptComposer() {
   const prompt = useAppStore((state) => state.prompt);
   const setPrompt = useAppStore((state) => state.setPrompt);
@@ -24,6 +34,7 @@ export function HomePromptComposer() {
   const removePreset = useAppStore((state) => state.removePreset);
   const generate = useAppStore((state) => state.generate);
   const activeGenerations = useAppStore((state) => state.activeGenerations);
+  const trayItems = useAppStore((state) => state.trayItems);
   const providerAvailability = useProviderAvailability();
   const { t } = useI18n();
   const selectedIdSet = new Set(selectedPresetIds);
@@ -55,6 +66,28 @@ export function HomePromptComposer() {
             </Chip>
           ))}
         </ChipRow>
+      ) : null}
+
+      {trayItems.length > 0 ? (
+        <div
+          className="home-prompt__reference-strip"
+          role="group"
+          aria-label={t("home.referenceTrayAria", { count: trayItems.length })}
+        >
+          <span className="home-prompt__reference-thumbs" aria-hidden="true">
+            {trayItems.map((item) => {
+              const thumbnail = homeReferenceThumbnail(item);
+              return (
+                <span key={item.tokenId} className="home-prompt__reference-thumb">
+                  {thumbnail ? <img src={thumbnail} alt="" loading="lazy" decoding="async" /> : "@"}
+                </span>
+              );
+            })}
+          </span>
+          <span className="home-prompt__reference-count">
+            {t("home.referenceTrayCount", { count: trayItems.length })}
+          </span>
+        </div>
       ) : null}
 
       <label className="home-prompt__label" htmlFor="home-prompt-input">

@@ -85,6 +85,7 @@
     "title": "IN FLIGHT",
     "badgeOpen": "Show {n} generations in flight",
     "badgeClose": "Hide {n} generations in flight",
+    "inlineCollapse": "Collapse {n} generations in flight",
     "footerHint": "You can close this panel — generations will continue.",
     "kindImage": "Image",
     "kindVideo": "Video",
@@ -316,6 +317,8 @@
     "presetsTitle": "Presets",
     "selectedCount": "{count} selected",
     "selectedPresets": "Selected presets",
+    "referenceTrayCount": "{count} refs",
+    "referenceTrayAria": "{count} references are attached to the next generation",
     "viewAll": "View all",
     "presetSearch": "Search presets…"
   },

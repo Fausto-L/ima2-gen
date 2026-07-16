@@ -85,6 +85,7 @@
     "title": "생성 중",
     "badgeOpen": "진행 중인 생성 {n}건 보기",
     "badgeClose": "진행 중인 생성 {n}건 숨기기",
+    "inlineCollapse": "진행 중인 생성 {n}건 접기",
     "footerHint": "이 패널을 닫아도 생성은 계속됩니다.",
     "kindImage": "이미지",
     "kindVideo": "비디오",
@@ -316,6 +317,8 @@
     "presetsTitle": "프리셋",
     "selectedCount": "{count}개 선택",
     "selectedPresets": "선택한 프리셋",
+    "referenceTrayCount": "참조 {count}개",
+    "referenceTrayAria": "다음 생성에 참조 {count}개가 포함됩니다",
     "viewAll": "전체 보기",
     "presetSearch": "프리셋 검색…"
   },

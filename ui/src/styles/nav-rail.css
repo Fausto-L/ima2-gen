@@ -64,7 +64,7 @@
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
-  z-index: 200;
+  z-index: 160;
 }
 
 .nav-rail--mobile .nav-rail__btn {
