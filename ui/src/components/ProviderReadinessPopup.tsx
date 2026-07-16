@@ -1,7 +1,7 @@
 import { useI18n } from "../i18n";
 import { IMAGE_MODEL_OPTIONS } from "../lib/imageModels";
 import { useAppStore } from "../store/useAppStore";
-import { useProviderAvailability } from "./ProviderSelect";
+import { useProviderAvailability } from "../hooks/useProviderAvailability";
 import { useModalFocus } from "../hooks/useModalFocus";
 
 export function ProviderReadinessPopup() {

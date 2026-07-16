@@ -5,11 +5,10 @@ import { OptionGroup } from "./OptionGroup";
 import { SizePicker } from "./SizePicker";
 import { CountPicker } from "./CountPicker";
 import { CostEstimate } from "./CostEstimate";
-import { ProviderSelect } from "./ProviderSelect";
+import { ProviderStatusSelect } from "./settings/ProviderStatusSelect";
 import { GrokSizePicker } from "./GrokSizePicker";
 import { GrokModelPicker } from "./GrokModelPicker";
 import { VideoControlsPanel } from "./VideoControlsPanel";
-import { ProviderStatusStrip } from "./settings/ProviderStatusStrip";
 import { McpGenerationControls } from "./settings/McpGenerationControls";
 import { useMcpProviders } from "../lib/mcpProviders";
 import type { Format, GeminiImageModel, Moderation, Quality } from "../types";
@@ -176,8 +175,7 @@ export function GenerationControlsPanel() {
   if (mcpProvider) {
     return (
       <div className="right-panel-settings" role="tabpanel">
-        <ProviderStatusStrip mcpProviders={mcpProviders} />
-        <ProviderSelect allowGrok muteSelection />
+        <ProviderStatusSelect mcpProviders={mcpProviders} />
         <McpGenerationControls
           record={mcpProviders.find((entry) => entry.id === mcpProvider) ?? null}
         />
@@ -187,8 +185,7 @@ export function GenerationControlsPanel() {
 
   return (
     <div className="right-panel-settings" role="tabpanel">
-      <ProviderStatusStrip mcpProviders={mcpProviders} />
-      <ProviderSelect allowGrok />
+      <ProviderStatusSelect mcpProviders={mcpProviders} />
       <details className="provider-compat-details">
         <summary>{providerCompat.title}</summary>
         <p>{providerCompat.body}</p>

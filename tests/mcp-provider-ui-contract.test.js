@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 
@@ -76,24 +76,29 @@ describe("MCP provider UI contract", () => {
     assert.match(selection, /\.\.\.\(ratio \? \{ ratio \} : \{\}\)/);
   });
 
-  it("pins the status strip on top of Settings and swaps per-provider sections (030)", () => {
+  it("pins the provider dropdown on top of Settings and swaps per-provider sections (060)", () => {
     const panel = readSource("ui/src/components/GenerationControlsPanel.tsx");
-    const providerSelect = readSource("ui/src/components/ProviderSelect.tsx");
-    const strip = readSource("ui/src/components/settings/ProviderStatusStrip.tsx");
+    const providerSelect = readSource("ui/src/components/settings/ProviderStatusSelect.tsx");
     const mcpControls = readSource("ui/src/components/settings/McpGenerationControls.tsx");
     const presetControls = readSource("ui/src/components/settings/McpModelPresetControls.tsx");
     const settings = readSource("ui/src/store/storeSettingsImpl.ts");
     const persistence = readSource("ui/src/store/storePersistence.ts");
 
-    // Status strip is the first child in BOTH panel branches.
-    assert.match(panel, /<div className="right-panel-settings" role="tabpanel">\s*<ProviderStatusStrip mcpProviders=\{mcpProviders\} \/>\s*<ProviderSelect allowGrok muteSelection \/>/);
-    assert.match(panel, /<div className="right-panel-settings" role="tabpanel">\s*<ProviderStatusStrip mcpProviders=\{mcpProviders\} \/>\s*<ProviderSelect allowGrok \/>/);
-    // Single-parent poller: strip and controls receive providers via props.
-    assert.doesNotMatch(strip, /useMcpProviders\(/);
+    // The Variant D dropdown is the first child in BOTH panel branches; the
+    // retired grid + status strip must stay deleted (060).
+    assert.match(panel, /<div className="right-panel-settings" role="tabpanel">\s*<ProviderStatusSelect mcpProviders=\{mcpProviders\} \/>\s*<McpGenerationControls/);
+    assert.match(panel, /<div className="right-panel-settings" role="tabpanel">\s*<ProviderStatusSelect mcpProviders=\{mcpProviders\} \/>/);
+    assert.doesNotMatch(panel, /ProviderStatusStrip|<ProviderSelect /);
+    assert.equal(existsSync(join(root, "ui/src/components/ProviderSelect.tsx")), false);
+    assert.equal(existsSync(join(root, "ui/src/components/settings/ProviderStatusStrip.tsx")), false);
+    // Single-parent poller: the dropdown receives providers via props.
+    assert.doesNotMatch(providerSelect, /useMcpProviders\(/);
     assert.match(panel, /const \{ providers: mcpProviders \} = useMcpProviders\(\)/);
-    // No simultaneous core+MCP active state.
-    assert.match(providerSelect, /muteSelection/);
-    assert.match(providerSelect, /const selected = !muteSelection && !cell\.disabled && provider === cell\.value/);
+    // No simultaneous core+MCP active state: the selected value is derived
+    // from mcpProvider first, so an active MCP lane never shows a core value.
+    assert.match(providerSelect, /const selectedValue = mcpProvider \? `\$\{MCP_PREFIX\}\$\{mcpProvider\}` : `\$\{CORE_PREFIX\}\$\{provider\}`/);
+    // MCP entry invariant matches the sidebar selector (enabled && connected).
+    assert.match(providerSelect, /!record \|\| !record\.enabled \|\| record\.status\.state !== "connected"/);
     // mcpRatio lifecycle: whitelist parse, persistent clear-to-Auto, Auto omission.
     assert.match(persistence, /normalizeMcpRatio\(parsed\.mcpRatio\)/);
     assert.match(settings, /saveGenerationDefaultsPatch\(\{ mcpRatio: null, mcpParameters: \{\} \}\)/);

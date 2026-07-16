@@ -613,6 +613,13 @@
   "provider": {
     "authTitle": "Provider",
     "apiLabel": "API Key",
+    "statusReady": "Ready",
+    "statusConnected": "Connected",
+    "statusAuthRequired": "Sign-in required",
+    "statusDisconnected": "Disconnected",
+    "statusLineTitle": "Status",
+    "authMethodTitle": "Auth",
+    "authActive": "Active",
     "oauthNotReady": "GPT OAuth proxy is not ready yet.",
     "codexLoginRequired": "Codex login required.",
     "codexLoginHint": "Run `codex login` in your terminal, then refresh this page.",

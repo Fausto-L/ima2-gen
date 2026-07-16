@@ -1,62 +1,66 @@
-.provider-grid {
+/* 060 — Variant D provider dropdown (replaces the 3-column grid). */
+.provider-status-select {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 6px;
+  gap: 8px;
 }
 
-.provider-grid__col {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.provider-status-select .ctl-select__trigger {
+  width: 100%;
+  min-height: 44px;
 }
 
-.provider-grid__header {
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  padding: 2px 0;
-  text-align: center;
+.provider-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
-.provider-pill {
-  flex: 1;
+.provider-status-line {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface-2);
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.provider-status-line__value {
   color: var(--text);
-  font-size: 12px;
-  line-height: 1.2;
-  white-space: pre-line;
-  cursor: pointer;
-  text-align: center;
-  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.provider-pill:hover {
-  border-color: var(--border-strong);
+.provider-status-line[data-tone="ok"] .provider-status-line__value {
+  color: var(--green);
 }
 
-.provider-pill:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
+.provider-status-line[data-tone="warn"] .provider-status-line__value {
+  color: var(--amber, #d9a12e);
 }
 
-.provider-pill.selected {
-  border-color: var(--accent);
-  background: var(--surface-3);
+.provider-status-line[data-tone="bad"] .provider-status-line__value {
+  color: var(--red);
 }
 
-.provider-pill.disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-  pointer-events: none;
+.provider-auth-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: start;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.provider-auth-chip__state {
+  color: var(--text-dim);
 }
 
 .status-dot {
@@ -75,6 +79,13 @@
 .status-dot--bad {
   background: var(--red);
   box-shadow: 0 0 6px var(--red);
+}
+
+/* Warn tone shared by MCP/auth states (moved from the retired status strip,
+   060 audit A4). */
+.status-dot--warn {
+  background: var(--amber, #d9a12e);
+  box-shadow: 0 0 6px var(--amber, #d9a12e);
 }
 
 .provider-helper {

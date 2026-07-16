@@ -613,6 +613,13 @@
   "provider": {
     "authTitle": "공급자",
     "apiLabel": "API 키",
+    "statusReady": "사용 가능",
+    "statusConnected": "연결됨",
+    "statusAuthRequired": "로그인 필요",
+    "statusDisconnected": "연결 안 됨",
+    "statusLineTitle": "상태",
+    "authMethodTitle": "인증",
+    "authActive": "사용 중",
     "oauthNotReady": "GPT OAuth 프록시가 아직 준비되지 않았습니다.",
     "codexLoginRequired": "Codex 로그인이 필요합니다.",
     "codexLoginHint": "터미널에서 `codex login`을 실행한 뒤 이 페이지를 새로고침하세요.",

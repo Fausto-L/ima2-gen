@@ -128,7 +128,9 @@
   user-select: none;
 }
 .ctl-select__list--portal {
-  z-index: 90;
+  /* Overlay layer: must clear the mobile compose sheet (z 180) so portaled
+     menus stay usable inside it (060 audit A1). */
+  z-index: 220;
 }
 
 /* ---- Toggle (switch) ---- */

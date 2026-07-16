@@ -1,9 +1,12 @@
 import { getAllPresets } from "../../lib/presets";
 import { useI18n } from "../../i18n";
 import { useAppStore } from "../../store/useAppStore";
+import type { Provider } from "../../types";
+import { useProviderAvailability } from "../../hooks/useProviderAvailability";
 import { Chip, ChipRow } from "../controls";
+import { Select, type SelectItem } from "../controls/Select";
 
-const PROVIDER_LABELS: Record<string, string> = {
+const PROVIDER_LABELS: Record<Provider, string> = {
   oauth: "GPT OAuth",
   api: "GPT API",
   grok: "Grok OAuth",
@@ -16,14 +19,26 @@ export function HomePromptComposer() {
   const prompt = useAppStore((state) => state.prompt);
   const setPrompt = useAppStore((state) => state.setPrompt);
   const provider = useAppStore((state) => state.provider);
+  const setProvider = useAppStore((state) => state.setProvider);
   const selectedPresetIds = useAppStore((state) => state.selectedPresetIds);
   const removePreset = useAppStore((state) => state.removePreset);
   const generate = useAppStore((state) => state.generate);
   const activeGenerations = useAppStore((state) => state.activeGenerations);
+  const providerAvailability = useProviderAvailability();
   const { t } = useI18n();
   const selectedIdSet = new Set(selectedPresetIds);
   const selectedPresets = getAllPresets().filter((preset) => selectedIdSet.has(preset.id));
   const isGenerating = activeGenerations > 0;
+  const providerItems = Object.entries(PROVIDER_LABELS).map(([value, label]) => {
+    const providerValue = value as Provider;
+    const availability = providerAvailability[providerValue];
+    return {
+      value: providerValue,
+      label,
+      sub: availability.ok ? t("readiness.ready") : availability.reason,
+      disabled: !availability.ok,
+    } satisfies SelectItem<Provider>;
+  });
 
   return (
     <div className="home-prompt">
@@ -55,15 +70,23 @@ export function HomePromptComposer() {
       />
 
       <div className="home-prompt__footer">
-        <span className="home-prompt__provider">
-          <span className="home-prompt__provider-dot" aria-hidden="true" />
-          {PROVIDER_LABELS[provider] ?? provider}
-        </span>
+        <Select
+          className="home-prompt__provider"
+          items={providerItems}
+          value={provider}
+          onChange={setProvider}
+          ariaLabel={t("readiness.provider")}
+        />
         <button
           type="button"
           className="home-prompt__generate"
           disabled={isGenerating || prompt.trim().length === 0}
-          onClick={() => void generate()}
+          onClick={() => {
+            void generate();
+            // Switch to classic mode so the user sees inflight/results
+            const setUIMode = useAppStore.getState().setUIMode;
+            setUIMode("classic");
+          }}
         >
           {isGenerating
             ? t("generate.buttonLoading", { n: activeGenerations })

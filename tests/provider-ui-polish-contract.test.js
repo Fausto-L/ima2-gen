@@ -11,15 +11,14 @@ function readSource(path) {
 }
 
 describe("provider UI contract", () => {
-  it("renders provider selection as logo-free compact pills", () => {
-    const select = readSource("ui/src/components/ProviderSelect.tsx");
+  it("renders provider selection as one grouped logo-free dropdown (060)", () => {
+    const select = readSource("ui/src/components/settings/ProviderStatusSelect.tsx");
 
-    assert.match(select, /const GRID/);
-    assert.match(select, /provider-pill/);
+    assert.match(select, /CORE_ENTRIES/);
     assert.match(select, /status-dot/);
     assert.match(select, /value: "grok-api"/);
     assert.match(select, /value: "gemini-api"/);
-    assert.match(select, /setProvider\(cell\.value\)/);
+    assert.match(select, /setProvider\(next\)/);
     assert.doesNotMatch(select, /ProviderCard/);
     assert.doesNotMatch(select, /getProviderIdentity/);
   });
@@ -30,24 +29,28 @@ describe("provider UI contract", () => {
     const toastCss = readSource("ui/src/styles/toast-modal.css");
 
     assert.match(indexCss, /@import "\.\/styles\/provider-controls\.css";/);
-    assert.match(providerCss, /\.provider-pill/);
-    assert.match(providerCss, /\.provider-pill\.selected/);
+    assert.match(providerCss, /\.provider-status-select/);
+    assert.match(providerCss, /\.provider-status-line/);
+    assert.match(providerCss, /\.provider-auth-chip/);
     assert.match(providerCss, /\.status-dot--ok/);
     assert.match(providerCss, /\.status-dot--bad/);
+    assert.match(providerCss, /\.status-dot--warn/);
     assert.doesNotMatch(providerCss, /provider-card/);
     assert.doesNotMatch(providerCss, /provider-card__mark/);
     assert.doesNotMatch(toastCss, /\.provider-grid/);
   });
 
-  it("keeps provider pills accessible and stable", () => {
-    const select = readSource("ui/src/components/ProviderSelect.tsx");
+  it("keeps the provider dropdown accessible and stable", () => {
+    const select = readSource("ui/src/components/settings/ProviderStatusSelect.tsx");
+    const primitive = readSource("ui/src/components/controls/Select.tsx");
     const css = readSource("ui/src/styles/provider-controls.css");
 
-    assert.match(select, /type="button"/);
-    assert.match(select, /aria-label=/);
-    assert.match(select, /aria-pressed=\{selected\}/);
+    assert.match(select, /ariaLabel=\{t\("provider\.authTitle"\)\}/);
+    // Select-only combobox contract (060 audit A2).
+    assert.match(primitive, /role="combobox"/);
+    assert.match(primitive, /aria-activedescendant=\{open \? optionId\(activeIndex\) : undefined\}/);
+    assert.match(primitive, /const typeahead = /);
     assert.match(css, /min-height:\s*44px/);
-    assert.match(css, /:focus-visible/);
   });
 
   it("keeps Agent mode model control on the existing dropdown pattern", () => {

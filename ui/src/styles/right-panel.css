@@ -528,33 +528,6 @@
   background: var(--surface-2);
 }
 
-/* 030 — provider status strip (top of Settings tab) */
-.provider-status-strip {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 10px;
-  padding: 2px 2px 8px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--hairline-soft, rgba(255, 255, 255, 0.08));
-}
-.provider-status-strip__item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 0.03em;
-  color: var(--text-dim);
-  cursor: default;
-}
-.provider-status-strip__item--mcp {
-  color: var(--text);
-}
-.status-dot--warn {
-  background: var(--amber, #d9a12e);
-}
-
 /* 030 — MCP lane controls */
 .mcp-generation-controls__header {
   display: flex;

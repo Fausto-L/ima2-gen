@@ -14,6 +14,8 @@ export type SelectItem<V extends string> = {
   label: ReactNode;
   sub?: ReactNode;
   disabled?: boolean;
+  /** Plain-text used for keyboard typeahead when `label` is not a string. */
+  searchText?: string;
 };
 
 export type SelectGroup<V extends string> = {
@@ -91,8 +93,36 @@ export function Select<V extends string>({
   const [activeIndex, setActiveIndex] = useState(() =>
     Math.max(0, flat.findIndex((it) => it.value === value)),
   );
+  const typeaheadRef = useRef<{ buffer: string; at: number }>({ buffer: "", at: 0 });
 
   const selected = flat.find((it) => it.value === value);
+  const optionId = (index: number) => `${listId}-opt-${index}`;
+
+  const searchTextOf = (it: SelectItem<V>): string => {
+    if (it.searchText) return it.searchText;
+    if (typeof it.label === "string") return it.label;
+    return it.value;
+  };
+
+  // Select-only combobox typeahead (APG): printable keys accumulate in a 1s
+  // buffer and move the active option to the next prefix match (audit A2).
+  const typeahead = (key: string) => {
+    const now = Date.now();
+    const state = typeaheadRef.current;
+    state.buffer = now - state.at > 1000 ? key : state.buffer + key;
+    state.at = now;
+    const query = state.buffer.toLowerCase();
+    const start = state.buffer.length === 1 ? activeIndex + 1 : activeIndex;
+    for (let i = 0; i < flat.length; i += 1) {
+      const index = (start + i + flat.length) % flat.length;
+      const item = flat[index];
+      if (!item || item.disabled) continue;
+      if (searchTextOf(item).toLowerCase().startsWith(query)) {
+        setActiveIndex(index);
+        return;
+      }
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -185,10 +215,19 @@ export function Select<V extends string>({
       event.preventDefault();
       setActiveIndex(flat.length - 1);
     } else if (event.key === "Enter" || event.key === " ") {
+      // Space participates in typeahead when a buffer is live (APG).
+      if (event.key === " " && Date.now() - typeaheadRef.current.at <= 1000 && typeaheadRef.current.buffer) {
+        event.preventDefault();
+        typeahead(" ");
+        return;
+      }
       event.preventDefault();
       commit(activeIndex);
     } else if (event.key === "Tab") {
       setOpen(false);
+    } else if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      event.preventDefault();
+      typeahead(event.key);
     }
   };
 
@@ -222,6 +261,7 @@ export function Select<V extends string>({
                 <li
                   key={it.value}
                   role="option"
+                  id={optionId(index)}
                   data-index={index}
                   aria-selected={it.value === value}
                   aria-disabled={it.disabled || undefined}
@@ -249,9 +289,11 @@ export function Select<V extends string>({
         id={id}
         ref={triggerRef}
         className={`ctl-select__trigger${open ? " is-open" : ""}`}
+        role="combobox"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listId}
+        aria-activedescendant={open ? optionId(activeIndex) : undefined}
         aria-label={ariaLabel}
         disabled={disabled}
         title={title}
