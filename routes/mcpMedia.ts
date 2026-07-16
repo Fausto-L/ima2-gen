@@ -20,6 +20,7 @@ import { uploadLocalMediaToRunway } from "../lib/mcp/adapters/runwayUpload.js";
 import { resolveMediaAction, type MediaOperation } from "../lib/mcp/mediaWorkflowRouter.js";
 import { loadEffectiveSnapshot } from "../lib/mcp/snapshotStore.js";
 import { higgsfieldAdapter } from "../lib/mcp/adapters/higgsfield.js";
+import { parseMcpPresetRecord, type McpPresetValue } from "../lib/mcp/modelCapabilities.js";
 import type { MediaProviderAdapter } from "../lib/mcp/providerAdapter.js";
 import { requireRuntimeContext, type RouteRuntimeContext } from "../lib/runtimeContext.js";
 
@@ -205,6 +206,12 @@ export function registerMcpMediaRoutes(app: Express, ctxRaw: RouteRuntimeContext
     if (kind !== "image" && kind !== "video") return res.status(400).json({ error: { code: "INVALID_KIND", message: "kind must be image|video" } });
     if (!adapter.executable) return res.status(409).json({ error: { code: "MCP_EXECUTION_LOCKED", message: `${adapter.provider} is catalog-only` } });
     if (typeof prompt !== "string" || !prompt.trim()) return res.status(400).json({ error: { code: "INVALID_PROMPT", message: "prompt is required" } });
+    let parameters: Record<string, McpPresetValue>;
+    try {
+      parameters = parseMcpPresetRecord(req.body?.parameters);
+    } catch {
+      return res.status(400).json({ error: { code: "INVALID_MCP_PARAMETERS", message: "parameters must be a bounded scalar record" } });
+    }
 
     const manager = ctx.mcpConnectionManager;
     if (!manager || manager.status(adapter.provider).state !== "connected") {
@@ -240,7 +247,7 @@ export function registerMcpMediaRoutes(app: Express, ctxRaw: RouteRuntimeContext
 
     const abort = new AbortController();
     registerJobAbortController(requestId, abort);
-    void runMcpMediaJob({ ctx, deps, adapter, requestId, kind, prompt, model, ratio, startFrameUrl, localStartFramePath, parentFilename, signal: abort.signal });
+    void runMcpMediaJob({ ctx, deps, adapter, requestId, kind, prompt, model, ratio, parameters, startFrameUrl, localStartFramePath, parentFilename, signal: abort.signal });
   });
 
   app.post("/api/mcp/media-action", (req: Request, res: Response) => handleMediaAction(ctx, deps, req, res));
@@ -255,6 +262,7 @@ async function runMcpMediaJob(input: {
   prompt: string;
   model?: string;
   ratio?: string;
+  parameters: Record<string, McpPresetValue>;
   startFrameUrl?: string;
   localStartFramePath?: string | null;
   parentFilename?: string | null;
@@ -278,6 +286,7 @@ async function runMcpMediaJob(input: {
       kind, prompt,
       ...(input.model ? { model: input.model } : {}),
       ...(input.ratio ? { ratio: input.ratio } : {}),
+      ...(Object.keys(input.parameters).length > 0 ? { parameters: input.parameters } : {}),
       ...(startFrameUrl ? { startFrameUrl } : {}),
     }, {
       signal,
@@ -297,6 +306,7 @@ async function runMcpMediaJob(input: {
         provider: adapter.provider, providerTransport: "mcp-streamable-http",
         model: input.model ?? null, providerTaskId: result.taskId,
         providerUrl: download.sanitizedUrl,
+        ...(Object.keys(input.parameters).length > 0 ? { mcpParameters: input.parameters } : {}),
         ...(input.parentFilename ? { parent: { filename: input.parentFilename, mediaType: "image", role: "start-frame" } } : {}),
         kind: `mcp-${kind}`,
       },

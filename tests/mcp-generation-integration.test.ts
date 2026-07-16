@@ -19,11 +19,14 @@ after(() => { db.closeDb(); rmSync(dir, { recursive: true, force: true }); });
 
 const fakeManager = { status: () => ({ provider: "runway", state: "connected" }) };
 
-function makeDeps(overrides: { failSidecar?: boolean } = {}) {
+function makeDeps(overrides: { failSidecar?: boolean; capture?: Array<Record<string, unknown>> } = {}) {
   const tempMedia = join(dir, "temp-media.png");
   writeFileSync(tempMedia, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
   return {
-    execute: async () => ({ taskId: "task-1", outputUrls: ["https://cdn.example.com/out.png?sig=secret"] }),
+    execute: async (_manager: unknown, _adapter: unknown, request: Record<string, unknown>) => {
+      overrides.capture?.push(request);
+      return { taskId: "task-1", outputUrls: ["https://cdn.example.com/out.png?sig=secret"] };
+    },
     download: async () => ({
       tempPath: tempMedia, contentType: "image/png", bytes: 4,
       sanitizedUrl: "https://cdn.example.com/out.png",
@@ -102,6 +105,24 @@ test("sidecar failure rolls back media and emits error, never done", async () =>
   });
 });
 
+test("route forwards bounded scalar presets and persists the selected values", async () => {
+  const capture: Array<Record<string, unknown>> = [];
+  await withApp(makeDeps({ capture }), async (base) => {
+    const response = await fetch(`${base}/api/mcp/generate`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        provider: "runway", kind: "image", prompt: "fox", model: "gen-4", requestId: "mcp-test-params",
+        parameters: { duration: 8, resolution: "720p", generateAudio: false },
+      }),
+    });
+    assert.equal(response.status, 202);
+    const done = await waitForEvent("mcp-test-params", "done");
+    assert.deepEqual(capture[0].parameters, { duration: 8, resolution: "720p", generateAudio: false });
+    const sidecar = JSON.parse(readFileSync(join(dir, "generated", String(done.filename) + ".json"), "utf8"));
+    assert.deepEqual(sidecar.mcpParameters, { duration: 8, resolution: "720p", generateAudio: false });
+  });
+});
+
 test("guards: unknown provider 400, locked provider 409, disconnected 409", async () => {
   await withApp(makeDeps(), async (base) => {
     const bad = await fetch(`${base}/api/mcp/generate`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider: "nope", kind: "image", prompt: "x" }) });
@@ -109,5 +130,8 @@ test("guards: unknown provider 400, locked provider 409, disconnected 409", asyn
     const locked = await fetch(`${base}/api/mcp/generate`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider: "higgsfield", kind: "image", prompt: "x" }) });
     assert.equal(locked.status, 409);
     assert.equal((await locked.json() as { error: { code: string } }).error.code, "MCP_EXECUTION_LOCKED");
+    const malformed = await fetch(`${base}/api/mcp/generate`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider: "runway", kind: "image", prompt: "x", parameters: ["bad"] }) });
+    assert.equal(malformed.status, 400);
+    assert.equal((await malformed.json() as { error: { code: string } }).error.code, "INVALID_MCP_PARAMETERS");
   });
 });

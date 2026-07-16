@@ -44,15 +44,19 @@ function makeCaller(pages: Record<string, Record<string, unknown>[]>): { caller:
 beforeEach(() => clearModelsCatalogCache());
 
 describe("parseModelsExploreItems", () => {
-  it("projects the captured fixture into {id,label,description} entries", () => {
+  it("preserves bounded provider-declared presets from the captured fixture", () => {
     const entries = parseModelsExploreItems(fixture);
     assert.equal(entries.length, 20);
     const nano = entries.find((entry) => entry.id === "nano_banana_pro");
-    assert.deepEqual(nano, {
-      id: "nano_banana_pro",
-      label: "Nano Banana Pro",
-      description: "Ultimate quality, text and diagrams",
+    assert.equal(nano?.label, "Nano Banana Pro");
+    assert.equal(nano?.description, "Ultimate quality, text and diagrams");
+    assert.equal(nano?.capabilities.source, "provider-declared");
+    assert.ok(nano?.capabilities.aspectRatios.includes("21:9"));
+    assert.deepEqual(nano?.capabilities.parameters.find((parameter) => parameter.name === "resolution"), {
+      name: "resolution", type: "string", description: "Output resolution",
+      default: "1k", options: ["1k", "2k", "4k"],
     });
+    assert.deepEqual(nano?.capabilities.inputRoles, ["image"]);
   });
 
   it("skips malformed items and falls back to id as label", () => {
@@ -61,7 +65,27 @@ describe("parseModelsExploreItems", () => {
       { id: "" },
       { name: "no-id" } as never,
     ]));
-    assert.deepEqual(entries, [{ id: "soul_2", label: "soul_2" }]);
+    assert.deepEqual(entries, [{
+      id: "soul_2", label: "soul_2",
+      capabilities: { source: "provider-declared", aspectRatios: [], parameters: [], inputRoles: [] },
+    }]);
+  });
+
+  it("synthesizes duration ranges and drops malformed capability fields", () => {
+    const entries = parseModelsExploreItems(page([{
+      id: "video_1",
+      aspect_ratios: ["16:9", "x".repeat(30), 9],
+      duration_range: { min: 4, max: 15 },
+      parameters: [
+        { name: "resolution", type: "string", options: ["720p", {}, "1080p"], default: "720p" },
+        { name: "bad key!", type: "string", options: ["x"] },
+      ],
+      medias: [{ roles: ["start_image", "start_image", 7] }],
+    } as never]));
+    assert.deepEqual(entries[0].capabilities.aspectRatios, ["16:9"]);
+    assert.deepEqual(entries[0].capabilities.inputRoles, ["start_image"]);
+    assert.deepEqual(entries[0].capabilities.parameters.map((parameter) => parameter.name), ["resolution", "duration"]);
+    assert.deepEqual(entries[0].capabilities.parameters[1], { name: "duration", type: "number", min: 4, max: 15 });
   });
 });
 
@@ -76,6 +100,11 @@ describe("getProviderModels", () => {
     assert.deepEqual(models.image.map((entry) => entry.id), [
       "nano-banana-pro", "gpt-image-2", "gen-4",
     ]);
+    const seedance = models.video.find((entry) => entry.id === "seedance-2");
+    assert.deepEqual(seedance?.capabilities.parameters.find((parameter) => parameter.name === "duration"), {
+      name: "duration", type: "number", description: "Output duration in seconds.", min: 4, max: 15, default: 10,
+    });
+    assert.deepEqual(seedance?.capabilities.parameters.find((parameter) => parameter.name === "resolution")?.options, ["480p", "720p", "1080p"]);
   });
 
   it("rejects unknown providers with the canonical code", async () => {

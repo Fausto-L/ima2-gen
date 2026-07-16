@@ -19,6 +19,30 @@ test("runway video request maps startFrame for image-to-video", () => {
   assert.deepEqual(plan.args.startFrame, { url: "https://x.example/a.png" });
 });
 
+test("runway forwards only model-declared video presets", () => {
+  const plan = runwayAdapter.buildGenerateCall({
+    kind: "video", prompt: "camera pans", model: "seedance-2", ratio: "9:16",
+    parameters: { duration: 12, resolution: "1080p", generateAudio: false },
+  });
+  assert.equal(plan.args.duration, 12);
+  assert.equal(plan.args.resolution, "1080p");
+  assert.equal(plan.args.generateAudio, false);
+});
+
+test("runway rejects unsupported ratios, keys, ranges, and dependent combinations before a tool plan", () => {
+  assert.throws(() => runwayAdapter.buildGenerateCall({ kind: "image", prompt: "x", model: "gpt-image-2", ratio: "7:5" }), /MCP_PARAMETER_INVALID/);
+  assert.throws(() => runwayAdapter.buildGenerateCall({ kind: "video", prompt: "x", model: "gen-4-turbo", parameters: { resolution: "1080p" } }), /MCP_PARAMETER_UNSUPPORTED/);
+  assert.throws(() => runwayAdapter.buildGenerateCall({ kind: "video", prompt: "x", model: "seedance-2", parameters: { duration: 99 } }), /MCP_PARAMETER_INVALID/);
+  assert.throws(() => runwayAdapter.buildGenerateCall({ kind: "video", prompt: "x", model: "veo-3.1", parameters: { resolution: "1080p", duration: 6 } }), /1080p-requires-8s/);
+});
+
+test("runway omits Auto presets instead of inventing provider arguments", () => {
+  const plan = runwayAdapter.buildGenerateCall({ kind: "video", prompt: "x", model: "veo-3.1", parameters: {} });
+  assert.equal("duration" in plan.args, false);
+  assert.equal("resolution" in plan.args, false);
+  assert.equal("generateAudio" in plan.args, false);
+});
+
 test("unsupported model ids are rejected before any call", () => {
   assert.throws(() => runwayAdapter.buildGenerateCall({ kind: "image", prompt: "x", model: "dall-e-9" }), /MCP_MODEL_UNSUPPORTED/);
   assert.throws(() => runwayAdapter.buildGenerateCall({ kind: "video", prompt: "x", model: "sora-99" }), /MCP_MODEL_UNSUPPORTED/);

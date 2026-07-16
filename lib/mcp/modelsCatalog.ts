@@ -4,9 +4,17 @@
 // upstream tool this module may ever call (READONLY_CATALOG_TOOL). Nothing in
 // a request can influence the tool name (audit R1-3). Billing tools stay
 // denied at the adapter layer; this module never touches them.
-import { runwayAdapter } from "./adapters/runway.js";
+import { RUNWAY_MODEL_CATALOG } from "./adapters/runway.js";
+import {
+  isMcpPresetValue,
+  type McpModelCapabilities,
+  type McpModelEntry,
+  type McpModelParameter,
+  type McpParameterType,
+  type McpPresetValue,
+} from "./modelCapabilities.js";
 
-export type McpModelEntry = { id: string; label: string; description?: string };
+export type { McpModelEntry, McpModelCapabilities, McpModelParameter, McpPresetValue } from "./modelCapabilities.js";
 export type McpProviderModels = { image: McpModelEntry[]; video: McpModelEntry[] };
 
 /** Sole upstream tool this resolver is allowed to call. Read-only, no credits. */
@@ -27,22 +35,97 @@ export type CatalogToolCaller = (
   options?: { signal?: AbortSignal; timeoutMs?: number },
 ) => Promise<Record<string, unknown>>;
 
-/** Projects a models_explore result to catalog entries ({id,label,description}
- *  is a projection — source items carry many more fields). */
+function boundedText(value: unknown, maxLength: number): string | undefined {
+  return typeof value === "string" && value.length > 0 && value.length <= maxLength ? value : undefined;
+}
+
+function boundedStrings(value: unknown, maxItems: number, maxLength: number): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value
+    .slice(0, maxItems)
+    .filter((item): item is string => typeof item === "string" && item.length > 0 && item.length <= maxLength))];
+}
+
+function parameterType(value: unknown): McpParameterType | null {
+  if (value === "bool" || value === "boolean") return "boolean";
+  if (value === "string" || value === "number" || value === "string_array") return value;
+  return null;
+}
+
+function presetOptions(value: unknown): McpPresetValue[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const options = value.slice(0, 50).filter(isMcpPresetValue);
+  return options.length > 0 ? [...new Set(options)] : undefined;
+}
+
+function parseParameter(value: unknown): McpModelParameter | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const name = boundedText(record.name, 64);
+  const type = parameterType(record.type);
+  if (!name || !/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(name) || !type) return null;
+  const min = typeof record.min === "number" && Number.isFinite(record.min) ? record.min : undefined;
+  const max = typeof record.max === "number" && Number.isFinite(record.max) ? record.max : undefined;
+  const defaultValue = isMcpPresetValue(record.default) ? record.default : undefined;
+  return {
+    name, type,
+    ...(record.required === true || record.required === "required" ? { required: true } : {}),
+    ...(boundedText(record.description, 500) ? { description: boundedText(record.description, 500) } : {}),
+    ...(defaultValue !== undefined ? { default: defaultValue } : {}),
+    ...(presetOptions(record.options) ? { options: presetOptions(record.options) } : {}),
+    ...(min !== undefined ? { min } : {}),
+    ...(max !== undefined ? { max } : {}),
+  };
+}
+
+function syntheticDuration(record: Record<string, unknown>): McpModelParameter | null {
+  const durations = Array.isArray(record.durations)
+    ? record.durations.filter((item): item is number => typeof item === "number" && Number.isFinite(item)).slice(0, 50)
+    : [];
+  if (durations.length > 0) return { name: "duration", type: "number", options: durations };
+  const range = record.duration_range;
+  if (!range || typeof range !== "object") return null;
+  const min = (range as Record<string, unknown>).min;
+  const max = (range as Record<string, unknown>).max;
+  if (typeof min !== "number" || typeof max !== "number" || !Number.isFinite(min) || !Number.isFinite(max)) return null;
+  return { name: "duration", type: "number", min, max };
+}
+
+function parseCapabilities(record: Record<string, unknown>): McpModelCapabilities {
+  const parameters = Array.isArray(record.parameters)
+    ? record.parameters.slice(0, 100).map(parseParameter).filter((item): item is McpModelParameter => Boolean(item))
+    : [];
+  const duration = syntheticDuration(record);
+  if (duration && !parameters.some((parameter) => parameter.name === "duration")) parameters.push(duration);
+  const mediaItems = Array.isArray(record.medias) ? record.medias.slice(0, 50) : [];
+  const inputRoles = boundedStrings(mediaItems.flatMap((item) => (
+    item && typeof item === "object" ? (item as { roles?: unknown }).roles ?? [] : []
+  )), 100, 64);
+  return {
+    source: "provider-declared",
+    aspectRatios: boundedStrings(record.aspect_ratios, 50, 24),
+    parameters,
+    inputRoles,
+  };
+}
+
+/** Projects bounded models_explore facts without dropping provider presets. */
 export function parseModelsExploreItems(result: Record<string, unknown>): McpModelEntry[] {
   const structured = (result as { structuredContent?: { items?: unknown } }).structuredContent;
   const items = Array.isArray(structured?.items) ? structured.items : [];
   const entries: McpModelEntry[] = [];
   for (const item of items) {
     if (!item || typeof item !== "object") continue;
-    const record = item as { id?: unknown; name?: unknown; description?: unknown };
-    if (typeof record.id !== "string" || record.id.length === 0) continue;
+    const record = item as Record<string, unknown>;
+    const id = boundedText(record.id, 128);
+    if (!id) continue;
     entries.push({
-      id: record.id,
-      label: typeof record.name === "string" && record.name ? record.name : record.id,
-      ...(typeof record.description === "string" && record.description
-        ? { description: record.description }
+      id,
+      label: boundedText(record.name, 160) ?? id,
+      ...(boundedText(record.description, 500)
+        ? { description: boundedText(record.description, 500) }
         : {}),
+      capabilities: parseCapabilities(record),
     });
   }
   return entries;
@@ -93,8 +176,19 @@ export function clearModelsCatalogCache(): void {
   cache.clear();
 }
 
-function staticEntries(ids: readonly string[]): McpModelEntry[] {
-  return ids.map((id) => ({ id, label: id }));
+function cloneEntries(entries: readonly McpModelEntry[]): McpModelEntry[] {
+  return entries.map((entry) => ({
+    ...entry,
+    capabilities: {
+      ...entry.capabilities,
+      aspectRatios: [...entry.capabilities.aspectRatios],
+      parameters: entry.capabilities.parameters.map((parameter) => ({
+        ...parameter,
+        ...(parameter.options ? { options: [...parameter.options] } : {}),
+      })),
+      inputRoles: [...entry.capabilities.inputRoles],
+    },
+  }));
 }
 
 export async function getProviderModels(
@@ -104,8 +198,8 @@ export async function getProviderModels(
 ): Promise<McpProviderModels> {
   if (provider === "runway") {
     return {
-      image: staticEntries(runwayAdapter.models.image),
-      video: staticEntries(runwayAdapter.models.video),
+      image: cloneEntries(RUNWAY_MODEL_CATALOG.image),
+      video: cloneEntries(RUNWAY_MODEL_CATALOG.video),
     };
   }
   if (provider !== "higgsfield") throw new Error("MCP_PROVIDER_UNKNOWN");

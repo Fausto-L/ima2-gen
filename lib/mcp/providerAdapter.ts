@@ -1,5 +1,7 @@
 // Provider adapter contract (050 WP5): normalized media requests <-> provider
 // tool calls. Adapters are pure mapping layers — no IO, no persistence.
+import type { McpPresetValue } from "./modelCapabilities.js";
+
 export type MediaJobKind = "image" | "video";
 
 export interface MediaJobRequest {
@@ -7,6 +9,8 @@ export interface MediaJobRequest {
   prompt: string;
   model?: string;
   ratio?: string;
+  /** Provider-neutral scalar preset values; executable adapters whitelist them per model. */
+  parameters?: Record<string, McpPresetValue>;
   /** Image-to-video start frame (public HTTPS or provider-hosted URL). */
   startFrameUrl?: string;
   /** Free-text purpose forwarded to providers that require a rationale field. */
