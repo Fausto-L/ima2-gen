@@ -161,7 +161,7 @@
     background: var(--control-bg);
   }
   .mobile-sheet-tabs__button {
-    min-height: 38px;
+    min-height: 44px;
     border: 0;
     border-radius: 999px;
     color: var(--text-dim);
@@ -241,6 +241,10 @@
   .compose-sheet__panel--prompt .composer__tray-remove:hover::before,
   .compose-sheet__panel--prompt .composer__tray-remove:focus-visible::before {
     background: var(--red);
+  }
+  .compose-sheet__panel--prompt .composer__tool,
+  .compose-sheet__panel--prompt .composer__tool--storyboard {
+    min-height: 44px;
   }
   .compose-sheet__inflight {
     flex: 0 1 auto;
@@ -336,16 +340,16 @@
     }
     .mobile-app-bar .image-model-select__trigger,
     .mobile-app-bar__icon-button {
-      width: 40px;
-      min-width: 40px;
-      min-height: 40px;
+      width: 44px;
+      min-width: 44px;
+      min-height: 44px;
     }
     .image-model-select__trigger-separator,
     .image-model-select__trigger-effort {
       display: none;
     }
     .mobile-app-bar__generate {
-      min-height: 40px;
+      min-height: 44px;
       padding: 0 11px;
     }
   }

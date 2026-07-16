@@ -37,6 +37,9 @@ test("dead tags join retiredTags behind the native textarea", () => {
   assert.match(composerCss, /\.composer__prompt-mirror\s*\{[\s\S]*?z-index:\s*0/);
   assert.match(composerCss, /\.composer__textarea\s*\{[\s\S]*?z-index:\s*1/);
   assert.match(composerCss, /\.dead-tag\s*\{[\s\S]*?background:[\s\S]*?text-decoration-line:\s*line-through/);
+  assert.match(mirror, /document\.createRange\(\)/);
+  assert.match(mirror, /range\.getClientRects\(\)/);
+  assert.match(mirror, /<span ref=\{textRef\}>\{prompt\}<\/span>/);
 });
 
 test("desktop layout uses 7:3 flex ratios without changing the bottom variant", () => {

@@ -512,14 +512,26 @@
   overflow-wrap: break-word;
 }
 .composer__prompt-mirror .dead-tag {
+  position: absolute;
+  pointer-events: none;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--red) 24%, transparent);
+  background: color-mix(in srgb, var(--text-muted) 24%, transparent);
   color: transparent;
   text-decoration-line: line-through;
-  text-decoration-color: color-mix(in srgb, var(--red) 86%, var(--text));
+  text-decoration-color: color-mix(in srgb, var(--text-muted) 86%, var(--text));
   text-decoration-thickness: 1.5px;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
+}
+.composer__prompt-mirror .dead-tag::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  left: 0;
+  top: 50%;
+  height: 1.5px;
+  background: color-mix(in srgb, var(--text-muted) 86%, var(--text));
+  transform: translateY(-50%);
 }
 .composer__textarea {
   position: relative;

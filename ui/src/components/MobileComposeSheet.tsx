@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAppStore } from "../store/useAppStore";
 import { useI18n } from "../i18n";
 import { useIsMobile } from "../hooks/useIsMobile";
@@ -31,13 +31,15 @@ export function MobileComposeSheet() {
       uiModeRaw === "card-news" && ENABLE_CARD_NEWS_MODE ? "card-news" :
       uiModeRaw === "node" && ENABLE_NODE_MODE ? "node" :
       uiModeRaw === "assets" ? "assets" :
-      uiModeRaw === "asset-gen" ? "asset-gen" :
         "classic";
   const isMobile = useIsMobile();
   const [inflightExpanded, setInflightExpanded] = useState(false);
+  const previousInFlightCountRef = useRef(inFlightCount);
+  const inflightHadFocusRef = useRef(false);
+  const actionsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open || activeTab !== "prompt") {
+    if (!open || activeTab !== "prompt" || !isMobile || settingsOpen || uiMode !== "classic") {
       setInflightExpanded(false);
     }
     if (!open) return;
@@ -46,7 +48,18 @@ export function MobileComposeSheet() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, activeTab, close]);
+  }, [open, activeTab, close, isMobile, settingsOpen, uiMode]);
+
+  useLayoutEffect(() => {
+    const lastJobFinished = previousInFlightCountRef.current > 0 && inFlightCount === 0;
+    previousInFlightCountRef.current = inFlightCount;
+    if (!lastJobFinished) return;
+    setInflightExpanded(false);
+    if (inflightHadFocusRef.current) {
+      actionsRef.current?.querySelector<HTMLButtonElement>(".generate-btn")?.focus();
+    }
+    inflightHadFocusRef.current = false;
+  }, [inFlightCount]);
 
   if (!isMobile || settingsOpen || uiMode !== "classic") return null;
 
@@ -90,14 +103,24 @@ export function MobileComposeSheet() {
         </div>
         <div className="compose-sheet__body">
           {activeTab === "prompt" ? (
-            <div className="compose-sheet__panel compose-sheet__panel--prompt" role="tabpanel">
+            <div
+              className="compose-sheet__panel compose-sheet__panel--prompt"
+              role="tabpanel"
+              onFocusCapture={(event) => {
+                const panel = document.getElementById(MOBILE_INFLIGHT_PANEL_ID);
+                inflightHadFocusRef.current = panel?.contains(event.target as Node) ?? false;
+              }}
+            >
               <PromptComposer />
               {inFlightCount > 0 ? (
                 <section className="compose-sheet__inflight" hidden={!inflightExpanded}>
                   <button
                     type="button"
                     className="compose-sheet__inflight-header"
-                    onClick={() => setInflightExpanded(false)}
+                    onClick={() => {
+                      actionsRef.current?.querySelector<HTMLButtonElement>(".inflight-badge")?.focus();
+                      setInflightExpanded(false);
+                    }}
                     aria-expanded={inflightExpanded}
                     aria-controls={MOBILE_INFLIGHT_PANEL_ID}
                     aria-label={t("inflight.inlineCollapse", { n: inFlightCount })}
@@ -109,7 +132,7 @@ export function MobileComposeSheet() {
                   <p className="compose-sheet__inflight-footer">{t("inflight.footerHint")}</p>
                 </section>
               ) : null}
-              <div className="compose-sheet__actions">
+              <div ref={actionsRef} className="compose-sheet__actions">
                 <GenerateButton />
                 <InFlightBadge
                   variant="inline"
