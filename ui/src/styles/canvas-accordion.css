@@ -220,6 +220,18 @@
   line-height: 1.1;
 }
 
+.image-model-select__retry {
+  font: inherit;
+  font-size: 10px;
+  color: var(--amber, #d9a12e);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  letter-spacing: 0.02em;
+}
+
 .image-model-select--settings select {
   color: inherit;
   font: inherit;

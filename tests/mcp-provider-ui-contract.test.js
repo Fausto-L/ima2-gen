@@ -35,7 +35,7 @@ describe("MCP provider UI contract", () => {
     assert.match(api, /filename: data\.filename/);
     assert.match(api, /mediaType: data\.mediaType/);
     assert.match(settings, /onDone: \(\) => get\(\)\.hydrateHistory\(\)/);
-    assert.match(settings, /requestId: `mcp_ui_\$\{Date\.now\(\)\}`/);
+    assert.match(settings, /`mcp_ui_\$\{Date\.now\(\)\}`/);
     assert.doesNotMatch(settings, /res\.image|addGeneratedHistoryItem/);
   });
 
@@ -46,12 +46,44 @@ describe("MCP provider UI contract", () => {
 
     assert.match(types, /mcpProvider\?: string \| null/);
     assert.match(types, /mcpModel\?: string \| null/);
+    assert.match(types, /mcpMediaKind\?: "image" \| "video"/);
     assert.match(settings, /setMcpProviderImpl/);
     assert.match(settings, /clearMcpLane\(set\)/);
     assert.match(settings, /count: 1/);
     assert.match(settings, /multimode: false/);
     assert.match(persistence, /typeof mcpProvider === "string"/);
-    assert.match(persistence, /saveMcpSelection\(provider: string \| null, model: string \| null\)/);
+    assert.match(
+      persistence,
+      /saveMcpSelection\(\s*provider: string \| null,\s*model: string \| null,\s*kind: "image" \| "video" = "image",?\s*\)/,
+    );
+    assert.match(persistence, /parsed\.mcpMediaKind === "image" \|\| parsed\.mcpMediaKind === "video"/);
+  });
+
+  it("routes MCP media kind through the store lane, not the core video flag", () => {
+    const settings = readSource("ui/src/store/storeSettingsImpl.ts");
+    const select = readSource("ui/src/components/GenProviderModelSelect.tsx");
+    const selection = readSource("ui/src/lib/mcpSelection.ts");
+
+    assert.match(settings, /buildMcpGenerationInput\(/);
+    assert.doesNotMatch(settings, /state\.videoModelSelected \? "video" : "image"/);
+    assert.match(settings, /setMcpMediaKindImpl/);
+    assert.match(settings, /setMcpModelWithKindImpl/);
+    assert.match(settings, /persistedKind \?\? get\(\)\.mcpMediaKind \?\? "image"/);
+    assert.match(select, /getMcpModelCatalog/);
+    assert.match(select, /encodeMcpModelValue\("image", model\)/);
+    assert.match(select, /encodeMcpModelValue\("video", model\)/);
+    assert.doesNotMatch(select, /const mediaKind = videoModel/);
+    assert.match(selection, /kind === "video" \? state\.videoAspectRatio : state\.grokAspectRatio/);
+  });
+
+  it("separates catalog abort, missing-contract, and failure semantics", () => {
+    const api = readSource("ui/src/lib/mcpProviders.ts");
+    const select = readSource("ui/src/components/GenProviderModelSelect.tsx");
+
+    assert.match(api, /name === "AbortError"\) throw error/);
+    assert.match(api, /status === 404\) return \[\]/);
+    assert.match(select, /setCatalogError\(true\)/);
+    assert.match(select, /setCatalogRetryToken/);
   });
 
   it("shows connected MCP providers only, preserves unknown selection, and locks Higgsfield", () => {
@@ -63,7 +95,8 @@ describe("MCP provider UI contract", () => {
     assert.match(select, /disabled=\{Boolean\(unavailableReason\)\}/);
     assert.match(select, /REASONING_EFFORT_OPTIONS/);
     assert.match(select, /getImageModelOptionsForProvider/);
-    assert.match(select, /getMcpModelOptions/);
+    assert.match(select, /getMcpModelCatalog/);
+    assert.match(select, /mcpModel && !mcpModelKnown/);
   });
 
   it("uses the split selector only outside Agent mode", () => {

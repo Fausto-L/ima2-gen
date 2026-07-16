@@ -333,6 +333,7 @@ export function isSizePreset(value: unknown): value is SizePreset {
 
 export type { GenerationDefaults } from "./storeTypes";
 import type { GenerationDefaults } from "./storeTypes";
+import { normalizeMcpSelection, type McpSelection } from "../lib/mcpSelection";
 
 export function loadGenerationDefaults(): GenerationDefaults {
   try {
@@ -348,6 +349,9 @@ export function loadGenerationDefaults(): GenerationDefaults {
     }
     if (typeof mcpModel === "string" || mcpModel === null) {
       out.mcpModel = mcpModel as string | null;
+    }
+    if (parsed.mcpMediaKind === "image" || parsed.mcpMediaKind === "video") {
+      out.mcpMediaKind = parsed.mcpMediaKind;
     }
     if (isQuality(parsed.quality)) out.quality = parsed.quality;
     if (isSizePreset(parsed.sizePreset)) out.sizePreset = parsed.sizePreset;
@@ -379,16 +383,16 @@ export function loadGenerationDefaults(): GenerationDefaults {
   }
 }
 
-export function loadMcpSelection(): { provider: string | null; model: string | null } {
-  const defaults = loadGenerationDefaults();
-  return {
-    provider: typeof defaults.mcpProvider === "string" ? defaults.mcpProvider : null,
-    model: typeof defaults.mcpModel === "string" ? defaults.mcpModel : null,
-  };
+export function loadMcpSelection(): McpSelection {
+  return normalizeMcpSelection(loadGenerationDefaults());
 }
 
-export function saveMcpSelection(provider: string | null, model: string | null): void {
-  saveGenerationDefaultsPatch({ mcpProvider: provider, mcpModel: model });
+export function saveMcpSelection(
+  provider: string | null,
+  model: string | null,
+  kind: "image" | "video" = "image",
+): void {
+  saveGenerationDefaultsPatch({ mcpProvider: provider, mcpModel: model, mcpMediaKind: kind });
 }
 
 export function saveGenerationDefaultsPatch(patch: GenerationDefaults): void {

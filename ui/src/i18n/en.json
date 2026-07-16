@@ -659,6 +659,7 @@
     "loadingModels": "Loading models",
     "loadingProviders": "Checking connections",
     "providersLoadFailed": "Could not load MCP provider status.",
+    "modelsLoadFailed": "Models failed to load — tap to retry",
     "refreshList": "Refresh status",
     "connect": "Connect",
     "connecting": "Connecting",

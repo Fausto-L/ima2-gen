@@ -16,26 +16,29 @@ import {
 } from "./storePersistence";
 import type { StoreSet, StoreGet } from "./storeTypes";
 import { startMcpGeneration } from "../lib/mcpProviders";
+import { buildMcpGenerationInput, type McpMediaKind } from "../lib/mcpSelection";
 import { t } from "../i18n";
 
 let coreGenerateAction: ReturnType<StoreGet>["generate"] | null = null;
 
 async function runMcpGenerate(get: StoreGet): Promise<void> {
   const state = get();
-  const provider = state.mcpProvider;
   const prompt = composePrompt(state.prompt, state.insertedPrompts);
-  if (!provider || !prompt) return;
-  const kind = state.videoModelSelected ? "video" : "image";
+  const input = buildMcpGenerationInput(
+    {
+      mcpProvider: state.mcpProvider,
+      mcpModel: state.mcpModel,
+      mcpMediaKind: state.mcpMediaKind,
+      videoAspectRatio: state.videoAspectRatio,
+      grokAspectRatio: state.grokAspectRatio,
+      currentImageFilename: state.currentImage?.filename ?? null,
+    },
+    prompt,
+    `mcp_ui_${Date.now()}`,
+  );
+  if (!input) return;
   try {
-    await startMcpGeneration({
-      provider,
-      kind,
-      prompt,
-      model: state.mcpModel ?? undefined,
-      ratio: kind === "video" ? state.videoAspectRatio : state.grokAspectRatio,
-      startFrameFilename: kind === "video" ? state.currentImage?.filename : undefined,
-      requestId: `mcp_ui_${Date.now()}`,
-    }, {
+    await startMcpGeneration(input, {
       onDone: () => get().hydrateHistory(),
       onError: () => get().showToast(t("mcp.generateFailed"), true),
     });
@@ -53,10 +56,11 @@ async function runMcpGenerate(get: StoreGet): Promise<void> {
 }
 
 function clearMcpLane(set: StoreSet): void {
-  saveMcpSelection(null, null);
+  saveMcpSelection(null, null, "image");
   set({
     mcpProvider: null,
     mcpModel: null,
+    mcpMediaKind: "image",
     ...(coreGenerateAction ? { generate: coreGenerateAction } : {}),
   });
 }
@@ -66,6 +70,7 @@ export function setMcpProviderImpl(
   set: StoreSet,
   get: StoreGet,
   persistedModel: string | null = null,
+  persistedKind?: McpMediaKind,
 ): void {
   if (!mcpProvider) {
     clearMcpLane(set);
@@ -75,11 +80,15 @@ export function setMcpProviderImpl(
   const mcpModel = get().mcpProvider === mcpProvider
     ? get().mcpModel ?? persistedModel
     : persistedModel;
-  saveMcpSelection(mcpProvider, mcpModel);
+  // Live provider switches (persistedKind omitted) preserve the current kind;
+  // only hydration passes the stored value explicitly (audit R2-4).
+  const mcpMediaKind: McpMediaKind = persistedKind ?? get().mcpMediaKind ?? "image";
+  saveMcpSelection(mcpProvider, mcpModel, mcpMediaKind);
   saveGenerationDefaultsPatch({ count: 1, multimode: false });
   set({
     mcpProvider,
     mcpModel,
+    mcpMediaKind,
     count: 1,
     multimode: false,
     generate: () => runMcpGenerate(get),
@@ -87,14 +96,31 @@ export function setMcpProviderImpl(
 }
 
 export function setMcpModelImpl(mcpModel: string | null, set: StoreSet, get: StoreGet): void {
-  saveMcpSelection(get().mcpProvider ?? null, mcpModel);
+  saveMcpSelection(get().mcpProvider ?? null, mcpModel, get().mcpMediaKind ?? "image");
   set({ mcpModel });
+}
+
+export function setMcpModelWithKindImpl(
+  mcpModel: string,
+  kind: McpMediaKind,
+  set: StoreSet,
+  get: StoreGet,
+): void {
+  saveMcpSelection(get().mcpProvider ?? null, mcpModel, kind);
+  set({ mcpModel, mcpMediaKind: kind });
+}
+
+export function setMcpMediaKindImpl(kind: McpMediaKind, set: StoreSet, get: StoreGet): void {
+  if ((get().mcpMediaKind ?? "image") === kind) return;
+  // Switching kind invalidates the previous kind's model selection.
+  saveMcpSelection(get().mcpProvider ?? null, null, kind);
+  set({ mcpMediaKind: kind, mcpModel: null });
 }
 
 export function hydrateMcpSelectionImpl(set: StoreSet, get: StoreGet): void {
   const selection = loadMcpSelection();
   if (selection.provider) {
-    setMcpProviderImpl(selection.provider, set, get, selection.model);
+    setMcpProviderImpl(selection.provider, set, get, selection.model, selection.kind);
   }
 }
 

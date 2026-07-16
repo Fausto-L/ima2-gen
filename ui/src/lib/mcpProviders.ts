@@ -139,6 +139,31 @@ export async function getMcpModelOptions(
   return stringEnum(response.data?.tool?.inputSchema?.properties?.model?.enum);
 }
 
+export type McpModelCatalog = { image: string[]; video: string[] };
+
+/**
+ * Loads both media-kind model enums for a provider in parallel.
+ * Error semantics (010 / audit blocker 3): AbortError propagates untouched,
+ * a 404 means the provider has no contract for that kind (empty list), and
+ * any other failure propagates so the UI can surface a catalog error state.
+ */
+export async function getMcpModelCatalog(
+  provider: string,
+  signal?: AbortSignal,
+): Promise<McpModelCatalog> {
+  const settle = async (kind: "image" | "video"): Promise<string[]> => {
+    try {
+      return await getMcpModelOptions(provider, kind, signal);
+    } catch (error) {
+      if ((error as { name?: string }).name === "AbortError") throw error;
+      if ((error as { status?: number }).status === 404) return [];
+      throw error;
+    }
+  };
+  const [image, video] = await Promise.all([settle("image"), settle("video")]);
+  return { image, video };
+}
+
 function normalizeDone(data: Record<string, unknown>, requestId: string): McpDoneResult | null {
   if (typeof data.filename !== "string" || typeof data.url !== "string") return null;
   if (data.mediaType !== "image" && data.mediaType !== "video") return null;

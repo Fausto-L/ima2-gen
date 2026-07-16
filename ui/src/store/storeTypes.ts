@@ -194,6 +194,7 @@ export type GenerationDefaults = Partial<{
   provider: Provider;
   mcpProvider: string | null;
   mcpModel: string | null;
+  mcpMediaKind: "image" | "video";
   quality: Quality;
   sizePreset: SizePreset;
   customW: number;
@@ -450,6 +451,7 @@ export type AppState = PresetState & {
   /** Hydrated lazily by the sidebar MCP selector until the store bootstrap owns this lane. */
   mcpProvider?: string | null;
   mcpModel?: string | null;
+  mcpMediaKind?: "image" | "video";
   setQuality: (q: Quality) => void;
   setSizePreset: (s: SizePreset) => void;
   setCustomSize: (w: number, h: number) => void;

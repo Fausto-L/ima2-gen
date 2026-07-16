@@ -5,11 +5,17 @@ import {
   VIDEO_MODEL_OPTIONS,
 } from "../lib/imageModels";
 import { REASONING_EFFORT_OPTIONS, type ReasoningEffort } from "../lib/reasoning";
-import { getMcpModelOptions, useMcpProviders } from "../lib/mcpProviders";
+import { getMcpModelCatalog, useMcpProviders, type McpModelCatalog } from "../lib/mcpProviders";
+import {
+  encodeMcpModelValue,
+  parseMcpModelValue,
+  type McpMediaKind,
+} from "../lib/mcpSelection";
 import { useAppStore } from "../store/useAppStore";
 import {
   hydrateMcpSelectionImpl,
   setMcpModelImpl,
+  setMcpModelWithKindImpl,
   setMcpProviderImpl,
 } from "../store/storeSettingsImpl";
 import { useI18n } from "../i18n";
@@ -36,6 +42,12 @@ function applyMcpModel(model: string | null): void {
   setMcpModelImpl(model, useAppStore.setState, useAppStore.getState);
 }
 
+function applyMcpModelWithKind(model: string, kind: McpMediaKind): void {
+  setMcpModelWithKindImpl(model, kind, useAppStore.setState, useAppStore.getState);
+}
+
+const EMPTY_CATALOG: McpModelCatalog = { image: [], video: [] };
+
 function displayProviderId(id: string): string {
   return id.replace(/(^|-)([a-z])/g, (_match, prefix: string, letter: string) => `${prefix}${letter.toUpperCase()}`);
 }
@@ -47,14 +59,16 @@ export function GenProviderModelSelect({ compact = false }: { compact?: boolean 
   const videoModel = useAppStore((state) => state.videoModelSelected);
   const mcpProvider = useAppStore((state) => state.mcpProvider ?? null);
   const mcpModel = useAppStore((state) => state.mcpModel ?? null);
+  const mcpMediaKind = useAppStore((state) => state.mcpMediaKind ?? "image");
   const setProvider = useAppStore((state) => state.setProvider);
   const setImageModel = useAppStore((state) => state.setImageModel);
   const selectVideoModel = useAppStore((state) => state.selectVideoModel);
   const setReasoningEffort = useAppStore((state) => state.setReasoningEffort);
   const { providers, loading, error } = useMcpProviders();
-  const [mcpModels, setMcpModels] = useState<string[]>([]);
+  const [mcpCatalog, setMcpCatalog] = useState<McpModelCatalog>(EMPTY_CATALOG);
+  const [catalogError, setCatalogError] = useState(false);
+  const [catalogRetryToken, setCatalogRetryToken] = useState(0);
   const [modelsLoading, setModelsLoading] = useState(false);
-  const mediaKind = videoModel ? "video" : "image";
 
   useEffect(() => {
     hydrateMcpSelectionImpl(useAppStore.setState, useAppStore.getState);
@@ -71,21 +85,29 @@ export function GenProviderModelSelect({ compact = false }: { compact?: boolean 
 
   useEffect(() => {
     if (!mcpProvider || !mcpSelectionAvailable) {
-      setMcpModels([]);
+      setMcpCatalog(EMPTY_CATALOG);
+      setCatalogError(false);
       return;
     }
     const controller = new AbortController();
     setModelsLoading(true);
-    void getMcpModelOptions(mcpProvider, mediaKind, controller.signal)
-      .then((models) => setMcpModels(models))
+    setCatalogError(false);
+    void getMcpModelCatalog(mcpProvider, controller.signal)
+      .then((catalog) => {
+        if (!controller.signal.aborted) setMcpCatalog(catalog);
+      })
       .catch((cause) => {
-        if ((cause as { name?: string }).name !== "AbortError") setMcpModels([]);
+        if ((cause as { name?: string }).name === "AbortError") return;
+        if (!controller.signal.aborted) {
+          setMcpCatalog(EMPTY_CATALOG);
+          setCatalogError(true);
+        }
       })
       .finally(() => {
         if (!controller.signal.aborted) setModelsLoading(false);
       });
     return () => controller.abort();
-  }, [mcpProvider, mcpSelectionAvailable, mediaKind]);
+  }, [mcpProvider, mcpSelectionAvailable, catalogRetryToken]);
 
   const connectedMcpProviders = useMemo(
     () => providers.filter((entry) => entry.enabled && entry.status.state === "connected"),
@@ -94,8 +116,13 @@ export function GenProviderModelSelect({ compact = false }: { compact?: boolean 
   const providerValue = mcpProvider ? `${MCP_PREFIX}${mcpProvider}` : `${CORE_PREFIX}${provider}`;
   const coreModels = getImageModelOptionsForProvider(provider);
   const coreModelValue = videoModel ? `${VIDEO_PREFIX}${videoModel}` : imageModel;
-  const modelValue = mcpProvider ? (mcpModel ?? "") : coreModelValue;
+  const modelValue = mcpProvider
+    ? (mcpModel ? encodeMcpModelValue(mcpMediaKind, mcpModel) : "")
+    : coreModelValue;
   const isGptFamily = !mcpProvider && (provider === "oauth" || provider === "api") && !videoModel;
+  const mcpModelKnown = Boolean(
+    mcpModel && (mcpCatalog.image.includes(mcpModel) || mcpCatalog.video.includes(mcpModel)),
+  );
 
   const unavailableReason = !mcpProvider
     ? null
@@ -126,7 +153,9 @@ export function GenProviderModelSelect({ compact = false }: { compact?: boolean 
       return;
     }
     if (mcpProvider) {
-      applyMcpModel(value || null);
+      const parsed = parseMcpModelValue(value);
+      if (parsed) applyMcpModelWithKind(parsed.model, parsed.kind);
+      else applyMcpModel(value || null);
       return;
     }
     if (value.startsWith(VIDEO_PREFIX)) {
@@ -187,11 +216,24 @@ export function GenProviderModelSelect({ compact = false }: { compact?: boolean 
       >
         {mcpProvider ? (
           <>
-            {mcpModel && !mcpModels.includes(mcpModel) ? (
-              <option value={mcpModel}>{mcpModel}</option>
+            {mcpModel && !mcpModelKnown ? (
+              <option value={encodeMcpModelValue(mcpMediaKind, mcpModel)}>{mcpModel}</option>
             ) : null}
             {!mcpModel ? <option value="">{modelsLoading ? t("mcp.loadingModels") : t("mcp.chooseModel")}</option> : null}
-            {mcpModels.map((model) => <option key={model} value={model}>{model}</option>)}
+            {mcpCatalog.image.length > 0 ? (
+              <optgroup label={t("mcp.imageModels")}>
+                {mcpCatalog.image.map((model) => (
+                  <option key={`img-${model}`} value={encodeMcpModelValue("image", model)}>{model}</option>
+                ))}
+              </optgroup>
+            ) : null}
+            {mcpCatalog.video.length > 0 ? (
+              <optgroup label={t("mcp.videoModels")}>
+                {mcpCatalog.video.map((model) => (
+                  <option key={`vid-${model}`} value={encodeMcpModelValue("video", model)}>{model}</option>
+                ))}
+              </optgroup>
+            ) : null}
             {selectedMcpRecord?.id === "higgsfield" ? (
               <option value="" disabled>{t("mcp.higgsfieldLocked")}</option>
             ) : null}
@@ -221,9 +263,18 @@ export function GenProviderModelSelect({ compact = false }: { compact?: boolean 
         )}
       </select>
 
-      {(unavailableReason || error) ? (
+      {(unavailableReason || error || catalogError) ? (
         <span className="image-model-select__trigger-effort" role="status">
-          {unavailableReason ?? (loading ? t("mcp.loadingProviders") : t("mcp.providersLoadFailed"))}
+          {unavailableReason
+            ?? (catalogError ? (
+              <button
+                type="button"
+                className="image-model-select__retry"
+                onClick={() => setCatalogRetryToken((token) => token + 1)}
+              >
+                {t("mcp.modelsLoadFailed")}
+              </button>
+            ) : (loading ? t("mcp.loadingProviders") : t("mcp.providersLoadFailed")))}
         </span>
       ) : null}
     </div>
