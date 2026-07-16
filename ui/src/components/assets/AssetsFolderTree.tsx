@@ -40,12 +40,12 @@ function FolderRow({ folder, depth }: FolderRowProps) {
           }} />
       ) : (
         <button type="button" className={`assets-folder-row__name${activeId === folder.id ? " is-active" : ""}`}
-          onClick={() => setFilters({ folderId: folder.id })}>{folder.name}</button>
+          onClick={() => setFilters({ folderId: folder.id, kind: null })}>{folder.name}</button>
       )}
       {!editing && <span className="assets-folder-row__actions">
         <button type="button" aria-label={t("assets.renameFolder")} onClick={() => setEditing(true)}>✎</button>
         <button type="button" aria-label={deleteArmed ? t("assets.confirmDelete") : t("assets.deleteFolder")}
-          className={deleteArmed ? "is-danger" : ""} onClick={() => void handleDelete()}>{deleteArmed ? "?" : "×"}</button>
+          className={deleteArmed ? "is-danger is-armed" : ""} onClick={() => void handleDelete()}>{deleteArmed ? t("assets.confirmDelete") : "×"}</button>
       </span>}
     </div>
   );
@@ -55,6 +55,7 @@ export function AssetsFolderTree() {
   const { t } = useI18n();
   const folders = useAppStore((s) => s.assetsFolders);
   const activeId = useAppStore((s) => s.assetsFilters.folderId);
+  const activeKind = useAppStore((s) => s.assetsFilters.kind);
   const setFilters = useAppStore((s) => s.setAssetsFilters);
   const createFolder = useAppStore((s) => s.createAssetFolder);
   const showToast = useAppStore((s) => s.showToast);
@@ -79,8 +80,15 @@ export function AssetsFolderTree() {
     <div className="assets-folders__heading"><span>{t("assets.rootFolder")}</span>
       <button type="button" aria-label={t("assets.newFolder")} onClick={() => setCreating(true)}>+</button></div>
     <div className="assets-folders__rows">
-      <button type="button" className={`assets-folder-all${activeId === null ? " is-active" : ""}`}
-        onClick={() => setFilters({ folderId: null })}>{t("assets.allAssets")}</button>
+      <button type="button" className={`assets-folder-all${activeId === null && activeKind !== "element" ? " is-active" : ""}`}
+        onClick={() => setFilters({ folderId: null, kind: null })}>{t("assets.allAssets")}</button>
+      {/* Pinned entry for persistent @-mentionable elements (characters, products,
+          styles, scenes). Not a folder — a kind-scoped view across all folders. */}
+      <button type="button" className={`assets-folder-all assets-folder-elements${activeId === null && activeKind === "element" ? " is-active" : ""}`}
+        onClick={() => setFilters({ folderId: null, kind: "element" })}>
+        <span className="assets-folder-elements__glyph" aria-hidden="true">@</span>
+        {t("assets.elementLibrary")}
+      </button>
       {rows.map(({ folder, depth }) => <FolderRow key={folder.id} folder={folder} depth={depth} />)}
       {creating && <input className="assets-folder-input assets-folder-input--new" value={name} autoFocus
         aria-label={t("assets.newFolder")} placeholder={t("assets.newFolder")} onChange={(e) => setName(e.target.value)}
