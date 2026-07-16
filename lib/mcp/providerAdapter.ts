@@ -13,6 +13,9 @@ export interface MediaJobRequest {
   parameters?: Record<string, McpPresetValue>;
   /** Image-to-video start frame (public HTTPS or provider-hosted URL). */
   startFrameUrl?: string;
+  /** Style/subject reference images (provider-hosted URLs). Models must
+   * declare the image_references input role to receive them. */
+  referenceImageUrls?: string[];
   /** Free-text purpose forwarded to providers that require a rationale field. */
   rationale?: string;
 }

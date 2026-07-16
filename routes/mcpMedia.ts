@@ -200,7 +200,7 @@ export function registerMcpMediaRoutes(app: Express, ctxRaw: RouteRuntimeContext
   };
 
   app.post("/api/mcp/generate", async (req: Request, res: Response) => {
-    const { provider, kind, prompt, model, ratio, startFrameUrl, startFrameFilename } = req.body ?? {};
+    const { provider, kind, prompt, model, ratio, startFrameUrl, startFrameFilename, referenceFilenames } = req.body ?? {};
     const adapter = ADAPTERS[String(provider)];
     if (!adapter) return res.status(400).json({ error: { code: "MCP_PROVIDER_UNKNOWN", message: String(provider) } });
     if (kind !== "image" && kind !== "video") return res.status(400).json({ error: { code: "INVALID_KIND", message: "kind must be image|video" } });
@@ -236,6 +236,30 @@ export function registerMcpMediaRoutes(app: Express, ctxRaw: RouteRuntimeContext
       }
     }
 
+    // Reference images (@element refs or composer attachments): local gallery
+    // files -> containment check -> upload -> provider-hosted URLs. The tool
+    // schema caps video references to seedance-2/kling-o3-pro; the adapter
+    // enforces the image_references input role before any upload happens.
+    const localReferencePaths: string[] = [];
+    if (referenceFilenames !== undefined) {
+      if (!Array.isArray(referenceFilenames) || referenceFilenames.length > 3
+        || referenceFilenames.some((name) => typeof name !== "string" || !name)) {
+        return res.status(400).json({ error: { code: "INVALID_MCP_REFERENCES", message: "referenceFilenames must be up to 3 generated filenames" } });
+      }
+      try {
+        for (const name of referenceFilenames as string[]) {
+          const resolved = await safeGeneratedFilePath(ctx.config.storage.generatedDir, name);
+          const fileInfo = await stat(resolved);
+          if (!fileInfo.isFile()) throw new Error("not a regular file");
+          if (fileInfo.size > 50 * 1024 * 1024) throw new Error("reference too large");
+          if (!/\.(png|jpe?g|webp)$/i.test(resolved)) throw new Error("reference must be an image");
+          localReferencePaths.push(resolved);
+        }
+      } catch (error) {
+        return res.status(400).json({ error: { code: "INVALID_MCP_REFERENCES", message: String((error as Error)?.message ?? error).slice(0, 120) } });
+      }
+    }
+
     const requestId = typeof req.body?.requestId === "string" && req.body.requestId
       ? req.body.requestId
       : `mcp_${Date.now()}_${randomBytes(4).toString("hex")}`;
@@ -248,6 +272,9 @@ export function registerMcpMediaRoutes(app: Express, ctxRaw: RouteRuntimeContext
         ...(typeof model === "string" && model ? { model } : {}),
         ...(typeof ratio === "string" && ratio ? { ratio } : {}),
         ...(Object.keys(parameters).length > 0 ? { parameters } : {}),
+        ...(localReferencePaths.length > 0
+          ? { referenceImageUrls: localReferencePaths.map((_, index) => `https://placeholder.invalid/reference-${index}`) }
+          : {}),
         ...(localStartFramePath || (typeof startFrameUrl === "string" && startFrameUrl)
           ? { startFrameUrl: typeof startFrameUrl === "string" && startFrameUrl ? startFrameUrl : "https://placeholder.invalid/start-frame" }
           : {}),
@@ -263,7 +290,7 @@ export function registerMcpMediaRoutes(app: Express, ctxRaw: RouteRuntimeContext
 
     const abort = new AbortController();
     registerJobAbortController(requestId, abort);
-    void runMcpMediaJob({ ctx, deps, adapter, requestId, kind, prompt, model, ratio, parameters, startFrameUrl, localStartFramePath, parentFilename, signal: abort.signal });
+    void runMcpMediaJob({ ctx, deps, adapter, requestId, kind, prompt, model, ratio, parameters, startFrameUrl, localStartFramePath, localReferencePaths, parentFilename, signal: abort.signal });
   });
 
   app.post("/api/mcp/media-action", (req: Request, res: Response) => handleMediaAction(ctx, deps, req, res));
@@ -281,6 +308,7 @@ async function runMcpMediaJob(input: {
   parameters: Record<string, McpPresetValue>;
   startFrameUrl?: string;
   localStartFramePath?: string | null;
+  localReferencePaths?: string[];
   parentFilename?: string | null;
   signal: AbortSignal;
 }): Promise<void> {
@@ -298,12 +326,21 @@ async function runMcpMediaJob(input: {
         fileName: basename(input.localStartFramePath), mimeType: mime,
       });
     }
+    const referenceImageUrls: string[] = [];
+    for (const path of input.localReferencePaths ?? []) {
+      setJobPhase(requestId, "uploading");
+      publishJobEvent(requestId, "progress", { phase: "uploading" });
+      const ext = extname(path).toLowerCase();
+      const mime = ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : "image/jpeg";
+      referenceImageUrls.push(await deps.upload(manager, path, { fileName: basename(path), mimeType: mime }));
+    }
     const result = await deps.execute(manager, adapter, {
       kind, prompt,
       ...(input.model ? { model: input.model } : {}),
       ...(input.ratio ? { ratio: input.ratio } : {}),
       ...(Object.keys(input.parameters).length > 0 ? { parameters: input.parameters } : {}),
       ...(startFrameUrl ? { startFrameUrl } : {}),
+      ...(referenceImageUrls.length > 0 ? { referenceImageUrls } : {}),
     }, {
       signal,
       onPhase: (phase) => { setJobPhase(requestId, phase); publishJobEvent(requestId, "progress", { phase }); },

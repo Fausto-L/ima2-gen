@@ -95,7 +95,18 @@ function validateRequest(request: MediaJobRequest): Record<string, McpPresetValu
   if (request.ratio && !entry.capabilities.aspectRatios.includes(request.ratio)) {
     throw new Error(`MCP_PARAMETER_INVALID:${entry.id}:ratio`);
   }
+  // Reference images ride the model's declared image_references input role;
+  // the tool schema caps them to seedance-2 / kling-o3-pro for video.
+  if (request.referenceImageUrls && request.referenceImageUrls.length > 0
+    && !entry.capabilities.inputRoles.includes("image_references")) {
+    throw new Error(`MCP_PARAMETER_UNSUPPORTED:${entry.id}:referenceImages`);
+  }
   return validatedParameters(request, entry);
+}
+
+function referenceImagesArg(request: MediaJobRequest): Record<string, unknown> {
+  const urls = (request.referenceImageUrls ?? []).filter((url) => /^https:\/\//i.test(url)).slice(0, 3);
+  return urls.length > 0 ? { referenceImages: urls.map((url) => ({ url })) } : {};
 }
 
 function buildGenerateCall(request: MediaJobRequest): ToolCallPlan {
@@ -109,6 +120,7 @@ function buildGenerateCall(request: MediaJobRequest): ToolCallPlan {
         promptText: request.prompt,
         ...(request.model ? { model: request.model } : {}),
         ...(request.ratio ? { ratio: request.ratio } : {}),
+        ...referenceImagesArg(request),
         count: 1,
       },
     };
@@ -124,6 +136,7 @@ function buildGenerateCall(request: MediaJobRequest): ToolCallPlan {
       ...(parameters.resolution !== undefined ? { resolution: parameters.resolution } : {}),
       ...(parameters.generateAudio !== undefined ? { generateAudio: parameters.generateAudio } : {}),
       ...(request.startFrameUrl ? { startFrame: { url: request.startFrameUrl } } : {}),
+      ...referenceImagesArg(request),
     },
   };
 }

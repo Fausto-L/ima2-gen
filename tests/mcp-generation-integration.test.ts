@@ -90,6 +90,54 @@ test("contract violations reject with 400 before any upload or tool call", async
   });
 });
 
+test("element reference filenames upload then forward as provider-hosted URLs", async () => {
+  const uploads: string[] = [];
+  const captured: Array<Record<string, unknown>> = [];
+  writeFileSync(join(dir, "generated", "ref-a.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  const deps = {
+    ...makeDeps({ capture: captured }),
+    upload: async (_manager: unknown, path: string) => {
+      uploads.push(path);
+      return `https://runway.example/hosted-${uploads.length}.png`;
+    },
+  };
+  await withApp(deps as never, async (base) => {
+    const response = await fetch(`${base}/api/mcp/generate`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        provider: "runway", kind: "video", prompt: "walk cycle", model: "seedance-2",
+        referenceFilenames: ["ref-a.png"], requestId: "mcp-test-refs",
+      }),
+    });
+    assert.equal(response.status, 202);
+    await waitForEvent("mcp-test-refs", "done");
+    assert.equal(uploads.length, 1);
+    assert.deepEqual(captured[0].referenceImageUrls, ["https://runway.example/hosted-1.png"]);
+  });
+});
+
+test("reference filenames are rejected for models without image_references", async () => {
+  const uploads: string[] = [];
+  writeFileSync(join(dir, "generated", "ref-b.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  const deps = {
+    ...makeDeps(),
+    upload: async (_manager: unknown, path: string) => { uploads.push(path); return "https://runway.example/hosted.png"; },
+  };
+  await withApp(deps as never, async (base) => {
+    const response = await fetch(`${base}/api/mcp/generate`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        provider: "runway", kind: "video", prompt: "x", model: "gen-4-turbo",
+        referenceFilenames: ["ref-b.png"],
+      }),
+    });
+    assert.equal(response.status, 400);
+    const body = await response.json() as { error: { code: string } };
+    assert.equal(body.error.code, "MCP_PARAMETER_UNSUPPORTED");
+    assert.deepEqual(uploads, []);
+  });
+});
+
 test("happy path: 202 then atomic commit with terminal envelope + sidecar core fields", async () => {
   await withApp(makeDeps(), async (base) => {
     const response = await fetch(`${base}/api/mcp/generate`, {

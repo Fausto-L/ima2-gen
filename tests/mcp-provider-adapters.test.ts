@@ -58,6 +58,26 @@ test("runway omits Auto presets instead of inventing provider arguments", () => 
   assert.equal("generateAudio" in plan.args, false);
 });
 
+test("reference images ride the image_references input role only", () => {
+  // seedance-2 declares image_references: URLs forward as {url} objects.
+  const seedance = runwayAdapter.buildGenerateCall({
+    kind: "video", prompt: "x", model: "seedance-2",
+    referenceImageUrls: ["https://cdn.example.com/a.png", "http://insecure.example.com/b.png"],
+  });
+  assert.deepEqual(seedance.args.referenceImages, [{ url: "https://cdn.example.com/a.png" }]);
+  // gen-4-turbo declares only start_image: references reject before any call.
+  assert.throws(() => runwayAdapter.buildGenerateCall({
+    kind: "video", prompt: "x", model: "gen-4-turbo",
+    referenceImageUrls: ["https://cdn.example.com/a.png"],
+  }), /MCP_PARAMETER_UNSUPPORTED:gen-4-turbo:referenceImages/);
+  // image models with image_references accept them too.
+  const image = runwayAdapter.buildGenerateCall({
+    kind: "image", prompt: "x", model: "gen-4",
+    referenceImageUrls: ["https://cdn.example.com/a.png"],
+  });
+  assert.deepEqual(image.args.referenceImages, [{ url: "https://cdn.example.com/a.png" }]);
+});
+
 test("unsupported model ids are rejected before any call", () => {
   assert.throws(() => runwayAdapter.buildGenerateCall({ kind: "image", prompt: "x", model: "dall-e-9" }), /MCP_MODEL_UNSUPPORTED/);
   assert.throws(() => runwayAdapter.buildGenerateCall({ kind: "video", prompt: "x", model: "sora-99" }), /MCP_MODEL_UNSUPPORTED/);
