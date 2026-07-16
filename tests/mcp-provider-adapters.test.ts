@@ -29,11 +29,26 @@ test("runway forwards only model-declared video presets", () => {
   assert.equal(plan.args.generateAudio, false);
 });
 
-test("runway rejects unsupported ratios, keys, ranges, and dependent combinations before a tool plan", () => {
+test("runway rejects unsupported ratios, keys, and ranges before a tool plan", () => {
   assert.throws(() => runwayAdapter.buildGenerateCall({ kind: "image", prompt: "x", model: "gpt-image-2", ratio: "7:5" }), /MCP_PARAMETER_INVALID/);
   assert.throws(() => runwayAdapter.buildGenerateCall({ kind: "video", prompt: "x", model: "gen-4-turbo", parameters: { resolution: "1080p" } }), /MCP_PARAMETER_UNSUPPORTED/);
   assert.throws(() => runwayAdapter.buildGenerateCall({ kind: "video", prompt: "x", model: "seedance-2", parameters: { duration: 99 } }), /MCP_PARAMETER_INVALID/);
-  assert.throws(() => runwayAdapter.buildGenerateCall({ kind: "video", prompt: "x", model: "veo-3.1", parameters: { resolution: "1080p", duration: 6 } }), /1080p-requires-8s/);
+});
+
+test("runway normalizes dependent combos to the nearest supported contract", () => {
+  // Veo 3.1 at 1080p only supports 8s output: coerce instead of self-reject.
+  const veo = runwayAdapter.buildGenerateCall({ kind: "video", prompt: "x", model: "veo-3.1", parameters: { resolution: "1080p", duration: 6 } });
+  assert.equal(veo.args.duration, 8);
+  assert.equal(veo.args.resolution, "1080p");
+  // Gen-4.5 image-to-video does not accept generateAudio: drop the default
+  // instead of rejecting the stock UI state (sol review F3).
+  const gen45 = runwayAdapter.buildGenerateCall({
+    kind: "video", prompt: "x", model: "gen-4.5",
+    parameters: { duration: 10, generateAudio: true },
+    startFrameUrl: "https://example.com/frame.png",
+  });
+  assert.equal("generateAudio" in gen45.args, false);
+  assert.deepEqual(gen45.args.startFrame, { url: "https://example.com/frame.png" });
 });
 
 test("runway omits Auto presets instead of inventing provider arguments", () => {

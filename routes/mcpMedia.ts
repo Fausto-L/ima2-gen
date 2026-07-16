@@ -239,6 +239,22 @@ export function registerMcpMediaRoutes(app: Express, ctxRaw: RouteRuntimeContext
     const requestId = typeof req.body?.requestId === "string" && req.body.requestId
       ? req.body.requestId
       : `mcp_${Date.now()}_${randomBytes(4).toString("hex")}`;
+    // Contract validation must reject BEFORE any provider tool call — including
+    // the start-frame upload (sol review F2). buildGenerateCall is pure plan
+    // construction; the placeholder URL only exercises start-frame combos.
+    try {
+      adapter.buildGenerateCall({
+        kind, prompt,
+        ...(typeof model === "string" && model ? { model } : {}),
+        ...(typeof ratio === "string" && ratio ? { ratio } : {}),
+        ...(Object.keys(parameters).length > 0 ? { parameters } : {}),
+        ...(localStartFramePath || (typeof startFrameUrl === "string" && startFrameUrl)
+          ? { startFrameUrl: typeof startFrameUrl === "string" && startFrameUrl ? startFrameUrl : "https://placeholder.invalid/start-frame" }
+          : {}),
+      });
+    } catch (error) {
+      return res.status(400).json({ error: { code: errorCode(error), message: "request violates the model capability contract" } });
+    }
     const started = startJob({ requestId, kind: `mcp-${kind}`, prompt, meta: { provider: adapter.provider, model: model ?? null } });
     if (started && isStartJobFailure(started)) {
       return res.status(started.code === "TOO_MANY_JOBS" ? 429 : 409).json({ error: { code: started.code, message: "cannot start job" } });

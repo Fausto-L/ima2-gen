@@ -70,7 +70,7 @@ function modelEntry(request: MediaJobRequest): McpModelEntry {
 }
 
 function validatedParameters(request: MediaJobRequest, entry: McpModelEntry): Record<string, McpPresetValue> {
-  const selected = request.parameters ?? {};
+  const selected = { ...(request.parameters ?? {}) };
   for (const [name, value] of Object.entries(selected)) {
     const parameter = entry.capabilities.parameters.find((candidate) => candidate.name === name);
     if (!parameter) throw new Error(`MCP_PARAMETER_UNSUPPORTED:${entry.id}:${name}`);
@@ -78,11 +78,14 @@ function validatedParameters(request: MediaJobRequest, entry: McpModelEntry): Re
       throw new Error(`MCP_PARAMETER_INVALID:${entry.id}:${name}`);
     }
   }
+  // Cross-field combos are normalized to the nearest supported contract so a
+  // default preset selection never self-rejects (sol review F3/F4). Individual
+  // out-of-contract values above still reject before any tool call.
   if (entry.id === "veo-3.1" && selected.resolution === "1080p" && selected.duration !== undefined && selected.duration !== 8) {
-    throw new Error("MCP_PARAMETER_INVALID:veo-3.1:1080p-requires-8s");
+    selected.duration = 8;
   }
   if (entry.id === "gen-4.5" && request.startFrameUrl && selected.generateAudio !== undefined) {
-    throw new Error("MCP_PARAMETER_UNSUPPORTED:gen-4.5:generateAudio-with-start-frame");
+    delete selected.generateAudio;
   }
   return selected;
 }

@@ -67,6 +67,29 @@ function waitForEvent(requestId: string, name: string, timeoutMs = 8000): Promis
   });
 }
 
+test("contract violations reject with 400 before any upload or tool call", async () => {
+  const uploads: string[] = [];
+  const framePath = join(dir, "generated", "frame-contract.png");
+  writeFileSync(framePath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  const deps = {
+    ...makeDeps(),
+    upload: async (_manager: unknown, path: string) => { uploads.push(path); return "https://runway.example/hosted.png"; },
+  };
+  await withApp(deps as never, async (base) => {
+    const response = await fetch(`${base}/api/mcp/generate`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        provider: "runway", kind: "video", prompt: "pan", model: "gen-4-turbo",
+        parameters: { resolution: "1080p" }, startFrameFilename: "frame-contract.png",
+      }),
+    });
+    assert.equal(response.status, 400);
+    const body = await response.json() as { error: { code: string } };
+    assert.equal(body.error.code, "MCP_PARAMETER_UNSUPPORTED");
+    assert.deepEqual(uploads, []);
+  });
+});
+
 test("happy path: 202 then atomic commit with terminal envelope + sidecar core fields", async () => {
   await withApp(makeDeps(), async (base) => {
     const response = await fetch(`${base}/api/mcp/generate`, {
@@ -111,7 +134,9 @@ test("route forwards bounded scalar presets and persists the selected values", a
     const response = await fetch(`${base}/api/mcp/generate`, {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        provider: "runway", kind: "image", prompt: "fox", model: "gen-4", requestId: "mcp-test-params",
+        // seedance-2 declares duration/resolution/generateAudio, so this stays
+        // inside the capability contract the route now enforces up front.
+        provider: "runway", kind: "video", prompt: "fox", model: "seedance-2", requestId: "mcp-test-params",
         parameters: { duration: 8, resolution: "720p", generateAudio: false },
       }),
     });

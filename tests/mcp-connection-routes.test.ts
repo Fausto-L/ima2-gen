@@ -109,8 +109,19 @@ test("models endpoint serves runway statically and higgsfield via models_explore
 
   const hf = await fetch(`${base}/api/mcp/providers/higgsfield/models?name=confirm_billing_purchase`);
   assert.equal(hf.status, 200);
-  const hfBody = await hf.json() as { ok: boolean; models: { image: Array<{ id: string; label: string }>; video: Array<{ id: string }> } };
-  assert.deepEqual(hfBody.models.image, [{ id: "soul_2", label: "Higgsfield Soul 2.0" }]);
+  const hfBody = await hf.json() as {
+    ok: boolean;
+    models: {
+      image: Array<{ id: string; label: string; capabilities?: { source?: string } }>;
+      video: Array<{ id: string }>;
+    };
+  };
+  assert.deepEqual(
+    hfBody.models.image.map((entry) => ({ id: entry.id, label: entry.label })),
+    [{ id: "soul_2", label: "Higgsfield Soul 2.0" }],
+  );
+  // Catalog entries now carry a capability contract for preset-driven UIs.
+  assert.equal(typeof hfBody.models.image[0]?.capabilities?.source, "string");
   assert.deepEqual(hfBody.models.video.map((entry) => entry.id), ["kling_3"]);
   // Hostile query params cannot influence the tool name: only models_explore fires.
   assert.ok(fakeManager.toolCalls.length >= 2);
