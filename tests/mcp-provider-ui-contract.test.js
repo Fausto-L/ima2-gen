@@ -73,7 +73,32 @@ describe("MCP provider UI contract", () => {
     assert.match(select, /encodeMcpModelValue\("image", model\)/);
     assert.match(select, /encodeMcpModelValue\("video", model\)/);
     assert.doesNotMatch(select, /const mediaKind = videoModel/);
-    assert.match(selection, /kind === "video" \? state\.videoAspectRatio : state\.grokAspectRatio/);
+    assert.match(selection, /\.\.\.\(ratio \? \{ ratio \} : \{\}\)/);
+  });
+
+  it("pins the status strip on top of Settings and swaps per-provider sections (030)", () => {
+    const panel = readSource("ui/src/components/GenerationControlsPanel.tsx");
+    const providerSelect = readSource("ui/src/components/ProviderSelect.tsx");
+    const strip = readSource("ui/src/components/settings/ProviderStatusStrip.tsx");
+    const mcpControls = readSource("ui/src/components/settings/McpGenerationControls.tsx");
+    const settings = readSource("ui/src/store/storeSettingsImpl.ts");
+    const persistence = readSource("ui/src/store/storePersistence.ts");
+
+    // Status strip is the first child in BOTH panel branches.
+    assert.match(panel, /<div className="right-panel-settings" role="tabpanel">\s*<ProviderStatusStrip mcpProviders=\{mcpProviders\} \/>\s*<ProviderSelect allowGrok muteSelection \/>/);
+    assert.match(panel, /<div className="right-panel-settings" role="tabpanel">\s*<ProviderStatusStrip mcpProviders=\{mcpProviders\} \/>\s*<ProviderSelect allowGrok \/>/);
+    // Single-parent poller: strip and controls receive providers via props.
+    assert.doesNotMatch(strip, /useMcpProviders\(/);
+    assert.match(panel, /const \{ providers: mcpProviders \} = useMcpProviders\(\)/);
+    // No simultaneous core+MCP active state.
+    assert.match(providerSelect, /muteSelection/);
+    assert.match(providerSelect, /const selected = !muteSelection && !cell\.disabled && provider === cell\.value/);
+    // mcpRatio lifecycle: whitelist parse, persistent clear-to-Auto, Auto omission.
+    assert.match(persistence, /normalizeMcpRatio\(parsed\.mcpRatio\)/);
+    assert.match(settings, /saveGenerationDefaultsPatch\(\{ mcpRatio: null \}\)/);
+    assert.match(settings, /setMcpRatioImpl/);
+    assert.match(mcpControls, /MCP_RATIO_PRESETS/);
+    assert.match(mcpControls, /higgsfieldLocked/);
   });
 
   it("separates catalog abort, missing-contract, and failure semantics", () => {

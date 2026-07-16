@@ -77,6 +77,8 @@ export function useProviderAvailability(): Record<Provider, ProviderAvailability
 
 type ProviderSelectProps = {
   allowGrok?: boolean;
+  /** True while an MCP provider owns the lane: no core pill renders as selected (030, audit blocker 6). */
+  muteSelection?: boolean;
 };
 
 type CellDef = {
@@ -109,7 +111,7 @@ const GRID: { header: string; cells: CellDef[] }[] = [
   },
 ];
 
-export function ProviderSelect({ allowGrok = true }: ProviderSelectProps) {
+export function ProviderSelect({ allowGrok = true, muteSelection = false }: ProviderSelectProps) {
   const { t } = useI18n();
   const provider = useAppStore((s) => s.provider);
   const setProvider = useAppStore((s) => s.setProvider);
@@ -147,7 +149,7 @@ export function ProviderSelect({ allowGrok = true }: ProviderSelectProps) {
           <div key={col.header} className="provider-grid__col">
             <div className="provider-grid__header">{col.header}</div>
             {col.cells.map((cell, i) => {
-              const selected = !cell.disabled && provider === cell.value;
+              const selected = !muteSelection && !cell.disabled && provider === cell.value;
               const ok = cell.disabled ? false : providerAvailability[cell.value].ok;
               const label = `${col.header} ${cell.label}`;
               return (

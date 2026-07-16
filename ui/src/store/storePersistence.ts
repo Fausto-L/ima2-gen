@@ -333,7 +333,7 @@ export function isSizePreset(value: unknown): value is SizePreset {
 
 export type { GenerationDefaults } from "./storeTypes";
 import type { GenerationDefaults } from "./storeTypes";
-import { normalizeMcpSelection, type McpSelection } from "../lib/mcpSelection";
+import { normalizeMcpRatio, normalizeMcpSelection, type McpSelection } from "../lib/mcpSelection";
 
 export function loadGenerationDefaults(): GenerationDefaults {
   try {
@@ -352,6 +352,9 @@ export function loadGenerationDefaults(): GenerationDefaults {
     }
     if (parsed.mcpMediaKind === "image" || parsed.mcpMediaKind === "video") {
       out.mcpMediaKind = parsed.mcpMediaKind;
+    }
+    if ("mcpRatio" in parsed) {
+      out.mcpRatio = normalizeMcpRatio(parsed.mcpRatio);
     }
     if (isQuality(parsed.quality)) out.quality = parsed.quality;
     if (isSizePreset(parsed.sizePreset)) out.sizePreset = parsed.sizePreset;

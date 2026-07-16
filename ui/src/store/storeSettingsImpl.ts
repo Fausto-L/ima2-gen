@@ -29,8 +29,7 @@ async function runMcpGenerate(get: StoreGet): Promise<void> {
       mcpProvider: state.mcpProvider,
       mcpModel: state.mcpModel,
       mcpMediaKind: state.mcpMediaKind,
-      videoAspectRatio: state.videoAspectRatio,
-      grokAspectRatio: state.grokAspectRatio,
+      mcpRatio: state.mcpRatio,
       currentImageFilename: state.currentImage?.filename ?? null,
     },
     prompt,
@@ -57,10 +56,14 @@ async function runMcpGenerate(get: StoreGet): Promise<void> {
 
 function clearMcpLane(set: StoreSet): void {
   saveMcpSelection(null, null, "image");
+  // Persisted clear-to-Auto: an in-memory reset alone would leave a stale
+  // stored ratio behind (audit R3-1).
+  saveGenerationDefaultsPatch({ mcpRatio: null });
   set({
     mcpProvider: null,
     mcpModel: null,
     mcpMediaKind: "image",
+    mcpRatio: null,
     ...(coreGenerateAction ? { generate: coreGenerateAction } : {}),
   });
 }
@@ -117,10 +120,16 @@ export function setMcpMediaKindImpl(kind: McpMediaKind, set: StoreSet, get: Stor
   set({ mcpMediaKind: kind, mcpModel: null });
 }
 
+export function setMcpRatioImpl(ratio: string | null, set: StoreSet): void {
+  saveGenerationDefaultsPatch({ mcpRatio: ratio });
+  set({ mcpRatio: ratio });
+}
+
 export function hydrateMcpSelectionImpl(set: StoreSet, get: StoreGet): void {
   const selection = loadMcpSelection();
   if (selection.provider) {
     setMcpProviderImpl(selection.provider, set, get, selection.model, selection.kind);
+    set({ mcpRatio: selection.ratio });
   }
 }
 

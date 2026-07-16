@@ -9,6 +9,9 @@ import { ProviderSelect } from "./ProviderSelect";
 import { GrokSizePicker } from "./GrokSizePicker";
 import { GrokModelPicker } from "./GrokModelPicker";
 import { VideoControlsPanel } from "./VideoControlsPanel";
+import { ProviderStatusStrip } from "./settings/ProviderStatusStrip";
+import { McpGenerationControls } from "./settings/McpGenerationControls";
+import { useMcpProviders } from "../lib/mcpProviders";
 import type { Format, GeminiImageModel, Moderation, Quality } from "../types";
 
 const FORMAT_ITEMS = [
@@ -99,6 +102,8 @@ export function GenerationControlsPanel() {
   const setCustomSize = useAppStore((s) => s.setCustomSize);
   const uiMode = useAppStore((s) => s.uiMode);
   const videoModelSelected = useAppStore((s) => s.videoModelSelected);
+  const mcpProvider = useAppStore((s) => s.mcpProvider ?? null);
+  const { providers: mcpProviders } = useMcpProviders();
   const showMultimodeControls = uiMode === "classic";
   const isGrok = provider === "grok" || provider === "grok-api";
   const isAgyOnly = provider === "agy";
@@ -168,8 +173,21 @@ export function GenerationControlsPanel() {
     }
   };
 
+  if (mcpProvider) {
+    return (
+      <div className="right-panel-settings" role="tabpanel">
+        <ProviderStatusStrip mcpProviders={mcpProviders} />
+        <ProviderSelect allowGrok muteSelection />
+        <McpGenerationControls
+          record={mcpProviders.find((entry) => entry.id === mcpProvider) ?? null}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="right-panel-settings" role="tabpanel">
+      <ProviderStatusStrip mcpProviders={mcpProviders} />
       <ProviderSelect allowGrok />
       <details className="provider-compat-details">
         <summary>{providerCompat.title}</summary>

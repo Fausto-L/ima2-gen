@@ -13,10 +13,24 @@ export function resolveMcpMediaKind(value: unknown): McpMediaKind {
   return value === "video" ? "video" : "image";
 }
 
+/**
+ * Conservative ratio presets (030): the Runway contract exposes no ratio enum
+ * ("supported values vary by model"), so the UI offers only widely-accepted
+ * presets and defaults to Auto (null = omit the ratio key entirely).
+ */
+export const MCP_RATIO_PRESETS = ["16:9", "9:16", "1:1"] as const;
+
+export function normalizeMcpRatio(value: unknown): string | null {
+  return (MCP_RATIO_PRESETS as readonly string[]).includes(value as string)
+    ? (value as string)
+    : null;
+}
+
 export type McpSelection = {
   provider: string | null;
   model: string | null;
   kind: McpMediaKind;
+  ratio: string | null;
 };
 
 /**
@@ -27,11 +41,13 @@ export function normalizeMcpSelection(defaults: {
   mcpProvider?: unknown;
   mcpModel?: unknown;
   mcpMediaKind?: unknown;
+  mcpRatio?: unknown;
 }): McpSelection {
   return {
     provider: typeof defaults.mcpProvider === "string" ? defaults.mcpProvider : null,
     model: typeof defaults.mcpModel === "string" ? defaults.mcpModel : null,
     kind: resolveMcpMediaKind(defaults.mcpMediaKind),
+    ratio: normalizeMcpRatio(defaults.mcpRatio),
   };
 }
 
@@ -55,8 +71,8 @@ export type McpGenerationBuildState = {
   mcpProvider?: string | null;
   mcpModel?: string | null;
   mcpMediaKind?: McpMediaKind;
-  videoAspectRatio: string;
-  grokAspectRatio: string;
+  /** null/undefined = Auto: the ratio key is omitted from the payload (030). */
+  mcpRatio?: string | null;
   /** Filename of the currently viewed image, used as the video start frame. */
   currentImageFilename?: string | null;
 };
@@ -74,14 +90,15 @@ export function buildMcpGenerationInput(
   const provider = state.mcpProvider ?? null;
   if (!provider || !prompt) return null;
   const kind = resolveMcpMediaKind(state.mcpMediaKind);
+  const ratio = normalizeMcpRatio(state.mcpRatio);
   return {
     provider,
     kind,
     prompt,
     model: state.mcpModel ?? undefined,
-    // 010: kind-consistent ratio derivation. 030 replaces this with the
-    // MCP-specific mcpRatio field (Auto omits the key entirely).
-    ratio: kind === "video" ? state.videoAspectRatio : state.grokAspectRatio,
+    // 030: MCP-specific ratio; Auto (null) omits the key entirely so the
+    // upstream model applies its own default.
+    ...(ratio ? { ratio } : {}),
     startFrameFilename: kind === "video" ? state.currentImageFilename ?? undefined : undefined,
     ...(requestId ? { requestId } : {}),
   };

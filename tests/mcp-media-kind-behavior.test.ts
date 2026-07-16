@@ -48,21 +48,33 @@ describe("MCP media-kind persistence migration", () => {
   it("falls back to image for legacy defaults without a kind", () => {
     assert.deepEqual(
       normalizeMcpSelection({ mcpProvider: "runway", mcpModel: "gen-4" }),
-      { provider: "runway", model: "gen-4", kind: "image" },
+      { provider: "runway", model: "gen-4", kind: "image", ratio: null },
     );
   });
 
   it("round-trips a persisted video kind", () => {
     assert.deepEqual(
       normalizeMcpSelection({ mcpProvider: "runway", mcpModel: "seedance-2", mcpMediaKind: "video" }),
-      { provider: "runway", model: "seedance-2", kind: "video" },
+      { provider: "runway", model: "seedance-2", kind: "video", ratio: null },
     );
+  });
+
+  it("restores a whitelisted persisted ratio and normalizes corrupt ones to Auto", () => {
+    assert.equal(
+      normalizeMcpSelection({ mcpProvider: "runway", mcpRatio: "9:16" }).ratio,
+      "9:16",
+    );
+    assert.equal(
+      normalizeMcpSelection({ mcpProvider: "runway", mcpRatio: "4:7" }).ratio,
+      null,
+    );
+    assert.equal(normalizeMcpSelection({ mcpProvider: "runway" }).ratio, null);
   });
 
   it("normalizes corrupt kind values and non-string ids", () => {
     assert.deepEqual(
       normalizeMcpSelection({ mcpProvider: 7, mcpModel: null, mcpMediaKind: "wide" }),
-      { provider: null, model: null, kind: "image" },
+      { provider: null, model: null, kind: "image", ratio: null },
     );
   });
 });

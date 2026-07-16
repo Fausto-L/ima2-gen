@@ -195,6 +195,7 @@ export type GenerationDefaults = Partial<{
   mcpProvider: string | null;
   mcpModel: string | null;
   mcpMediaKind: "image" | "video";
+  mcpRatio: string | null;
   quality: Quality;
   sizePreset: SizePreset;
   customW: number;
@@ -452,6 +453,7 @@ export type AppState = PresetState & {
   mcpProvider?: string | null;
   mcpModel?: string | null;
   mcpMediaKind?: "image" | "video";
+  mcpRatio?: string | null;
   setQuality: (q: Quality) => void;
   setSizePreset: (s: SizePreset) => void;
   setCustomSize: (w: number, h: number) => void;

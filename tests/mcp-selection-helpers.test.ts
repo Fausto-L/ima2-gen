@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   buildMcpGenerationInput,
   encodeMcpModelValue,
+  normalizeMcpRatio,
   parseMcpModelValue,
   resolveMcpMediaKind,
 } from "../ui/src/lib/mcpSelection.js";
@@ -31,14 +32,13 @@ describe("mcpSelection pure helpers", () => {
     assert.equal(resolveMcpMediaKind(42), "image");
   });
 
-  it("builds a video payload with kind-consistent ratio and start frame", () => {
+  it("builds a video payload with an explicit preset ratio and start frame", () => {
     const input = buildMcpGenerationInput(
       {
         mcpProvider: "runway",
         mcpModel: "seedance-2",
         mcpMediaKind: "video",
-        videoAspectRatio: "16:9",
-        grokAspectRatio: "1:1",
+        mcpRatio: "16:9",
         currentImageFilename: "frame.png",
       },
       "a fox running",
@@ -55,21 +55,20 @@ describe("mcpSelection pure helpers", () => {
     });
   });
 
-  it("builds an image payload without video-only fields", () => {
+  it("builds an image payload without video-only fields and omits ratio on Auto", () => {
     const input = buildMcpGenerationInput(
       {
         mcpProvider: "runway",
         mcpModel: "gen-4",
         mcpMediaKind: "image",
-        videoAspectRatio: "16:9",
-        grokAspectRatio: "1:1",
+        mcpRatio: null,
         currentImageFilename: "frame.png",
       },
       "a fox portrait",
     );
     assert.ok(input);
     assert.equal(input.kind, "image");
-    assert.equal(input.ratio, "1:1");
+    assert.equal("ratio" in input, false);
     assert.equal(input.startFrameFilename, undefined);
     assert.equal("requestId" in input, false);
   });
@@ -78,8 +77,6 @@ describe("mcpSelection pure helpers", () => {
     const base = {
       mcpModel: "gen-4",
       mcpMediaKind: "image" as const,
-      videoAspectRatio: "16:9",
-      grokAspectRatio: "1:1",
     };
     assert.equal(buildMcpGenerationInput({ ...base, mcpProvider: null }, "prompt"), null);
     assert.equal(buildMcpGenerationInput({ ...base, mcpProvider: "runway" }, ""), null);
@@ -90,12 +87,26 @@ describe("mcpSelection pure helpers", () => {
       {
         mcpProvider: "runway",
         mcpModel: "gen-4",
-        videoAspectRatio: "16:9",
-        grokAspectRatio: "3:4",
       },
       "prompt",
     );
     assert.equal(input?.kind, "image");
-    assert.equal(input?.ratio, "3:4");
+    assert.equal(input && "ratio" in input, false);
+  });
+
+  it("whitelists ratio presets and normalizes everything else to Auto", () => {
+    assert.equal(normalizeMcpRatio("16:9"), "16:9");
+    assert.equal(normalizeMcpRatio("9:16"), "9:16");
+    assert.equal(normalizeMcpRatio("1:1"), "1:1");
+    assert.equal(normalizeMcpRatio("21:9"), null);
+    assert.equal(normalizeMcpRatio(""), null);
+    assert.equal(normalizeMcpRatio(undefined), null);
+    assert.equal(normalizeMcpRatio(169), null);
+    // Non-whitelisted persisted ratio never reaches the payload.
+    const input = buildMcpGenerationInput(
+      { mcpProvider: "runway", mcpModel: "seedance-2", mcpMediaKind: "video", mcpRatio: "banana" },
+      "prompt",
+    );
+    assert.equal(input && "ratio" in input, false);
   });
 });
