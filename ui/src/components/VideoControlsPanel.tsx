@@ -3,6 +3,7 @@ import { useAppStore } from "../store/useAppStore";
 import { useI18n } from "../i18n";
 import { OptionGroup } from "./OptionGroup";
 import { Chip, ChipRow, Select } from "./controls";
+import { DurationSlider } from "./controls/DurationSlider";
 import { deriveVideoModeUI, GROK_VIDEO_MODEL_15, GROK_VIDEO_MODEL_BASE, MAX_REF2V_DURATION_UI, supportsVideoResolutionUI } from "../lib/imageModels";
 import { ACTIVE_VIDEO_PROMPT_GUIDANCE, continuitySummary } from "../lib/videoContinuity";
 import { getPresetById } from "../lib/presets";
@@ -141,18 +142,12 @@ export function VideoControlsPanel() {
       </div>
       <div className="option-group">
         <div className="section-title">{t("video.durationTitle")}</div>
-        <div className="option-row">
-          {DURATIONS.filter((d) => d <= maxDuration).map((d) => (
-            <button
-              key={d}
-              type="button"
-              className={`option-btn${duration === d ? " active" : ""}`}
-              onClick={() => setDuration(d)}
-            >
-              {d}s
-            </button>
-          ))}
-        </div>
+        <DurationSlider
+          values={DURATIONS.filter((d) => d <= maxDuration)}
+          value={duration}
+          ariaLabel={t("video.durationTitle")}
+          onChange={(next) => setDuration(next ?? DURATIONS[0])}
+        />
       </div>
       <OptionGroup<VideoResolutionUI>
         title={t("video.resolutionTitle")}

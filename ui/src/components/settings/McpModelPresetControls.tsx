@@ -1,5 +1,6 @@
 import { useI18n } from "../../i18n";
 import type { McpModelEntry, McpModelParameter, McpPresetValue } from "../../lib/mcpProviders";
+import { DurationSlider } from "../controls/DurationSlider";
 
 const CORE_PARAMETERS = new Set(["duration", "resolution", "quality", "mode"]);
 
@@ -44,6 +45,11 @@ function displayValue(value: McpPresetValue, t: (key: string) => string): string
   return String(value);
 }
 
+function durationValues(parameter: McpModelParameter): number[] {
+  const raw = parameterPresetValues(parameter).filter((value): value is number => typeof value === "number");
+  return [...raw].sort((a, b) => a - b);
+}
+
 function PresetRow({ parameter, value, disabled, onChange }: {
   parameter: McpModelParameter;
   value: McpPresetValue | undefined;
@@ -51,6 +57,28 @@ function PresetRow({ parameter, value, disabled, onChange }: {
   onChange: (value: McpPresetValue | null) => void;
 }) {
   const { t } = useI18n();
+  // Duration renders as one dynamic slider snapped to the model contract
+  // (options list or min..max range) instead of a button wall.
+  if (parameter.name === "duration" && parameter.type === "number") {
+    const values = durationValues(parameter);
+    if (values.length > 1) {
+      const label = parameterLabel(parameter.name, t);
+      return (
+        <div className="mcp-preset-row">
+          <div className="section-title">{label}</div>
+          <DurationSlider
+            values={values}
+            value={typeof value === "number" ? value : null}
+            defaultValue={typeof parameter.default === "number" ? parameter.default : undefined}
+            allowAuto={!parameter.required}
+            disabled={disabled}
+            ariaLabel={label}
+            onChange={onChange}
+          />
+        </div>
+      );
+    }
+  }
   const values = parameterPresetValues(parameter);
   if (values.length === 0) return null;
   const label = parameterLabel(parameter.name, t);
