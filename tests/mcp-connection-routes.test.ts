@@ -6,13 +6,29 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { registerMcpConnectionRoutes } from "../routes/mcpConnections.js";
+import { clearModelsCatalogCache } from "../lib/mcp/modelsCatalog.js";
 
 const dir = mkdtempSync(join(tmpdir(), "ima2-mcp-routes-"));
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 const fakeManager = {
   last: new Map<string, Record<string, unknown>>(),
+  toolCalls: [] as Array<{ provider: string; name: string; args: Record<string, unknown> }>,
+  toolBehavior: "pages" as "pages" | "not-connected" | "boom",
   status(id: string) { return this.last.get(id) ?? { provider: id, state: "disconnected" }; },
+  async callTool(provider: string, name: string, args: Record<string, unknown>) {
+    this.toolCalls.push({ provider, name, args });
+    if (this.toolBehavior === "not-connected") throw new Error("MCP_NOT_CONNECTED");
+    if (this.toolBehavior === "boom") throw new Error("MCP_TOOL_ERROR:models_explore:boom");
+    return {
+      structuredContent: {
+        items: args.type === "video"
+          ? [{ id: "kling_3", name: "Kling 3" }]
+          : [{ id: "soul_2", name: "Higgsfield Soul 2.0" }],
+        has_more: false,
+      },
+    };
+  },
   async connect(id: string) {
     const status = { provider: id, state: "auth_required", authorizationUrl: "https://provider.example/authorize" };
     this.last.set(id, status);
@@ -76,4 +92,46 @@ test("disconnect responds with the non-revocation note and no secrets anywhere",
     const body = await (await fetch(base + path)).text();
     assert.ok(!/access_token|refresh_token|code_verifier/i.test(body), `${path} leaked a secret field`);
   }
+}));
+
+// 040 — /models catalog endpoint contract.
+test("models endpoint serves runway statically and higgsfield via models_explore only", async () => withApp(async (base) => {
+  clearModelsCatalogCache();
+  fakeManager.toolCalls = [];
+  fakeManager.toolBehavior = "pages";
+
+  const runway = await fetch(`${base}/api/mcp/providers/runway/models`);
+  assert.equal(runway.status, 200);
+  const runwayBody = await runway.json() as { ok: boolean; models: { video: Array<{ id: string }> } };
+  assert.equal(runwayBody.ok, true);
+  assert.ok(runwayBody.models.video.some((entry) => entry.id === "seedance-2"));
+  assert.equal(fakeManager.toolCalls.length, 0);
+
+  const hf = await fetch(`${base}/api/mcp/providers/higgsfield/models?name=confirm_billing_purchase`);
+  assert.equal(hf.status, 200);
+  const hfBody = await hf.json() as { ok: boolean; models: { image: Array<{ id: string; label: string }>; video: Array<{ id: string }> } };
+  assert.deepEqual(hfBody.models.image, [{ id: "soul_2", label: "Higgsfield Soul 2.0" }]);
+  assert.deepEqual(hfBody.models.video.map((entry) => entry.id), ["kling_3"]);
+  // Hostile query params cannot influence the tool name: only models_explore fires.
+  assert.ok(fakeManager.toolCalls.length >= 2);
+  for (const call of fakeManager.toolCalls) assert.equal(call.name, "models_explore");
+}));
+
+test("models endpoint returns canonical typed errors", async () => withApp(async (base) => {
+  const unknown = await fetch(`${base}/api/mcp/providers/krea/models`);
+  assert.equal(unknown.status, 404);
+  assert.equal(((await unknown.json()) as { error: { code: string } }).error.code, "MCP_PROVIDER_UNKNOWN");
+
+  clearModelsCatalogCache();
+  fakeManager.toolBehavior = "not-connected";
+  const disconnected = await fetch(`${base}/api/mcp/providers/higgsfield/models`);
+  assert.equal(disconnected.status, 409);
+  assert.equal(((await disconnected.json()) as { error: { code: string } }).error.code, "MCP_NOT_CONNECTED");
+
+  clearModelsCatalogCache();
+  fakeManager.toolBehavior = "boom";
+  const upstream = await fetch(`${base}/api/mcp/providers/higgsfield/models`);
+  assert.equal(upstream.status, 502);
+  assert.equal(((await upstream.json()) as { error: { code: string } }).error.code, "MCP_UPSTREAM_ERROR");
+  fakeManager.toolBehavior = "pages";
 }));

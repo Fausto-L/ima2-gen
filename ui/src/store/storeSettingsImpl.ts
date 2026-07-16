@@ -23,6 +23,12 @@ let coreGenerateAction: ReturnType<StoreGet>["generate"] | null = null;
 
 async function runMcpGenerate(get: StoreGet): Promise<void> {
   const state = get();
+  // Higgsfield generation stays locked on the free plan (040): pre-block in the
+  // client so no request is sent; the server adapter also rejects (double guard).
+  if (state.mcpProvider === "higgsfield") {
+    get().showToast(t("mcp.higgsfieldLocked"), true);
+    return;
+  }
   const prompt = composePrompt(state.prompt, state.insertedPrompts);
   const input = buildMcpGenerationInput(
     {

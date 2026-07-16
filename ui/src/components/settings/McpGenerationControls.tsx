@@ -36,7 +36,8 @@ export function McpGenerationControls({ record }: { record: McpProviderRecord | 
   const connected = record?.status.state === "connected";
 
   useEffect(() => {
-    if (!mcpProvider || locked || !connected) {
+    // Catalog browsing is allowed while generation is locked (040).
+    if (!mcpProvider || !connected) {
       setCatalog(EMPTY_CATALOG);
       return;
     }
@@ -54,13 +55,14 @@ export function McpGenerationControls({ record }: { record: McpProviderRecord | 
         }
       });
     return () => controller.abort();
-  }, [mcpProvider, locked, connected]);
+  }, [mcpProvider, connected]);
 
   if (!mcpProvider) return null;
 
   const models = mcpMediaKind === "video" ? catalog.video : catalog.image;
   const setKind = (kind: McpMediaKind) =>
     setMcpMediaKindImpl(kind, useAppStore.setState, useAppStore.getState);
+  const showRatio = mcpProvider === "runway";
 
   return (
     <div className="mcp-generation-controls" data-testid="mcp-generation-controls">
@@ -78,11 +80,11 @@ export function McpGenerationControls({ record }: { record: McpProviderRecord | 
         {!connected ? (
           <p className="option-help">{t("mcp.disconnectedSelection")}</p>
         ) : null}
+        {locked ? (
+          <p className="option-help">{t("mcp.higgsfieldLocked")}</p>
+        ) : null}
       </div>
-      {locked ? (
-        <p className="option-help">{t("mcp.higgsfieldLocked")}</p>
-      ) : (
-        <>
+      <>
           <div className="option-group">
             <div className="option-row">
               <button
@@ -105,19 +107,21 @@ export function McpGenerationControls({ record }: { record: McpProviderRecord | 
             <div className="section-title">{t("mcp.modelSectionTitle")}</div>
             {catalogFailed ? <p className="option-help">{t("mcp.modelsLoadFailed")}</p> : null}
             <div className="mcp-generation-controls__models">
-              {models.map((model) => (
+              {models.map((entry) => (
                 <button
-                  key={model}
+                  key={entry.id}
                   type="button"
-                  className={`option-btn${mcpModel === model ? " active" : ""}`}
+                  className={`option-btn${mcpModel === entry.id ? " active" : ""}`}
+                  title={entry.description ?? entry.id}
                   onClick={() =>
-                    setMcpModelWithKindImpl(model, mcpMediaKind, useAppStore.setState, useAppStore.getState)}
+                    setMcpModelWithKindImpl(entry.id, mcpMediaKind, useAppStore.setState, useAppStore.getState)}
                 >
-                  {model}
+                  {entry.label}
                 </button>
               ))}
             </div>
           </div>
+          {showRatio ? (
           <div className="option-group">
             <div className="section-title">{t("size.grokAspectTitle")}</div>
             <div className="option-row">
@@ -141,8 +145,8 @@ export function McpGenerationControls({ record }: { record: McpProviderRecord | 
             </div>
             <p className="option-help">{t("mcp.ratioAutoHelp")}</p>
           </div>
-        </>
-      )}
+          ) : null}
+      </>
     </div>
   );
 }

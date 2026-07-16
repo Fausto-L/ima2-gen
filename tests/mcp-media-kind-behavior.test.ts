@@ -87,8 +87,15 @@ describe("getMcpModelCatalog error semantics", () => {
     });
     const catalog = await getMcpModelCatalog("runway");
     assert.deepEqual(catalog, {
-      image: ["nano-banana-pro", "gpt-image-2", "gen-4"],
-      video: ["seedance-2", "veo-3.1"],
+      image: [
+        { id: "nano-banana-pro", label: "nano-banana-pro" },
+        { id: "gpt-image-2", label: "gpt-image-2" },
+        { id: "gen-4", label: "gen-4" },
+      ],
+      video: [
+        { id: "seedance-2", label: "seedance-2" },
+        { id: "veo-3.1", label: "veo-3.1" },
+      ],
     });
     assert.equal(calls.length, 2);
   });
@@ -99,7 +106,43 @@ describe("getMcpModelCatalog error semantics", () => {
       "generate_video": { status: 404, body: { error: { code: "NOT_FOUND", message: "no tool" } } },
     });
     const catalog = await getMcpModelCatalog("imageonly");
-    assert.deepEqual(catalog, { image: ["gen-4"], video: [] });
+    assert.deepEqual(catalog, { image: [{ id: "gen-4", label: "gen-4" }], video: [] });
+  });
+
+  it("falls back to the server catalog exactly once when both enums are empty (higgsfield shape)", async () => {
+    // Higgsfield contracts return 200 with the model nested under opaque
+    // `params` — no top-level enum (audit R1-2). The fallback endpoint fires once.
+    const calls = installFakeFetch({
+      "generate_image": { status: 200, body: contractBody([]) },
+      "generate_video": { status: 200, body: contractBody([]) },
+      "/api/mcp/providers/higgsfield/models": {
+        status: 200,
+        body: { ok: true, models: {
+          image: [{ id: "soul_2", label: "Higgsfield Soul 2.0" }],
+          video: [{ id: "kling_3", label: "Kling 3" }],
+        } },
+      },
+    });
+    const catalog = await getMcpModelCatalog("higgsfield");
+    assert.deepEqual(catalog.image, [{ id: "soul_2", label: "Higgsfield Soul 2.0" }]);
+    assert.deepEqual(catalog.video, [{ id: "kling_3", label: "Kling 3" }]);
+    const fallbackCalls = calls.filter((url) => url.includes("/providers/higgsfield/models"));
+    assert.equal(fallbackCalls.length, 1);
+  });
+
+  it("propagates fallback endpoint failures as catalog errors", async () => {
+    installFakeFetch({
+      "generate_image": { status: 200, body: contractBody([]) },
+      "generate_video": { status: 200, body: contractBody([]) },
+      "/api/mcp/providers/higgsfield/models": {
+        status: 409,
+        body: { error: { code: "MCP_NOT_CONNECTED", message: "not connected" } },
+      },
+    });
+    await assert.rejects(getMcpModelCatalog("higgsfield"), (error: Error & { status?: number }) => {
+      assert.equal(error.status, 409);
+      return true;
+    });
   });
 
   it("propagates non-404 failures", async () => {

@@ -5,6 +5,7 @@ import type { Express, Request, Response } from "express";
 import { McpConnectionManager } from "../lib/mcp/connectionManager.js";
 import { listProviders } from "../lib/mcp/providerRegistry.js";
 import { resolveProviderEndpoint } from "../lib/mcp/providerRegistry.js";
+import { getProviderModels } from "../lib/mcp/modelsCatalog.js";
 import { ingestLiveTools } from "../lib/mcp/snapshotPipeline.js";
 import { requireRuntimeContext, type RouteRuntimeContext } from "../lib/runtimeContext.js";
 
@@ -56,6 +57,39 @@ export function registerMcpConnectionRoutes(app: Express, ctxRaw: RouteRuntimeCo
 
   app.get("/api/mcp/providers/:id/status", (req: Request, res: Response) => {
     res.json({ ok: true, status: manager.status(String(req.params.id)) });
+  });
+
+  // 040 — provider model catalog. Read-only: the resolver can only ever call
+  // models_explore (READONLY_CATALOG_TOOL); no request field reaches the tool
+  // name. Request abort propagates upstream (audit R1-4).
+  app.get("/api/mcp/providers/:id/models", async (req: Request, res: Response) => {
+    const id = String(req.params.id);
+    if (!ctx.config.mcp.enabledProviders.includes(id)) {
+      typedError(res, 404, "MCP_PROVIDER_UNKNOWN", `unknown provider: ${id}`);
+      return;
+    }
+    const abort = new AbortController();
+    const onClose = () => abort.abort();
+    req.on("close", onClose);
+    try {
+      const models = await getProviderModels(
+        id,
+        (provider, name, args, options) => manager.callTool(provider, name, args, options),
+        { signal: abort.signal },
+      );
+      res.json({ ok: true, models });
+    } catch (error) {
+      const code = errorCode(error);
+      if (code === "MCP_NOT_CONNECTED") {
+        typedError(res, 409, code, "Provider is not connected");
+      } else if (code === "MCP_PROVIDER_UNKNOWN") {
+        typedError(res, 404, code, `unknown provider: ${id}`);
+      } else {
+        typedError(res, 502, "MCP_UPSTREAM_ERROR", "Model catalog fetch failed");
+      }
+    } finally {
+      req.off("close", onClose);
+    }
   });
 
   app.post("/api/mcp/providers/:id/connect", async (req: Request, res: Response) => {

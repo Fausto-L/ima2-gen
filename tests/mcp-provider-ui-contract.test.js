@@ -70,8 +70,8 @@ describe("MCP provider UI contract", () => {
     assert.match(settings, /setMcpModelWithKindImpl/);
     assert.match(settings, /persistedKind \?\? get\(\)\.mcpMediaKind \?\? "image"/);
     assert.match(select, /getMcpModelCatalog/);
-    assert.match(select, /encodeMcpModelValue\("image", model\)/);
-    assert.match(select, /encodeMcpModelValue\("video", model\)/);
+    assert.match(select, /encodeMcpModelValue\("image", entry\.id\)/);
+    assert.match(select, /encodeMcpModelValue\("video", entry\.id\)/);
     assert.doesNotMatch(select, /const mediaKind = videoModel/);
     assert.match(selection, /\.\.\.\(ratio \? \{ ratio \} : \{\}\)/);
   });
@@ -123,6 +123,33 @@ describe("MCP provider UI contract", () => {
     assert.match(kit, /listRef\.current\?\.contains\(target\)/);
     assert.match(kit, /window\.addEventListener\("scroll", close, true\)/);
     assert.match(kit, /triggerRef\.current\?\.focus\(\)/);
+  });
+
+  it("unlocks higgsfield model browsing while generation stays locked (040)", () => {
+    const select = readSource("ui/src/components/GenProviderModelSelect.tsx");
+    const settings = readSource("ui/src/store/storeSettingsImpl.ts");
+    const controls = readSource("ui/src/components/settings/McpGenerationControls.tsx");
+    const adapter = readSource("lib/mcp/adapters/higgsfield.ts");
+    const catalog = readSource("lib/mcp/modelsCatalog.ts");
+    const api = readSource("ui/src/lib/mcpProviders.ts");
+
+    // Browse unlock: no provider-item disable, no selection rejection, no synthetic locked row.
+    assert.doesNotMatch(select, /disabled: entry\.id === "higgsfield"/);
+    assert.doesNotMatch(select, /record\.id === "higgsfield" \|\|/);
+    assert.doesNotMatch(select, /higgsfield-locked/);
+    assert.match(select, /lockedNotice/);
+    // Generation stays locked: client pre-block + adapter lock + billing denylist intact.
+    assert.match(settings, /state\.mcpProvider === "higgsfield"/);
+    assert.match(settings, /higgsfieldLocked/);
+    assert.match(adapter, /executable: false/);
+    assert.match(adapter, /confirm_billing_purchase/);
+    // Catalog resolver: single read-only tool constant; UI fallback endpoint.
+    assert.match(catalog, /READONLY_CATALOG_TOOL = "models_explore"/);
+    assert.doesNotMatch(catalog, /generate_image|generate_video|upscale|billing/);
+    assert.match(api, /\/api\/mcp\/providers\/\$\{encodeURIComponent\(provider\)\}\/models/);
+    // Settings: catalog effect no longer gated by the lock; ratio is runway-only.
+    assert.doesNotMatch(controls, /!mcpProvider \|\| locked \|\| !connected/);
+    assert.match(controls, /showRatio = mcpProvider === "runway"/);
   });
 
   it("shows connected MCP providers only, preserves unknown selection, and locks Higgsfield", () => {

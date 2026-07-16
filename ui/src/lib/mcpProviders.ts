@@ -139,13 +139,21 @@ export async function getMcpModelOptions(
   return stringEnum(response.data?.tool?.inputSchema?.properties?.model?.enum);
 }
 
-export type McpModelCatalog = { image: string[]; video: string[] };
+export type McpModelEntry = { id: string; label: string; description?: string };
+export type McpModelCatalog = { image: McpModelEntry[]; video: McpModelEntry[] };
+
+function toEntries(ids: string[]): McpModelEntry[] {
+  return ids.map((id) => ({ id, label: id }));
+}
 
 /**
  * Loads both media-kind model enums for a provider in parallel.
  * Error semantics (010 / audit blocker 3): AbortError propagates untouched,
  * a 404 means the provider has no contract for that kind (empty list), and
  * any other failure propagates so the UI can surface a catalog error state.
+ * Fallback (040): when BOTH contract enums are empty (e.g. Higgsfield's
+ * opaque `params` schema returns 200 with no top-level model enum), the
+ * server-side catalog endpoint (read-only models_explore) is queried once.
  */
 export async function getMcpModelCatalog(
   provider: string,
@@ -161,7 +169,18 @@ export async function getMcpModelCatalog(
     }
   };
   const [image, video] = await Promise.all([settle("image"), settle("video")]);
-  return { image, video };
+  if (image.length > 0 || video.length > 0) {
+    return { image: toEntries(image), video: toEntries(video) };
+  }
+  const response = await jsonFetch<{ ok: boolean; models?: McpModelCatalog }>(
+    `/api/mcp/providers/${encodeURIComponent(provider)}/models`,
+    { signal },
+  );
+  const models = response.models;
+  return {
+    image: Array.isArray(models?.image) ? models.image : [],
+    video: Array.isArray(models?.video) ? models.video : [],
+  };
 }
 
 function normalizeDone(data: Record<string, unknown>, requestId: string): McpDoneResult | null {

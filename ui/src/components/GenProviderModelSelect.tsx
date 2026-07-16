@@ -81,8 +81,7 @@ export function GenProviderModelSelect({ compact = false }: { compact?: boolean 
     : null;
   const mcpSelectionAvailable = Boolean(
     selectedMcpRecord?.enabled &&
-    selectedMcpRecord.status.state === "connected" &&
-    selectedMcpRecord.id !== "higgsfield",
+    selectedMcpRecord.status.state === "connected",
   );
 
   useEffect(() => {
@@ -123,20 +122,24 @@ export function GenProviderModelSelect({ compact = false }: { compact?: boolean 
     : coreModelValue;
   const isGptFamily = !mcpProvider && (provider === "oauth" || provider === "api") && !videoModel;
   const mcpModelKnown = Boolean(
-    mcpModel && (mcpCatalog.image.includes(mcpModel) || mcpCatalog.video.includes(mcpModel)),
+    mcpModel && (
+      mcpCatalog.image.some((entry) => entry.id === mcpModel) ||
+      mcpCatalog.video.some((entry) => entry.id === mcpModel)
+    ),
   );
 
+  // Browse is unlocked for Higgsfield (040); generation stays locked and the
+  // notice renders in the status line without disabling the model select.
+  const lockedNotice = selectedMcpRecord?.id === "higgsfield" ? t("mcp.higgsfieldLocked") : null;
   const unavailableReason = !mcpProvider
     ? null
-    : selectedMcpRecord?.id === "higgsfield"
-      ? t("mcp.higgsfieldLocked")
-      : !selectedMcpRecord
-        ? t("mcp.unknownProvider", { provider: mcpProvider })
-        : selectedMcpRecord.status.state !== "connected"
-          ? t("mcp.disconnectedSelection")
-          : !selectedMcpRecord.enabled
-            ? t("mcp.disabledProvider")
-            : null;
+    : !selectedMcpRecord
+      ? t("mcp.unknownProvider", { provider: mcpProvider })
+      : selectedMcpRecord.status.state !== "connected"
+        ? t("mcp.disconnectedSelection")
+        : !selectedMcpRecord.enabled
+          ? t("mcp.disabledProvider")
+          : null;
 
   const onProviderChange = (value: string) => {
     if (value.startsWith(CORE_PREFIX)) {
@@ -145,7 +148,7 @@ export function GenProviderModelSelect({ compact = false }: { compact?: boolean 
     }
     const next = value.slice(MCP_PREFIX.length);
     const record = providers.find((entry) => entry.id === next);
-    if (!record || record.id === "higgsfield" || record.status.state !== "connected") return;
+    if (!record || record.status.state !== "connected") return;
     applyMcpProvider(next);
   };
 
@@ -182,7 +185,6 @@ export function GenProviderModelSelect({ compact = false }: { compact?: boolean 
       items: connectedMcpProviders.map((entry) => ({
         value: `${MCP_PREFIX}${entry.id}`,
         label: displayProviderId(entry.id),
-        disabled: entry.id === "higgsfield",
         sub: entry.id === "higgsfield" ? t("mcp.locked") : undefined,
       })),
     });
@@ -207,23 +209,18 @@ export function GenProviderModelSelect({ compact = false }: { compact?: boolean 
     }
     modelGroups.push({
       label: t("mcp.imageModels"),
-      items: mcpCatalog.image.map((model) => ({
-        value: encodeMcpModelValue("image", model),
-        label: model,
+      items: mcpCatalog.image.map((entry) => ({
+        value: encodeMcpModelValue("image", entry.id),
+        label: entry.label,
       })),
     });
     modelGroups.push({
       label: t("mcp.videoModels"),
-      items: mcpCatalog.video.map((model) => ({
-        value: encodeMcpModelValue("video", model),
-        label: model,
+      items: mcpCatalog.video.map((entry) => ({
+        value: encodeMcpModelValue("video", entry.id),
+        label: entry.label,
       })),
     });
-    if (selectedMcpRecord?.id === "higgsfield") {
-      modelGroups.push({
-        items: [{ value: "higgsfield-locked", label: t("mcp.higgsfieldLocked"), disabled: true }],
-      });
-    }
   } else {
     modelGroups.push({
       label: videoModel ? t("mcp.videoModels") : t("mcp.imageModels"),
@@ -277,9 +274,10 @@ export function GenProviderModelSelect({ compact = false }: { compact?: boolean 
         portal
       />
 
-      {(unavailableReason || error || catalogError) ? (
+      {(unavailableReason || lockedNotice || error || catalogError) ? (
         <span className="image-model-select__trigger-effort" role="status">
           {unavailableReason
+            ?? lockedNotice
             ?? (catalogError ? (
               <button
                 type="button"
