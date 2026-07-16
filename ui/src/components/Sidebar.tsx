@@ -1,6 +1,7 @@
 import { PromptComposer } from "./PromptComposer";
 import { GenerateButton } from "./GenerateButton";
 import { InFlightList } from "./InFlightList";
+import { InFlightBadge } from "./composer/InFlightBadge";
 import { SessionPicker } from "./SessionPicker";
 import { ImageModelSelect } from "./ImageModelSelect";
 import { GenProviderModelSelect } from "./GenProviderModelSelect";
@@ -12,6 +13,8 @@ import { useI18n } from "../i18n";
 import { resolveWorkspaceSettings } from "../lib/workspaceProfile";
 import { useIsMobile } from "../hooks/useIsMobile";
 import type { AgentGenerationSettings } from "./agent/agentTypes";
+
+const DESKTOP_INFLIGHT_PANEL_ID = "sidebar-inflight-panel";
 
 export function SidebarStack() {
   const { t } = useI18n();
@@ -41,13 +44,14 @@ export function SidebarStack() {
         promptStudioDesktop ? (
           <>
             <SidebarHistory />
-            <InFlightList />
           </>
         ) : (
           <>
             <PromptComposer />
-            <GenerateButton />
-            <InFlightList />
+            <div className="sidebar-generate-with-inflight">
+              <GenerateButton />
+              <InFlightBadge variant="popup" panelId={DESKTOP_INFLIGHT_PANEL_ID} />
+            </div>
           </>
         )
       ) : uiMode === "card-news" ? (
