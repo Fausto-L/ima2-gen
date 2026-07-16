@@ -30,6 +30,7 @@
     "localImportInvalid": "Only PNG, JPEG, or WebP is supported",
     "localStorageFull": "Local storage is full — recent state may not persist.",
     "refLimitExceeded": "References are capped at 5. Extra images were dropped.",
+    "refLimitTrayFull": "Reference tray is full ({max}). Remove an item with its X to attach more — deleted @tags can be re-mentioned with @.",
     "refOverProviderLimit": "This provider accepts up to {max} reference images. Remove {excess} to generate.",
     "refTooLarge": "Image is too large. Convert to JPEG/PNG or lower the resolution and try again.",
     "refNotBase64": "Image file is corrupted or uses an unsupported encoding.",

@@ -57,7 +57,10 @@ test("attachments preserve their caret owner and mentions insert tray tags in ev
   assert.match(composer, /const insertionPoint = Math\.max\(0, Math\.min\(caret, currentPrompt\.length\)\)/);
   assert.match(composer, /added\.map\(\(item\) => `@\$\{item\.tag\} `\)/);
   assert.match(composer, /addElementId\?\.\(element\.id\)/);
-  assert.match(composer, /const replacement = `@\$\{trayElement\.tag\} `/);
+  // 050: the inline replacement moved into the shared insertTagAtMention
+  // helper, reused by both element and tray-attachment mention selection.
+  assert.match(composer, /const replacement = `@\$\{tag\} `/);
+  assert.match(composer, /insertTagAtMention\(trayElement\.tag, mentionQuery\)/);
   assert.doesNotMatch(composer, /mcpProvider/);
 });
 

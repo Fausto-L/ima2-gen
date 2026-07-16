@@ -26,6 +26,10 @@ type ElementSelectionState = {
 
 type InternalRefDragItem = VideoReferenceDragPayload;
 
+// Mention-menu ids for tray attachments; selecting one only reinserts the
+// @tag text (tray membership is never mutated from the mention menu).
+const TRAY_MENTION_PREFIX = "tray:";
+
 function parseCssPixelValue(value: string): number | null {
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
@@ -117,6 +121,15 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
     requestAnimationFrame(() => textareaRef.current?.setSelectionRange(nextCaret, nextCaret));
   };
 
+  const insertTagAtMention = (tag: string, mention: MentionQuery) => {
+    const replacement = `@${tag} `;
+    const currentPrompt = useAppStore.getState().prompt;
+    const next = `${currentPrompt.slice(0, mention.start)}${replacement}${currentPrompt.slice(mention.end)}`;
+    const caret = mention.start + replacement.length;
+    setPrompt(next);
+    requestAnimationFrame(() => textareaRef.current?.setSelectionRange(caret, caret));
+  };
+
   const addFilesAtCaret = async (files: File[], caret: number, inspectMetadata: boolean) => {
     if (files.length === 0) return;
     const knownTokenIds = new Set(useAppStore.getState().trayItems.map((item) => item.tokenId));
@@ -202,9 +215,13 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
   };
 
   const onPaste = (e: ClipboardEvent<HTMLDivElement>) => {
-    if (!canAddMore) return;
     const files = extractClipboardImages(e.clipboardData?.items ?? null);
     if (files.length === 0) return;
+    if (!canAddMore) {
+      e.preventDefault();
+      useAppStore.getState().showToast(t("toast.refLimitTrayFull", { max: maxRefs }), true);
+      return;
+    }
     e.preventDefault();
     const room = maxRefs - trayItems.length;
     void addFilesAtCaret(files.slice(0, room), captureAttachmentCaret(), false);
@@ -229,19 +246,23 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
 
   useEffect(() => {
     const handler = (e: globalThis.ClipboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      const tag = t?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || t?.isContentEditable) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) return;
       const files = extractClipboardImages(e.clipboardData?.items ?? null);
       if (files.length === 0) return;
-      if (trayItems.length >= maxRefs) return;
+      if (trayItems.length >= maxRefs) {
+        e.preventDefault();
+        useAppStore.getState().showToast(t("toast.refLimitTrayFull", { max: maxRefs }), true);
+        return;
+      }
       e.preventDefault();
       const room = maxRefs - trayItems.length;
       void addFilesAtCaret(files.slice(0, room), useAppStore.getState().prompt.length, false);
     };
     window.addEventListener("paste", handler);
     return () => window.removeEventListener("paste", handler);
-  }, [trayItems.length, maxRefs, addReferences]);
+  }, [trayItems.length, maxRefs, addReferences, t]);
 
   const canMovePromptBlock = (id: string, direction: "up" | "down"): boolean => {
     const index = visualPromptIds.indexOf(id);
@@ -387,26 +408,43 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
         textareaRef={textareaRef}
         caret={mentionQuery?.end ?? 0}
         query={mentionQuery?.query ?? ""}
-        elements={elements.map((asset) => ({
-          id: asset.id,
-          name: asset.name,
-          kind: (typeof asset.metadata?.elementKind === "string" ? asset.metadata.elementKind : "character") as ElementMentionKind,
-          thumbnail: asset.filePath ? `/generated/${asset.filePath.split("/").map(encodeURIComponent).join("/")}` : undefined,
-          tags: asset.tags,
-        }))}
+        elements={[
+          // Tray attachments come first so a deleted @Image_N tag can be
+          // re-mentioned; selecting one reinserts the tag without mutating
+          // the tray (the tray stays the single source of truth).
+          ...trayItems
+            .filter((item): item is Extract<typeof item, { kind: "attachment" }> => item.kind === "attachment")
+            .map((item) => ({
+              id: `${TRAY_MENTION_PREFIX}${item.tokenId}`,
+              name: item.tag,
+              kind: "reference" as ElementMentionKind,
+              thumbnail: item.source.dataUrl,
+            })),
+          ...elements.map((asset) => ({
+            id: asset.id,
+            name: asset.name,
+            kind: (typeof asset.metadata?.elementKind === "string" ? asset.metadata.elementKind : "character") as ElementMentionKind,
+            thumbnail: asset.filePath ? `/generated/${asset.filePath.split("/").map(encodeURIComponent).join("/")}` : undefined,
+            tags: asset.tags,
+          })),
+        ]}
         onSelect={(element) => {
+          if (element.id.startsWith(TRAY_MENTION_PREFIX)) {
+            const tokenId = element.id.slice(TRAY_MENTION_PREFIX.length);
+            const trayItem = useAppStore.getState().trayItems.find((item) => item.tokenId === tokenId);
+            if (trayItem && mentionQuery) {
+              insertTagAtMention(trayItem.tag, mentionQuery);
+            }
+            setMentionQuery(null);
+            return;
+          }
           addElementId?.(element.id);
           if (mentionQuery) {
             const trayElement = useAppStore.getState().trayItems.find(
               (item) => item.kind === "element" && item.source.elementId === element.id,
             );
             if (trayElement) {
-              const replacement = `@${trayElement.tag} `;
-              const currentPrompt = useAppStore.getState().prompt;
-              const next = `${currentPrompt.slice(0, mentionQuery.start)}${replacement}${currentPrompt.slice(mentionQuery.end)}`;
-              const caret = mentionQuery.start + replacement.length;
-              setPrompt(next);
-              requestAnimationFrame(() => textareaRef.current?.setSelectionRange(caret, caret));
+              insertTagAtMention(trayElement.tag, mentionQuery);
             }
           }
           setMentionQuery(null);
