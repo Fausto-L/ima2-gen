@@ -129,9 +129,15 @@ export type McpGenerationBuildState = {
   mcpParameters?: Record<string, McpPresetValue>;
   /** Filename of the currently viewed image, used as the video start frame. */
   currentImageFilename?: string | null;
-  /** Generated-storage filenames from @element mentions (style/subject refs). */
-  elementReferenceFilenames?: string[];
+  /** Tagged references from @element mentions; tag = @alias in the prompt. */
+  elementReferences?: Array<{ filename: string; tag?: string }>;
 };
+
+/** Sanitizes an element name into a Runway-style @tag alias. */
+export function mcpReferenceTag(name: string): string | null {
+  const tag = name.normalize("NFKC").replace(/\s+/g, "_").replace(/[^\p{L}\p{N}_-]/gu, "").slice(0, 32);
+  return tag.length > 0 ? tag : null;
+}
 
 /**
  * Assembles the full MCP generation payload. Owns kind/model/ratio/start-frame
@@ -148,8 +154,8 @@ export function buildMcpGenerationInput(
   const kind = resolveMcpMediaKind(state.mcpMediaKind);
   const ratio = normalizeMcpRatio(state.mcpRatio);
   const parameters = normalizeMcpParameters(state.mcpParameters);
-  const referenceFilenames = (state.elementReferenceFilenames ?? [])
-    .filter((name) => typeof name === "string" && name)
+  const references = (state.elementReferences ?? [])
+    .filter((entry) => typeof entry?.filename === "string" && entry.filename)
     .slice(0, 3);
   return {
     provider,
@@ -161,7 +167,7 @@ export function buildMcpGenerationInput(
     ...(ratio ? { ratio } : {}),
     ...(Object.keys(parameters).length > 0 ? { parameters } : {}),
     startFrameFilename: kind === "video" ? state.currentImageFilename ?? undefined : undefined,
-    ...(referenceFilenames.length > 0 ? { referenceFilenames } : {}),
+    ...(references.length > 0 ? { references } : {}),
     ...(requestId ? { requestId } : {}),
   };
 }

@@ -62,20 +62,34 @@ test("reference images ride the image_references input role only", () => {
   // seedance-2 declares image_references: URLs forward as {url} objects.
   const seedance = runwayAdapter.buildGenerateCall({
     kind: "video", prompt: "x", model: "seedance-2",
-    referenceImageUrls: ["https://cdn.example.com/a.png", "http://insecure.example.com/b.png"],
+    referenceImages: [{ url: "https://cdn.example.com/a.png" }, { url: "http://insecure.example.com/b.png" }],
   });
   assert.deepEqual(seedance.args.referenceImages, [{ url: "https://cdn.example.com/a.png" }]);
   // gen-4-turbo declares only start_image: references reject before any call.
   assert.throws(() => runwayAdapter.buildGenerateCall({
     kind: "video", prompt: "x", model: "gen-4-turbo",
-    referenceImageUrls: ["https://cdn.example.com/a.png"],
+    referenceImages: [{ url: "https://cdn.example.com/a.png" }],
   }), /MCP_PARAMETER_UNSUPPORTED:gen-4-turbo:referenceImages/);
   // image models with image_references accept them too.
   const image = runwayAdapter.buildGenerateCall({
     kind: "image", prompt: "x", model: "gen-4",
-    referenceImageUrls: ["https://cdn.example.com/a.png"],
+    referenceImages: [{ url: "https://cdn.example.com/a.png" }],
   });
   assert.deepEqual(image.args.referenceImages, [{ url: "https://cdn.example.com/a.png" }]);
+});
+
+test("reference tags forward as Runway @aliases; invalid tags drop silently", () => {
+  const plan = runwayAdapter.buildGenerateCall({
+    kind: "video", prompt: "@Jipy waves at the crosswalk", model: "seedance-2",
+    referenceImages: [
+      { url: "https://cdn.example.com/a.png", tag: "Jipy" },
+      { url: "https://cdn.example.com/b.png", tag: "bad tag with spaces!" },
+    ],
+  });
+  assert.deepEqual(plan.args.referenceImages, [
+    { url: "https://cdn.example.com/a.png", tag: "Jipy" },
+    { url: "https://cdn.example.com/b.png" },
+  ]);
 });
 
 test("unsupported model ids are rejected before any call", () => {

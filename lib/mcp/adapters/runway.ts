@@ -97,16 +97,25 @@ function validateRequest(request: MediaJobRequest): Record<string, McpPresetValu
   }
   // Reference images ride the model's declared image_references input role;
   // the tool schema caps them to seedance-2 / kling-o3-pro for video.
-  if (request.referenceImageUrls && request.referenceImageUrls.length > 0
+  if (request.referenceImages && request.referenceImages.length > 0
     && !entry.capabilities.inputRoles.includes("image_references")) {
     throw new Error(`MCP_PARAMETER_UNSUPPORTED:${entry.id}:referenceImages`);
   }
   return validatedParameters(request, entry);
 }
 
+/** Tags follow the Runway @alias convention: word characters only, <=32. */
+const REFERENCE_TAG_PATTERN = /^[\p{L}\p{N}_-]{1,32}$/u;
+
 function referenceImagesArg(request: MediaJobRequest): Record<string, unknown> {
-  const urls = (request.referenceImageUrls ?? []).filter((url) => /^https:\/\//i.test(url)).slice(0, 3);
-  return urls.length > 0 ? { referenceImages: urls.map((url) => ({ url })) } : {};
+  const entries = (request.referenceImages ?? [])
+    .filter((ref) => /^https:\/\//i.test(ref.url))
+    .slice(0, 3)
+    .map((ref) => ({
+      url: ref.url,
+      ...(ref.tag && REFERENCE_TAG_PATTERN.test(ref.tag) ? { tag: ref.tag } : {}),
+    }));
+  return entries.length > 0 ? { referenceImages: entries } : {};
 }
 
 function buildGenerateCall(request: MediaJobRequest): ToolCallPlan {

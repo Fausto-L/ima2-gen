@@ -112,7 +112,28 @@ test("element reference filenames upload then forward as provider-hosted URLs", 
     assert.equal(response.status, 202);
     await waitForEvent("mcp-test-refs", "done");
     assert.equal(uploads.length, 1);
-    assert.deepEqual(captured[0].referenceImageUrls, ["https://runway.example/hosted-1.png"]);
+    assert.deepEqual(captured[0].referenceImages, [{ url: "https://runway.example/hosted-1.png" }]);
+  });
+});
+
+test("tagged references keep their @alias through upload", async () => {
+  const captured: Array<Record<string, unknown>> = [];
+  writeFileSync(join(dir, "generated", "ref-tag.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  const deps = {
+    ...makeDeps({ capture: captured }),
+    upload: async () => "https://runway.example/hosted-tagged.png",
+  };
+  await withApp(deps as never, async (base) => {
+    const response = await fetch(`${base}/api/mcp/generate`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        provider: "runway", kind: "video", prompt: "@Jipy waves", model: "seedance-2",
+        references: [{ filename: "ref-tag.png", tag: "Jipy" }], requestId: "mcp-test-tagged",
+      }),
+    });
+    assert.equal(response.status, 202);
+    await waitForEvent("mcp-test-tagged", "done");
+    assert.deepEqual(captured[0].referenceImages, [{ url: "https://runway.example/hosted-tagged.png", tag: "Jipy" }]);
   });
 });
 

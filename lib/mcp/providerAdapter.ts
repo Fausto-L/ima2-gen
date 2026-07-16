@@ -14,8 +14,9 @@ export interface MediaJobRequest {
   /** Image-to-video start frame (public HTTPS or provider-hosted URL). */
   startFrameUrl?: string;
   /** Style/subject reference images (provider-hosted URLs). Models must
-   * declare the image_references input role to receive them. */
-  referenceImageUrls?: string[];
+   * declare the image_references input role to receive them. `tag` is the
+   * @alias usable inside promptText (Runway multi-reference syntax). */
+  referenceImages?: Array<{ url: string; tag?: string }>;
   /** Free-text purpose forwarded to providers that require a rationale field. */
   rationale?: string;
 }
