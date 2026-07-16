@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
 import { useAppStore } from "../store/useAppStore";
 import { useI18n } from "../i18n";
 import { SavePromptPopover } from "./SavePromptPopover";
@@ -7,10 +7,21 @@ import { continueFromItem } from "../lib/continueFromItem";
 import { isVideoItem, extractLastFrame } from "../lib/videoMedia";
 import type { VideoReferenceDragPayload } from "../lib/videoContinuity";
 import { getPresetById } from "../lib/presets";
+import { findMentionAtCaret, type MentionQuery } from "../lib/elementMention";
 import { Chip, ChipRow } from "./controls";
+import { ElementMentionMenu } from "./ElementMentionMenu";
+import type { ElementMentionKind } from "./ElementMentionChip";
+import { ReferenceTray } from "./composer/ReferenceTray";
+import { DeadTagMirror } from "./composer/DeadTagMirror";
 
 type PromptComposerProps = {
   variant?: "sidebar" | "bottom";
+};
+
+// Element selection is supplied by the element-store slice, which is composed
+// into AppState independently of this UI surface.
+type ElementSelectionState = {
+  addElementId?: (id: string) => void;
 };
 
 type InternalRefDragItem = VideoReferenceDragPayload;
@@ -29,17 +40,30 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
   const generate = useAppStore((s) => s.generate);
   const selectedPresetIds = useAppStore((s) => s.selectedPresetIds);
   const removePreset = useAppStore((s) => s.removePreset);
+  const elementSelection = useAppStore((s) => s as typeof s & ElementSelectionState);
+  const addElementId = elementSelection.addElementId;
+  const allAssets = useAppStore((s) => s.assets);
+  const elements = useMemo(() => allAssets.filter((asset) => asset.kind === "element"), [allAssets]);
+  // The create surface never mounts the Assets workspace, so hydrate the
+  // asset list once here or the @mention menu would stay empty.
+  useEffect(() => {
+    const state = useAppStore.getState();
+    if (state.assets.length === 0 && !state.assetsLoading) void state.loadAssets(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const { t } = useI18n();
 
-  const refs = useAppStore((s) => s.referenceImages);
-  const maxRefs = useAppStore((s) => s.referenceLimit);
+  const trayItems = useAppStore((s) => s.trayItems);
+  const retiredTags = useAppStore((s) => s.retiredTags);
+  const removeTrayItem = useAppStore((s) => s.removeTrayItem);
+  // Provider/mode-aware cap (grok family image 3, grok video 7, MCP lane 0).
+  const maxRefs = useAppStore((s) => s.activeReferenceLimit());
   const providerUrlReference = useAppStore((s) => s.providerUrlReference);
   const setProviderUrlReference = useAppStore((s) => s.setProviderUrlReference);
   const addReferences = useAppStore((s) => s.addReferences);
   const addReferenceDataUrl = useAppStore((s) => s.addReferenceDataUrl);
   const useImageAsReference = useAppStore((s) => s.useImageAsReference);
   const readDroppedImageMetadata = useAppStore((s) => s.readDroppedImageMetadata);
-  const removeReference = useAppStore((s) => s.removeReference);
   const currentImage = useAppStore((s) => s.currentImage);
   const videoModelSelected = useAppStore((s) => s.videoModelSelected);
   const selectVideoModel = useAppStore((s) => s.selectVideoModel);
@@ -49,8 +73,10 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
 
   const fileInput = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const attachmentCaretRef = useRef<number | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState<MentionQuery | null>(null);
   const promptMode = useAppStore((s) => s.promptMode);
   const setPromptMode = useAppStore((s) => s.setPromptMode);
   const multimode = useAppStore((s) => s.multimode);
@@ -64,29 +90,63 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
     ...afterPrompts.map((item) => item.id),
   ];
 
-  const canAddMore = refs.length < maxRefs;
+  const canAddMore = trayItems.length < maxRefs;
   const placeholder = multimode
-    ? refs.length > 0
+    ? trayItems.length > 0
       ? t("multimode.promptPlaceholderWithRefs")
       : t("multimode.promptPlaceholder")
-    : refs.length > 0
+    : trayItems.length > 0
       ? t("prompt.placeholderWithRefs")
       : t("prompt.placeholder");
 
-  const handleImageFiles = async (files: File[]) => {
-    if (files.length === 0) return;
-    if (files.length === 1) {
-      const handled = await readDroppedImageMetadata(files[0]);
-      if (handled) return;
-    }
-    await addReferences(files);
+  const captureAttachmentCaret = (): number => {
+    const textarea = textareaRef.current;
+    return textarea?.selectionStart ?? useAppStore.getState().prompt.length;
   };
 
-  const attachInternalReference = async (item: InternalRefDragItem): Promise<void> => {
-    // Add the dragged gallery item as a reference image WITHOUT touching the
-    // prompt. Images go through useImageAsReference (fetch → compress → base64);
-    // videos extract their last frame. Both produce a proper base64 data URL so
-    // downstream generation can decode it.
+  const insertAttachmentTags = (knownTokenIds: ReadonlySet<string>, caret: number) => {
+    const added = useAppStore.getState().trayItems.filter(
+      (item) => item.kind === "attachment" && !knownTokenIds.has(item.tokenId),
+    );
+    if (added.length === 0) return;
+    const currentPrompt = useAppStore.getState().prompt;
+    const insertionPoint = Math.max(0, Math.min(caret, currentPrompt.length));
+    const mentionText = added.map((item) => `@${item.tag} `).join("");
+    setPrompt(`${currentPrompt.slice(0, insertionPoint)}${mentionText}${currentPrompt.slice(insertionPoint)}`);
+    const nextCaret = insertionPoint + mentionText.length;
+    requestAnimationFrame(() => textareaRef.current?.setSelectionRange(nextCaret, nextCaret));
+  };
+
+  const addFilesAtCaret = async (files: File[], caret: number, inspectMetadata: boolean) => {
+    if (files.length === 0) return;
+    const knownTokenIds = new Set(useAppStore.getState().trayItems.map((item) => item.tokenId));
+    try {
+      if (inspectMetadata && files.length === 1) {
+        const handled = await readDroppedImageMetadata(files[0]);
+        if (handled) return;
+      }
+      await addReferences(files);
+      insertAttachmentTags(knownTokenIds, caret);
+    } catch { /* attachment errors surface through the existing store toasts */ }
+  };
+
+  const handleImageFiles = async (files: File[]) => {
+    const caret = attachmentCaretRef.current ?? captureAttachmentCaret();
+    attachmentCaretRef.current = null;
+    await addFilesAtCaret(files, caret, true);
+  };
+
+  const openFilePicker = () => {
+    if (!canAddMore) return;
+    attachmentCaretRef.current = captureAttachmentCaret();
+    fileInput.current?.click();
+  };
+
+  const attachInternalReference = async (item: InternalRefDragItem, caret: number): Promise<void> => {
+    // Images go through useImageAsReference (fetch → compress → base64), while
+    // videos contribute their last frame. The resulting tray tag is inserted at
+    // the caret snapshot owned by this drag operation.
+    const knownTokenIds = new Set(useAppStore.getState().trayItems.map((trayItem) => trayItem.tokenId));
     try {
       const src = item.url || item.image;
       if (!src) return;
@@ -97,6 +157,7 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
       } else {
         await useImageAsReference(refItem as Parameters<typeof useImageAsReference>[0]);
       }
+      insertAttachmentTags(knownTokenIds, caret);
     } catch { /* non-fatal for drag-drop */ }
   };
 
@@ -108,7 +169,7 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
     if (refData) {
       try {
         const item = JSON.parse(refData) as InternalRefDragItem;
-        void attachInternalReference(item);
+        void attachInternalReference(item, captureAttachmentCaret());
       } catch { /* ignore malformed */ }
       return;
     }
@@ -145,8 +206,8 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
     const files = extractClipboardImages(e.clipboardData?.items ?? null);
     if (files.length === 0) return;
     e.preventDefault();
-    const room = maxRefs - refs.length;
-    void addReferences(files.slice(0, room));
+    const room = maxRefs - trayItems.length;
+    void addFilesAtCaret(files.slice(0, room), captureAttachmentCaret(), false);
   };
 
   const maxHeightRef = useRef<number | null>(null);
@@ -173,14 +234,14 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
       if (tag === "INPUT" || tag === "TEXTAREA" || t?.isContentEditable) return;
       const files = extractClipboardImages(e.clipboardData?.items ?? null);
       if (files.length === 0) return;
-      if (refs.length >= maxRefs) return;
+      if (trayItems.length >= maxRefs) return;
       e.preventDefault();
-      const room = maxRefs - refs.length;
-      void addReferences(files.slice(0, room));
+      const room = maxRefs - trayItems.length;
+      void addFilesAtCaret(files.slice(0, room), useAppStore.getState().prompt.length, false);
     };
     window.addEventListener("paste", handler);
     return () => window.removeEventListener("paste", handler);
-  }, [refs.length, maxRefs, addReferences]);
+  }, [trayItems.length, maxRefs, addReferences]);
 
   const canMovePromptBlock = (id: string, direction: "up" | "down"): boolean => {
     const index = visualPromptIds.indexOf(id);
@@ -266,31 +327,20 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
               {t("prompt.urlRefActive")}
             </button>
           )}
-          {refs.length > 0 && (
+          {trayItems.length > 0 && (
             <span className="composer__count">
-              {t("prompt.refCount", { count: refs.length, max: maxRefs })}
+              {t("prompt.refCount", { count: trayItems.length, max: maxRefs })}
             </span>
           )}
         </div>
       </div>
 
-      {refs.length > 0 && (
-        <div className="composer__chips">
-          {refs.map((src, i) => (
-            <div key={i} className="composer__chip" title={t("prompt.refChipTitle", { n: i + 1 })}>
-              <img src={src} alt={t("prompt.refChipAlt", { n: i + 1 })} loading="lazy" decoding="async" />
-              <button
-                type="button"
-                className="composer__chip-remove"
-                onClick={() => removeReference(i)}
-                aria-label={t("prompt.refRemoveAria", { n: i + 1 })}
-              >
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+      <ReferenceTray
+        items={trayItems}
+        limit={maxRefs}
+        onRemove={removeTrayItem}
+        onAdd={openFilePicker}
+      />
 
       {beforePrompts.length > 0 && (
         <div className="composer__prompt-chips">
@@ -312,18 +362,56 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
         </ChipRow>
       )}
 
-      <textarea
-        ref={textareaRef}
-        className="prompt-area composer__textarea"
-        value={prompt}
-        placeholder={placeholder}
-        onChange={(e) => setPrompt(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-            e.preventDefault();
-            void generate();
+      <div className="composer__prompt-stack">
+        <DeadTagMirror prompt={prompt} retiredTags={retiredTags} textareaRef={textareaRef} />
+        <textarea
+          ref={textareaRef}
+          className="prompt-area composer__textarea"
+          value={prompt}
+          placeholder={placeholder}
+          onChange={(e) => {
+            setPrompt(e.target.value);
+            setMentionQuery(findMentionAtCaret(e.target.value, e.target.selectionStart));
+          }}
+          onClick={(e) => setMentionQuery(findMentionAtCaret(e.currentTarget.value, e.currentTarget.selectionStart))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              void generate();
+            }
+          }}
+        />
+      </div>
+      <ElementMentionMenu
+        open={mentionQuery !== null}
+        textareaRef={textareaRef}
+        caret={mentionQuery?.end ?? 0}
+        query={mentionQuery?.query ?? ""}
+        elements={elements.map((asset) => ({
+          id: asset.id,
+          name: asset.name,
+          kind: (typeof asset.metadata?.elementKind === "string" ? asset.metadata.elementKind : "character") as ElementMentionKind,
+          thumbnail: asset.filePath ? `/generated/${asset.filePath.split("/").map(encodeURIComponent).join("/")}` : undefined,
+          tags: asset.tags,
+        }))}
+        onSelect={(element) => {
+          addElementId?.(element.id);
+          if (mentionQuery) {
+            const trayElement = useAppStore.getState().trayItems.find(
+              (item) => item.kind === "element" && item.source.elementId === element.id,
+            );
+            if (trayElement) {
+              const replacement = `@${trayElement.tag} `;
+              const currentPrompt = useAppStore.getState().prompt;
+              const next = `${currentPrompt.slice(0, mentionQuery.start)}${replacement}${currentPrompt.slice(mentionQuery.end)}`;
+              const caret = mentionQuery.start + replacement.length;
+              setPrompt(next);
+              requestAnimationFrame(() => textareaRef.current?.setSelectionRange(caret, caret));
+            }
           }
+          setMentionQuery(null);
         }}
+        onClose={() => setMentionQuery(null)}
       />
 
       {afterPrompts.length > 0 && (
@@ -340,7 +428,7 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
         <button
           type="button"
           className="composer__tool"
-          onClick={() => canAddMore && fileInput.current?.click()}
+          onClick={openFilePicker}
           disabled={!canAddMore}
           title={t("prompt.attachTitle")}
           aria-label={t("prompt.attachTitle")}
@@ -436,6 +524,7 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
         onChange={(e) => {
           const files = Array.from(e.target.files ?? []);
           if (files.length > 0) void handleImageFiles(files);
+          else attachmentCaretRef.current = null;
           e.target.value = "";
         }}
       />

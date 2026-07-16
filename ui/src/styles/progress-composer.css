@@ -329,59 +329,117 @@
   background: #a855f7;
   box-shadow: 0 0 0 3px color-mix(in srgb, #a855f7 20%, transparent);
 }
+.composer__ref-warning {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--amber, #d9a12e);
+}
+
 .composer__count {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--text-dim);
 }
-.composer__chips {
+.composer__tray-wrap {
+  min-width: 0;
+}
+.composer__tray {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  align-items: flex-start;
+  gap: 8px;
 }
-.composer__chip {
+.composer__tray-slot {
+  width: 56px;
+  min-width: 56px;
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+.composer__tray-thumbnail {
   position: relative;
-  width: 44px;
-  height: 44px;
-  border-radius: 8px;
+  display: flex;
+  width: 48px;
+  height: 48px;
+  margin-inline: auto;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
   border: 1px solid var(--border);
+  border-radius: 8px;
   background: var(--bg);
-  flex-shrink: 0;
 }
-.composer__chip img {
+.composer__tray-thumbnail img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: block;
 }
-.composer__chip-remove {
+.composer__tray-thumbnail-empty {
+  font-family: var(--mono);
+  font-size: 18px;
+  color: var(--text-muted);
+}
+.composer__tray-remove {
   position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 16px;
-  height: 16px;
+  top: 0;
+  right: 0;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   border: none;
   background: var(--chip-scrim);
   color: #fff;
-  font-size: 9px;
+  font-size: 13px;
   line-height: 1;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  opacity: 0;
-  transition: opacity 0.12s;
+  opacity: 0.82;
+  transition: opacity 0.12s, background 0.12s;
 }
-.composer__chip:hover .composer__chip-remove {
+.composer__tray-slot:hover .composer__tray-remove {
   opacity: 1;
 }
-.composer__chip-remove:hover,
-.composer__chip-remove:focus-visible {
+.composer__tray-remove:hover,
+.composer__tray-remove:focus-visible {
   background: var(--red);
   opacity: 1;
+}
+.composer__tray-tag {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.25;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer__tray-slot--add {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--border-strong, var(--border));
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 22px;
+}
+.composer__tray-slot--add:hover:not(:disabled),
+.composer__tray-slot--add:focus-visible {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.composer__tray-slot--add:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
 }
 .composer__prompt-chips {
   display: flex;
@@ -437,7 +495,34 @@
   background: var(--red);
   color: #fff;
 }
+.composer__prompt-stack {
+  position: relative;
+  min-width: 0;
+}
+.composer__prompt-mirror {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  color: transparent;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+.composer__prompt-mirror .dead-tag {
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--red) 24%, transparent);
+  color: transparent;
+  text-decoration-line: line-through;
+  text-decoration-color: color-mix(in srgb, var(--red) 86%, var(--text));
+  text-decoration-thickness: 1.5px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
 .composer__textarea {
+  position: relative;
+  z-index: 1;
+  width: 100%;
   border: none;
   padding: 4px 2px;
   background: transparent;
@@ -451,6 +536,26 @@
 .composer__textarea:focus-visible {
   border: none;
   box-shadow: none;
+}
+@media (min-width: 801px) {
+  .composer--sidebar {
+    --composer-textarea-min-height: clamp(200px, 42vh, 520px);
+    --composer-textarea-max-height: none;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .composer--sidebar .composer__prompt-stack {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .composer--sidebar .composer__textarea {
+    height: 100% !important;
+    min-height: 0;
+    max-height: none;
+    flex: 1 1 auto;
+  }
 }
 .composer__toolbar {
   display: grid;
