@@ -81,6 +81,7 @@ describe("MCP provider UI contract", () => {
     const providerSelect = readSource("ui/src/components/ProviderSelect.tsx");
     const strip = readSource("ui/src/components/settings/ProviderStatusStrip.tsx");
     const mcpControls = readSource("ui/src/components/settings/McpGenerationControls.tsx");
+    const presetControls = readSource("ui/src/components/settings/McpModelPresetControls.tsx");
     const settings = readSource("ui/src/store/storeSettingsImpl.ts");
     const persistence = readSource("ui/src/store/storePersistence.ts");
 
@@ -95,20 +96,26 @@ describe("MCP provider UI contract", () => {
     assert.match(providerSelect, /const selected = !muteSelection && !cell\.disabled && provider === cell\.value/);
     // mcpRatio lifecycle: whitelist parse, persistent clear-to-Auto, Auto omission.
     assert.match(persistence, /normalizeMcpRatio\(parsed\.mcpRatio\)/);
-    assert.match(settings, /saveGenerationDefaultsPatch\(\{ mcpRatio: null \}\)/);
+    assert.match(settings, /saveGenerationDefaultsPatch\(\{ mcpRatio: null, mcpParameters: \{\} \}\)/);
     assert.match(settings, /setMcpRatioImpl/);
-    assert.match(mcpControls, /MCP_RATIO_PRESETS/);
+    assert.match(mcpControls, /McpModelPresetControls/);
+    assert.doesNotMatch(mcpControls, /models\.map\(/);
+    assert.match(presetControls, /parameterPresetValues/);
+    assert.match(presetControls, /advancedPresetsLabel/);
+    assert.match(presetControls, /toolInputsLabel/);
+    assert.match(settings, /setMcpParameterImpl/);
     assert.match(mcpControls, /higgsfieldLocked/);
   });
 
-  it("separates catalog abort, missing-contract, and failure semantics", () => {
+  it("uses one canonical enriched catalog endpoint and preserves retry semantics", () => {
     const api = readSource("ui/src/lib/mcpProviders.ts");
     const select = readSource("ui/src/components/GenProviderModelSelect.tsx");
 
-    assert.match(api, /name === "AbortError"\) throw error/);
-    assert.match(api, /status === 404\) return \[\]/);
+    assert.match(api, /\/api\/mcp\/providers\/\$\{encodeURIComponent\(provider\)\}\/models/);
+    assert.doesNotMatch(api, /Promise\.all\(\[settle\("image"\), settle\("video"\)\]\)/);
     assert.match(select, /setCatalogError\(true\)/);
     assert.match(select, /setCatalogRetryToken/);
+    assert.match(select, /reconcileMcpPresetStateImpl/);
   });
 
   it("renders the sidebar selector with the shared ctl-select skin, not native selects", () => {
@@ -147,9 +154,10 @@ describe("MCP provider UI contract", () => {
     assert.match(catalog, /READONLY_CATALOG_TOOL = "models_explore"/);
     assert.doesNotMatch(catalog, /generate_image|generate_video|upscale|billing/);
     assert.match(api, /\/api\/mcp\/providers\/\$\{encodeURIComponent\(provider\)\}\/models/);
-    // Settings: catalog effect no longer gated by the lock; ratio is runway-only.
+    // Settings: catalog effect no longer gated by the lock; presets remain visible but disabled.
     assert.doesNotMatch(controls, /!mcpProvider \|\| locked \|\| !connected/);
-    assert.match(controls, /showRatio = mcpProvider === "runway"/);
+    assert.match(controls, /disabled=\{locked\}/);
+    assert.doesNotMatch(controls, /mcp-generation-controls__models/);
   });
 
   it("shows connected MCP providers only, preserves unknown selection, and locks Higgsfield", () => {

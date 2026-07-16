@@ -40,22 +40,20 @@ function installFakeFetch(routes: Record<string, FakeRoute>): string[] {
   return calls;
 }
 
-function contractBody(models: string[]): unknown {
-  return { ok: true, data: { tool: { inputSchema: { properties: { model: { enum: models } } } } } };
-}
+const capabilities = { source: "verified-contract", aspectRatios: [], parameters: [], inputRoles: [] };
 
 describe("MCP media-kind persistence migration", () => {
   it("falls back to image for legacy defaults without a kind", () => {
     assert.deepEqual(
       normalizeMcpSelection({ mcpProvider: "runway", mcpModel: "gen-4" }),
-      { provider: "runway", model: "gen-4", kind: "image", ratio: null },
+      { provider: "runway", model: "gen-4", kind: "image", ratio: null, parameters: {} },
     );
   });
 
   it("round-trips a persisted video kind", () => {
     assert.deepEqual(
       normalizeMcpSelection({ mcpProvider: "runway", mcpModel: "seedance-2", mcpMediaKind: "video" }),
-      { provider: "runway", model: "seedance-2", kind: "video", ratio: null },
+      { provider: "runway", model: "seedance-2", kind: "video", ratio: null, parameters: {} },
     );
   });
 
@@ -65,7 +63,7 @@ describe("MCP media-kind persistence migration", () => {
       "9:16",
     );
     assert.equal(
-      normalizeMcpSelection({ mcpProvider: "runway", mcpRatio: "4:7" }).ratio,
+      normalizeMcpSelection({ mcpProvider: "runway", mcpRatio: "4x7" }).ratio,
       null,
     );
     assert.equal(normalizeMcpSelection({ mcpProvider: "runway" }).ratio, null);
@@ -74,66 +72,60 @@ describe("MCP media-kind persistence migration", () => {
   it("normalizes corrupt kind values and non-string ids", () => {
     assert.deepEqual(
       normalizeMcpSelection({ mcpProvider: 7, mcpModel: null, mcpMediaKind: "wide" }),
-      { provider: null, model: null, kind: "image", ratio: null },
+      { provider: null, model: null, kind: "image", ratio: null, parameters: {} },
     );
+  });
+
+  it("round-trips bounded scalar preset values and drops malformed records", () => {
+    assert.deepEqual(
+      normalizeMcpSelection({ mcpProvider: "runway", mcpParameters: { duration: 8, resolution: "720p", audio: false } }).parameters,
+      { duration: 8, resolution: "720p", audio: false },
+    );
+    assert.deepEqual(normalizeMcpSelection({ mcpProvider: "runway", mcpParameters: ["bad"] }).parameters, {});
   });
 });
 
 describe("getMcpModelCatalog error semantics", () => {
-  it("loads both kind enums in parallel", async () => {
+  it("loads one canonical enriched catalog for Runway", async () => {
     const calls = installFakeFetch({
-      "generate_image": { status: 200, body: contractBody(["nano-banana-pro", "gpt-image-2", "gen-4"]) },
-      "generate_video": { status: 200, body: contractBody(["seedance-2", "veo-3.1"]) },
+      "/api/mcp/providers/runway/models": { status: 200, body: { ok: true, models: {
+        image: [{ id: "gen-4", label: "Gen-4", capabilities }],
+        video: [{ id: "seedance-2", label: "Seedance 2", capabilities }],
+      } } },
     });
     const catalog = await getMcpModelCatalog("runway");
-    assert.deepEqual(catalog, {
-      image: [
-        { id: "nano-banana-pro", label: "nano-banana-pro" },
-        { id: "gpt-image-2", label: "gpt-image-2" },
-        { id: "gen-4", label: "gen-4" },
-      ],
-      video: [
-        { id: "seedance-2", label: "seedance-2" },
-        { id: "veo-3.1", label: "veo-3.1" },
-      ],
-    });
-    assert.equal(calls.length, 2);
+    assert.deepEqual(catalog.image.map((entry) => entry.id), ["gen-4"]);
+    assert.deepEqual(catalog.video.map((entry) => entry.id), ["seedance-2"]);
+    assert.equal(calls.length, 1);
   });
 
-  it("treats a 404 contract as an empty kind, not an error", async () => {
+  it("returns empty arrays when a successful catalog omits model arrays", async () => {
     installFakeFetch({
-      "generate_image": { status: 200, body: contractBody(["gen-4"]) },
-      "generate_video": { status: 404, body: { error: { code: "NOT_FOUND", message: "no tool" } } },
+      "/api/mcp/providers/imageonly/models": { status: 200, body: { ok: true, models: {} } },
     });
     const catalog = await getMcpModelCatalog("imageonly");
-    assert.deepEqual(catalog, { image: [{ id: "gen-4", label: "gen-4" }], video: [] });
+    assert.deepEqual(catalog, { image: [], video: [] });
   });
 
-  it("falls back to the server catalog exactly once when both enums are empty (higgsfield shape)", async () => {
-    // Higgsfield contracts return 200 with the model nested under opaque
-    // `params` — no top-level enum (audit R1-2). The fallback endpoint fires once.
+  it("loads Higgsfield capabilities from the same endpoint exactly once", async () => {
     const calls = installFakeFetch({
-      "generate_image": { status: 200, body: contractBody([]) },
-      "generate_video": { status: 200, body: contractBody([]) },
       "/api/mcp/providers/higgsfield/models": {
         status: 200,
         body: { ok: true, models: {
-          image: [{ id: "soul_2", label: "Higgsfield Soul 2.0" }],
-          video: [{ id: "kling_3", label: "Kling 3" }],
+          image: [{ id: "soul_2", label: "Higgsfield Soul 2.0", capabilities }],
+          video: [{ id: "kling_3", label: "Kling 3", capabilities }],
         } },
       },
     });
     const catalog = await getMcpModelCatalog("higgsfield");
-    assert.deepEqual(catalog.image, [{ id: "soul_2", label: "Higgsfield Soul 2.0" }]);
-    assert.deepEqual(catalog.video, [{ id: "kling_3", label: "Kling 3" }]);
+    assert.equal(catalog.image[0].label, "Higgsfield Soul 2.0");
+    assert.equal(catalog.video[0].label, "Kling 3");
     const fallbackCalls = calls.filter((url) => url.includes("/providers/higgsfield/models"));
     assert.equal(fallbackCalls.length, 1);
   });
 
   it("propagates fallback endpoint failures as catalog errors", async () => {
     installFakeFetch({
-      "generate_image": { status: 200, body: contractBody([]) },
-      "generate_video": { status: 200, body: contractBody([]) },
       "/api/mcp/providers/higgsfield/models": {
         status: 409,
         body: { error: { code: "MCP_NOT_CONNECTED", message: "not connected" } },
@@ -147,8 +139,7 @@ describe("getMcpModelCatalog error semantics", () => {
 
   it("propagates non-404 failures", async () => {
     installFakeFetch({
-      "generate_image": { status: 200, body: contractBody(["gen-4"]) },
-      "generate_video": { status: 500, body: { error: { code: "BOOM", message: "server broke" } } },
+      "/api/mcp/providers/runway/models": { status: 500, body: { error: { code: "BOOM", message: "server broke" } } },
     });
     await assert.rejects(getMcpModelCatalog("runway"), (error: Error & { status?: number }) => {
       assert.equal(error.status, 500);
@@ -158,8 +149,7 @@ describe("getMcpModelCatalog error semantics", () => {
 
   it("propagates aborts untouched", async () => {
     installFakeFetch({
-      "generate_image": { status: 200, body: contractBody(["gen-4"]) },
-      "generate_video": { status: 200, body: contractBody(["seedance-2"]) },
+      "/api/mcp/providers/runway/models": { status: 200, body: { ok: true, models: { image: [], video: [] } } },
     });
     const controller = new AbortController();
     controller.abort();

@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildMcpGenerationInput,
+  defaultMcpPresetSelection,
   encodeMcpModelValue,
   normalizeMcpRatio,
   parseMcpModelValue,
+  reconcileMcpPresetSelection,
   resolveMcpMediaKind,
 } from "../ui/src/lib/mcpSelection.js";
 
@@ -94,11 +96,11 @@ describe("mcpSelection pure helpers", () => {
     assert.equal(input && "ratio" in input, false);
   });
 
-  it("whitelists ratio presets and normalizes everything else to Auto", () => {
+  it("keeps syntactically valid ratios for later model-aware reconciliation", () => {
     assert.equal(normalizeMcpRatio("16:9"), "16:9");
     assert.equal(normalizeMcpRatio("9:16"), "9:16");
     assert.equal(normalizeMcpRatio("1:1"), "1:1");
-    assert.equal(normalizeMcpRatio("21:9"), null);
+    assert.equal(normalizeMcpRatio("21:9"), "21:9");
     assert.equal(normalizeMcpRatio(""), null);
     assert.equal(normalizeMcpRatio(undefined), null);
     assert.equal(normalizeMcpRatio(169), null);
@@ -108,5 +110,38 @@ describe("mcpSelection pure helpers", () => {
       "prompt",
     );
     assert.equal(input && "ratio" in input, false);
+  });
+
+  it("applies provider defaults and removes stale values when the selected model changes", () => {
+    const seedance = {
+      source: "verified-contract" as const,
+      aspectRatios: ["16:9", "9:16"],
+      inputRoles: ["start_image"],
+      parameters: [
+        { name: "duration", type: "number" as const, min: 4, max: 15, default: 10 },
+        { name: "resolution", type: "string" as const, options: ["480p", "720p"] },
+      ],
+    };
+    assert.deepEqual(defaultMcpPresetSelection(seedance), { ratio: null, parameters: { duration: 10 } });
+    assert.deepEqual(
+      reconcileMcpPresetSelection(seedance, "9:16", { duration: 12, resolution: "720p", genre: "noir" }),
+      { ratio: "9:16", parameters: { duration: 12, resolution: "720p" } },
+    );
+    assert.deepEqual(
+      reconcileMcpPresetSelection(seedance, "1:1", { duration: 99, resolution: "4k" }),
+      { ratio: null, parameters: { duration: 10 } },
+    );
+  });
+
+  it("emits bounded scalar presets and omits an empty parameter record", () => {
+    const withPresets = buildMcpGenerationInput({
+      mcpProvider: "runway", mcpModel: "seedance-2", mcpMediaKind: "video",
+      mcpRatio: "16:9", mcpParameters: { duration: 12, resolution: "720p", generateAudio: false },
+    }, "prompt");
+    assert.deepEqual(withPresets?.parameters, { duration: 12, resolution: "720p", generateAudio: false });
+    const withoutPresets = buildMcpGenerationInput({
+      mcpProvider: "runway", mcpModel: "seedance-2", mcpMediaKind: "video", mcpParameters: {},
+    }, "prompt");
+    assert.equal(withoutPresets && "parameters" in withoutPresets, false);
   });
 });

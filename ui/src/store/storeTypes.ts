@@ -26,6 +26,7 @@ import type { CustomSizeAdjustmentReason } from "../lib/size";
 import type { ReasoningEffort } from "../lib/reasoning";
 import type { GalleryShortcutAction } from "../lib/galleryShortcuts";
 import type { WorkspaceProfile } from "../lib/workspaceProfile";
+import type { McpPresetValue } from "../lib/mcpProviders";
 import type { Locale } from "../i18n";
 import type { SpriteRecipeDraft, SpriteRecipeRecord, SpriteRecipeSummary } from "../types/spriteRecipe";
 export type AssetGenWorkflow = "generate" | "sprite";
@@ -196,6 +197,7 @@ export type GenerationDefaults = Partial<{
   mcpModel: string | null;
   mcpMediaKind: "image" | "video";
   mcpRatio: string | null;
+  mcpParameters: Record<string, McpPresetValue>;
   quality: Quality;
   sizePreset: SizePreset;
   customW: number;
@@ -454,6 +456,7 @@ export type AppState = PresetState & {
   mcpModel?: string | null;
   mcpMediaKind?: "image" | "video";
   mcpRatio?: string | null;
+  mcpParameters?: Record<string, McpPresetValue>;
   setQuality: (q: Quality) => void;
   setSizePreset: (s: SizePreset) => void;
   setCustomSize: (w: number, h: number) => void;

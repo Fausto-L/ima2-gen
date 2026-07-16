@@ -15,8 +15,14 @@ import {
   normalizeCount,
 } from "./storePersistence";
 import type { StoreSet, StoreGet } from "./storeTypes";
-import { startMcpGeneration } from "../lib/mcpProviders";
-import { buildMcpGenerationInput, type McpMediaKind } from "../lib/mcpSelection";
+import { startMcpGeneration, type McpModelCapabilities, type McpPresetValue } from "../lib/mcpProviders";
+import {
+  buildMcpGenerationInput,
+  defaultMcpPresetSelection,
+  reconcileMcpPresetSelection,
+  sameMcpPresetSelection,
+  type McpMediaKind,
+} from "../lib/mcpSelection";
 import { t } from "../i18n";
 
 let coreGenerateAction: ReturnType<StoreGet>["generate"] | null = null;
@@ -36,6 +42,7 @@ async function runMcpGenerate(get: StoreGet): Promise<void> {
       mcpModel: state.mcpModel,
       mcpMediaKind: state.mcpMediaKind,
       mcpRatio: state.mcpRatio,
+      mcpParameters: state.mcpParameters,
       currentImageFilename: state.currentImage?.filename ?? null,
     },
     prompt,
@@ -64,12 +71,13 @@ function clearMcpLane(set: StoreSet): void {
   saveMcpSelection(null, null, "image");
   // Persisted clear-to-Auto: an in-memory reset alone would leave a stale
   // stored ratio behind (audit R3-1).
-  saveGenerationDefaultsPatch({ mcpRatio: null });
+  saveGenerationDefaultsPatch({ mcpRatio: null, mcpParameters: {} });
   set({
     mcpProvider: null,
     mcpModel: null,
     mcpMediaKind: "image",
     mcpRatio: null,
+    mcpParameters: {},
     ...(coreGenerateAction ? { generate: coreGenerateAction } : {}),
   });
 }
@@ -92,12 +100,18 @@ export function setMcpProviderImpl(
   // Live provider switches (persistedKind omitted) preserve the current kind;
   // only hydration passes the stored value explicitly (audit R2-4).
   const mcpMediaKind: McpMediaKind = persistedKind ?? get().mcpMediaKind ?? "image";
+  const switchingProvider = get().mcpProvider !== mcpProvider;
   saveMcpSelection(mcpProvider, mcpModel, mcpMediaKind);
-  saveGenerationDefaultsPatch({ count: 1, multimode: false });
+  saveGenerationDefaultsPatch({
+    count: 1,
+    multimode: false,
+    ...(switchingProvider ? { mcpRatio: null, mcpParameters: {} } : {}),
+  });
   set({
     mcpProvider,
     mcpModel,
     mcpMediaKind,
+    ...(switchingProvider ? { mcpRatio: null, mcpParameters: {} } : {}),
     count: 1,
     multimode: false,
     generate: () => runMcpGenerate(get),
@@ -106,7 +120,8 @@ export function setMcpProviderImpl(
 
 export function setMcpModelImpl(mcpModel: string | null, set: StoreSet, get: StoreGet): void {
   saveMcpSelection(get().mcpProvider ?? null, mcpModel, get().mcpMediaKind ?? "image");
-  set({ mcpModel });
+  saveGenerationDefaultsPatch({ mcpRatio: null, mcpParameters: {} });
+  set({ mcpModel, mcpRatio: null, mcpParameters: {} });
 }
 
 export function setMcpModelWithKindImpl(
@@ -114,16 +129,20 @@ export function setMcpModelWithKindImpl(
   kind: McpMediaKind,
   set: StoreSet,
   get: StoreGet,
+  capabilities?: McpModelCapabilities,
 ): void {
+  const presets = defaultMcpPresetSelection(capabilities);
   saveMcpSelection(get().mcpProvider ?? null, mcpModel, kind);
-  set({ mcpModel, mcpMediaKind: kind });
+  saveGenerationDefaultsPatch({ mcpRatio: presets.ratio, mcpParameters: presets.parameters });
+  set({ mcpModel, mcpMediaKind: kind, mcpRatio: presets.ratio, mcpParameters: presets.parameters });
 }
 
 export function setMcpMediaKindImpl(kind: McpMediaKind, set: StoreSet, get: StoreGet): void {
   if ((get().mcpMediaKind ?? "image") === kind) return;
   // Switching kind invalidates the previous kind's model selection.
   saveMcpSelection(get().mcpProvider ?? null, null, kind);
-  set({ mcpMediaKind: kind, mcpModel: null });
+  saveGenerationDefaultsPatch({ mcpRatio: null, mcpParameters: {} });
+  set({ mcpMediaKind: kind, mcpModel: null, mcpRatio: null, mcpParameters: {} });
 }
 
 export function setMcpRatioImpl(ratio: string | null, set: StoreSet): void {
@@ -131,11 +150,40 @@ export function setMcpRatioImpl(ratio: string | null, set: StoreSet): void {
   set({ mcpRatio: ratio });
 }
 
+export function setMcpParameterImpl(
+  name: string,
+  value: McpPresetValue | null,
+  set: StoreSet,
+  get: StoreGet,
+): void {
+  if (!/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(name)) return;
+  const parameters = { ...(get().mcpParameters ?? {}) };
+  if (value === null) delete parameters[name];
+  else parameters[name] = value;
+  saveGenerationDefaultsPatch({ mcpParameters: parameters });
+  set({ mcpParameters: parameters });
+}
+
+/** Called once by the sidebar catalog completion event. It is deliberately not
+ * a state-watching effect, and writes only when persisted values are stale. */
+export function reconcileMcpPresetStateImpl(
+  capabilities: McpModelCapabilities,
+  set: StoreSet,
+  get: StoreGet,
+): void {
+  const current = { ratio: get().mcpRatio ?? null, parameters: get().mcpParameters ?? {} };
+  const next = reconcileMcpPresetSelection(capabilities, current.ratio, current.parameters);
+  if (sameMcpPresetSelection(current, next)) return;
+  saveGenerationDefaultsPatch({ mcpRatio: next.ratio, mcpParameters: next.parameters });
+  set({ mcpRatio: next.ratio, mcpParameters: next.parameters });
+}
+
 export function hydrateMcpSelectionImpl(set: StoreSet, get: StoreGet): void {
   const selection = loadMcpSelection();
   if (selection.provider) {
     setMcpProviderImpl(selection.provider, set, get, selection.model, selection.kind);
-    set({ mcpRatio: selection.ratio });
+    saveGenerationDefaultsPatch({ mcpRatio: selection.ratio, mcpParameters: selection.parameters });
+    set({ mcpRatio: selection.ratio, mcpParameters: selection.parameters });
   }
 }
 

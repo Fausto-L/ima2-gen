@@ -42,6 +42,7 @@ export type McpGenerateInput = {
   prompt: string;
   model?: string;
   ratio?: string;
+  parameters?: Record<string, McpPresetValue>;
   startFrameFilename?: string;
   requestId?: string;
 };
@@ -139,39 +140,41 @@ export async function getMcpModelOptions(
   return stringEnum(response.data?.tool?.inputSchema?.properties?.model?.enum);
 }
 
-export type McpModelEntry = { id: string; label: string; description?: string };
+export type McpPresetValue = string | number | boolean;
+export type McpModelParameter = {
+  name: string;
+  type: "string" | "number" | "boolean" | "string_array";
+  required?: boolean;
+  description?: string;
+  default?: McpPresetValue;
+  options?: McpPresetValue[];
+  min?: number;
+  max?: number;
+};
+export type McpModelCapabilities = {
+  source: "provider-declared" | "verified-contract";
+  aspectRatios: string[];
+  parameters: McpModelParameter[];
+  inputRoles: string[];
+};
+export type McpModelEntry = {
+  id: string;
+  label: string;
+  description?: string;
+  capabilities: McpModelCapabilities;
+};
 export type McpModelCatalog = { image: McpModelEntry[]; video: McpModelEntry[] };
 
-function toEntries(ids: string[]): McpModelEntry[] {
-  return ids.map((id) => ({ id, label: id }));
-}
-
 /**
- * Loads both media-kind model enums for a provider in parallel.
- * Error semantics (010 / audit blocker 3): AbortError propagates untouched,
- * a 404 means the provider has no contract for that kind (empty list), and
- * any other failure propagates so the UI can surface a catalog error state.
- * Fallback (040): when BOTH contract enums are empty (e.g. Higgsfield's
- * opaque `params` schema returns 200 with no top-level model enum), the
- * server-side catalog endpoint (read-only models_explore) is queried once.
+ * Canonical enriched catalog for every MCP provider. Runway is a verified
+ * projection of its authenticated schema description; Higgsfield is the
+ * bounded read-only models_explore projection. Errors and AbortError propagate
+ * so callers can preserve their existing retry/teardown behavior.
  */
 export async function getMcpModelCatalog(
   provider: string,
   signal?: AbortSignal,
 ): Promise<McpModelCatalog> {
-  const settle = async (kind: "image" | "video"): Promise<string[]> => {
-    try {
-      return await getMcpModelOptions(provider, kind, signal);
-    } catch (error) {
-      if ((error as { name?: string }).name === "AbortError") throw error;
-      if ((error as { status?: number }).status === 404) return [];
-      throw error;
-    }
-  };
-  const [image, video] = await Promise.all([settle("image"), settle("video")]);
-  if (image.length > 0 || video.length > 0) {
-    return { image: toEntries(image), video: toEntries(video) };
-  }
   const response = await jsonFetch<{ ok: boolean; models?: McpModelCatalog }>(
     `/api/mcp/providers/${encodeURIComponent(provider)}/models`,
     { signal },

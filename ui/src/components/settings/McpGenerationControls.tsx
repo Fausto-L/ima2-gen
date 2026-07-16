@@ -5,19 +5,22 @@ import { useEffect, useState } from "react";
 import { useAppStore } from "../../store/useAppStore";
 import {
   setMcpMediaKindImpl,
-  setMcpModelWithKindImpl,
+  setMcpParameterImpl,
   setMcpProviderImpl,
   setMcpRatioImpl,
 } from "../../store/storeSettingsImpl";
 import {
   getMcpModelCatalog,
+  type McpPresetValue,
   type McpModelCatalog,
   type McpProviderRecord,
 } from "../../lib/mcpProviders";
-import { MCP_RATIO_PRESETS, type McpMediaKind } from "../../lib/mcpSelection";
+import { type McpMediaKind } from "../../lib/mcpSelection";
 import { useI18n } from "../../i18n";
+import { McpModelPresetControls } from "./McpModelPresetControls";
 
 const EMPTY_CATALOG: McpModelCatalog = { image: [], video: [] };
+const EMPTY_PARAMETERS: Record<string, McpPresetValue> = {};
 
 function displayProviderId(id: string): string {
   return id.replace(/(^|-)([a-z])/g, (_match, prefix: string, letter: string) => `${prefix}${letter.toUpperCase()}`);
@@ -29,6 +32,8 @@ export function McpGenerationControls({ record }: { record: McpProviderRecord | 
   const mcpModel = useAppStore((s) => s.mcpModel ?? null);
   const mcpMediaKind = useAppStore((s) => s.mcpMediaKind ?? "image");
   const mcpRatio = useAppStore((s) => s.mcpRatio ?? null);
+  const storedMcpParameters = useAppStore((s) => s.mcpParameters);
+  const mcpParameters = storedMcpParameters ?? EMPTY_PARAMETERS;
   const [catalog, setCatalog] = useState<McpModelCatalog>(EMPTY_CATALOG);
   const [catalogFailed, setCatalogFailed] = useState(false);
 
@@ -60,9 +65,9 @@ export function McpGenerationControls({ record }: { record: McpProviderRecord | 
   if (!mcpProvider) return null;
 
   const models = mcpMediaKind === "video" ? catalog.video : catalog.image;
+  const selectedEntry = models.find((entry) => entry.id === mcpModel) ?? null;
   const setKind = (kind: McpMediaKind) =>
     setMcpMediaKindImpl(kind, useAppStore.setState, useAppStore.getState);
-  const showRatio = mcpProvider === "runway";
 
   return (
     <div className="mcp-generation-controls" data-testid="mcp-generation-controls">
@@ -106,46 +111,25 @@ export function McpGenerationControls({ record }: { record: McpProviderRecord | 
           <div className="option-group">
             <div className="section-title">{t("mcp.modelSectionTitle")}</div>
             {catalogFailed ? <p className="option-help">{t("mcp.modelsLoadFailed")}</p> : null}
-            <div className="mcp-generation-controls__models">
-              {models.map((entry) => (
-                <button
-                  key={entry.id}
-                  type="button"
-                  className={`option-btn${mcpModel === entry.id ? " active" : ""}`}
-                  title={entry.description ?? entry.id}
-                  onClick={() =>
-                    setMcpModelWithKindImpl(entry.id, mcpMediaKind, useAppStore.setState, useAppStore.getState)}
-                >
-                  {entry.label}
-                </button>
-              ))}
-            </div>
+            {selectedEntry ? (
+              <>
+                <div className="mcp-selected-model">
+                  <strong>{selectedEntry.label}</strong>
+                  {selectedEntry.description ? <span>{selectedEntry.description}</span> : null}
+                </div>
+                <McpModelPresetControls
+                  entry={selectedEntry}
+                  ratio={mcpRatio}
+                  parameters={mcpParameters}
+                  disabled={locked}
+                  onRatio={(value) => setMcpRatioImpl(value, useAppStore.setState)}
+                  onParameter={(name, value) => setMcpParameterImpl(name, value, useAppStore.setState, useAppStore.getState)}
+                />
+              </>
+            ) : (
+              <p className="option-help">{mcpModel ? t("mcp.providerDefaultsHelp") : t("mcp.chooseModelForPresets")}</p>
+            )}
           </div>
-          {showRatio ? (
-          <div className="option-group">
-            <div className="section-title">{t("size.grokAspectTitle")}</div>
-            <div className="option-row">
-              <button
-                type="button"
-                className={`option-btn${mcpRatio === null ? " active" : ""}`}
-                onClick={() => setMcpRatioImpl(null, useAppStore.setState)}
-              >
-                {t("size.autoLabel")}
-              </button>
-              {MCP_RATIO_PRESETS.map((preset) => (
-                <button
-                  key={preset}
-                  type="button"
-                  className={`option-btn${mcpRatio === preset ? " active" : ""}`}
-                  onClick={() => setMcpRatioImpl(preset, useAppStore.setState)}
-                >
-                  {preset}
-                </button>
-              ))}
-            </div>
-            <p className="option-help">{t("mcp.ratioAutoHelp")}</p>
-          </div>
-          ) : null}
       </>
     </div>
   );

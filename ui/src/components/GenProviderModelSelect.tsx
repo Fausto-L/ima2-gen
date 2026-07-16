@@ -6,7 +6,7 @@ import {
 } from "../lib/imageModels";
 import { REASONING_EFFORT_OPTIONS, type ReasoningEffort } from "../lib/reasoning";
 import { Select, type SelectGroup } from "./controls/Select";
-import { getMcpModelCatalog, useMcpProviders, type McpModelCatalog } from "../lib/mcpProviders";
+import { getMcpModelCatalog, useMcpProviders, type McpModelCapabilities, type McpModelCatalog } from "../lib/mcpProviders";
 import {
   encodeMcpModelValue,
   parseMcpModelValue,
@@ -15,6 +15,7 @@ import {
 import { useAppStore } from "../store/useAppStore";
 import {
   hydrateMcpSelectionImpl,
+  reconcileMcpPresetStateImpl,
   setMcpModelImpl,
   setMcpModelWithKindImpl,
   setMcpProviderImpl,
@@ -43,8 +44,8 @@ function applyMcpModel(model: string | null): void {
   setMcpModelImpl(model, useAppStore.setState, useAppStore.getState);
 }
 
-function applyMcpModelWithKind(model: string, kind: McpMediaKind): void {
-  setMcpModelWithKindImpl(model, kind, useAppStore.setState, useAppStore.getState);
+function applyMcpModelWithKind(model: string, kind: McpMediaKind, capabilities?: McpModelCapabilities): void {
+  setMcpModelWithKindImpl(model, kind, useAppStore.setState, useAppStore.getState, capabilities);
 }
 
 const EMPTY_CATALOG: McpModelCatalog = { image: [], video: [] };
@@ -95,7 +96,12 @@ export function GenProviderModelSelect({ compact = false }: { compact?: boolean 
     setCatalogError(false);
     void getMcpModelCatalog(mcpProvider, controller.signal)
       .then((catalog) => {
-        if (!controller.signal.aborted) setMcpCatalog(catalog);
+        if (controller.signal.aborted) return;
+        setMcpCatalog(catalog);
+        const state = useAppStore.getState();
+        const entries = state.mcpMediaKind === "video" ? catalog.video : catalog.image;
+        const selected = entries.find((entry) => entry.id === state.mcpModel);
+        if (selected) reconcileMcpPresetStateImpl(selected.capabilities, useAppStore.setState, useAppStore.getState);
       })
       .catch((cause) => {
         if ((cause as { name?: string }).name === "AbortError") return;
@@ -159,7 +165,11 @@ export function GenProviderModelSelect({ compact = false }: { compact?: boolean 
     }
     if (mcpProvider) {
       const parsed = parseMcpModelValue(value);
-      if (parsed) applyMcpModelWithKind(parsed.model, parsed.kind);
+      if (parsed) {
+        const entries = parsed.kind === "video" ? mcpCatalog.video : mcpCatalog.image;
+        const entry = entries.find((candidate) => candidate.id === parsed.model);
+        applyMcpModelWithKind(parsed.model, parsed.kind, entry?.capabilities);
+      }
       else applyMcpModel(value || null);
       return;
     }

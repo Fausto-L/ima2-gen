@@ -1,7 +1,12 @@
 // Pure MCP selection helpers (010, devlog/_plan/260716_mcp-model-surface-ui).
 // This module must stay free of browser globals so plain Node test harnesses
 // can import it directly (see tests/mcp-media-kind-behavior.test.ts).
-import type { McpGenerateInput } from "./mcpProviders";
+import type {
+  McpGenerateInput,
+  McpModelCapabilities,
+  McpModelParameter,
+  McpPresetValue,
+} from "./mcpProviders";
 
 export type McpMediaKind = "image" | "video";
 
@@ -13,17 +18,62 @@ export function resolveMcpMediaKind(value: unknown): McpMediaKind {
   return value === "video" ? "video" : "image";
 }
 
-/**
- * Conservative ratio presets (030): the Runway contract exposes no ratio enum
- * ("supported values vary by model"), so the UI offers only widely-accepted
- * presets and defaults to Auto (null = omit the ratio key entirely).
- */
-export const MCP_RATIO_PRESETS = ["16:9", "9:16", "1:1"] as const;
-
 export function normalizeMcpRatio(value: unknown): string | null {
-  return (MCP_RATIO_PRESETS as readonly string[]).includes(value as string)
-    ? (value as string)
-    : null;
+  return typeof value === "string" && /^\d{1,3}:\d{1,3}$/.test(value) ? value : null;
+}
+
+function isPresetValue(value: unknown): value is McpPresetValue {
+  return typeof value === "boolean"
+    || (typeof value === "number" && Number.isFinite(value))
+    || (typeof value === "string" && value.length <= 128);
+}
+
+export function normalizeMcpParameters(value: unknown): Record<string, McpPresetValue> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const entries = Object.entries(value as Record<string, unknown>).slice(0, 24);
+  return Object.fromEntries(entries.filter(([name, candidate]) => (
+    /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(name) && isPresetValue(candidate)
+  ))) as Record<string, McpPresetValue>;
+}
+
+function parameterAllows(parameter: McpModelParameter, value: McpPresetValue): boolean {
+  if (parameter.type === "number" && typeof value !== "number") return false;
+  if (parameter.type === "boolean" && typeof value !== "boolean") return false;
+  if (parameter.type === "string" && typeof value !== "string") return false;
+  if (parameter.type === "string_array") return false;
+  if (parameter.options && !parameter.options.includes(value)) return false;
+  if (typeof value === "number" && parameter.min !== undefined && value < parameter.min) return false;
+  if (typeof value === "number" && parameter.max !== undefined && value > parameter.max) return false;
+  return true;
+}
+
+export type McpPresetSelection = { ratio: string | null; parameters: Record<string, McpPresetValue> };
+
+export function reconcileMcpPresetSelection(
+  capabilities: McpModelCapabilities,
+  ratio: unknown,
+  parameters: unknown,
+): McpPresetSelection {
+  const normalizedRatio = normalizeMcpRatio(ratio);
+  const previous = normalizeMcpParameters(parameters);
+  const next: Record<string, McpPresetValue> = {};
+  for (const parameter of capabilities.parameters) {
+    const candidate = previous[parameter.name];
+    if (candidate !== undefined && parameterAllows(parameter, candidate)) next[parameter.name] = candidate;
+    else if (parameter.default !== undefined && parameterAllows(parameter, parameter.default)) next[parameter.name] = parameter.default;
+  }
+  return {
+    ratio: normalizedRatio && capabilities.aspectRatios.includes(normalizedRatio) ? normalizedRatio : null,
+    parameters: next,
+  };
+}
+
+export function defaultMcpPresetSelection(capabilities?: McpModelCapabilities): McpPresetSelection {
+  return capabilities ? reconcileMcpPresetSelection(capabilities, null, {}) : { ratio: null, parameters: {} };
+}
+
+export function sameMcpPresetSelection(a: McpPresetSelection, b: McpPresetSelection): boolean {
+  return a.ratio === b.ratio && JSON.stringify(a.parameters) === JSON.stringify(b.parameters);
 }
 
 export type McpSelection = {
@@ -31,6 +81,7 @@ export type McpSelection = {
   model: string | null;
   kind: McpMediaKind;
   ratio: string | null;
+  parameters: Record<string, McpPresetValue>;
 };
 
 /**
@@ -42,12 +93,14 @@ export function normalizeMcpSelection(defaults: {
   mcpModel?: unknown;
   mcpMediaKind?: unknown;
   mcpRatio?: unknown;
+  mcpParameters?: unknown;
 }): McpSelection {
   return {
     provider: typeof defaults.mcpProvider === "string" ? defaults.mcpProvider : null,
     model: typeof defaults.mcpModel === "string" ? defaults.mcpModel : null,
     kind: resolveMcpMediaKind(defaults.mcpMediaKind),
     ratio: normalizeMcpRatio(defaults.mcpRatio),
+    parameters: normalizeMcpParameters(defaults.mcpParameters),
   };
 }
 
@@ -73,6 +126,7 @@ export type McpGenerationBuildState = {
   mcpMediaKind?: McpMediaKind;
   /** null/undefined = Auto: the ratio key is omitted from the payload (030). */
   mcpRatio?: string | null;
+  mcpParameters?: Record<string, McpPresetValue>;
   /** Filename of the currently viewed image, used as the video start frame. */
   currentImageFilename?: string | null;
 };
@@ -91,6 +145,7 @@ export function buildMcpGenerationInput(
   if (!provider || !prompt) return null;
   const kind = resolveMcpMediaKind(state.mcpMediaKind);
   const ratio = normalizeMcpRatio(state.mcpRatio);
+  const parameters = normalizeMcpParameters(state.mcpParameters);
   return {
     provider,
     kind,
@@ -99,6 +154,7 @@ export function buildMcpGenerationInput(
     // 030: MCP-specific ratio; Auto (null) omits the key entirely so the
     // upstream model applies its own default.
     ...(ratio ? { ratio } : {}),
+    ...(Object.keys(parameters).length > 0 ? { parameters } : {}),
     startFrameFilename: kind === "video" ? state.currentImageFilename ?? undefined : undefined,
     ...(requestId ? { requestId } : {}),
   };

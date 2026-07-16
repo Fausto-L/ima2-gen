@@ -333,7 +333,7 @@ export function isSizePreset(value: unknown): value is SizePreset {
 
 export type { GenerationDefaults } from "./storeTypes";
 import type { GenerationDefaults } from "./storeTypes";
-import { normalizeMcpRatio, normalizeMcpSelection, type McpSelection } from "../lib/mcpSelection";
+import { normalizeMcpParameters, normalizeMcpRatio, normalizeMcpSelection, type McpSelection } from "../lib/mcpSelection";
 
 export function loadGenerationDefaults(): GenerationDefaults {
   try {
@@ -355,6 +355,9 @@ export function loadGenerationDefaults(): GenerationDefaults {
     }
     if ("mcpRatio" in parsed) {
       out.mcpRatio = normalizeMcpRatio(parsed.mcpRatio);
+    }
+    if ("mcpParameters" in parsed) {
+      out.mcpParameters = normalizeMcpParameters(parsed.mcpParameters);
     }
     if (isQuality(parsed.quality)) out.quality = parsed.quality;
     if (isSizePreset(parsed.sizePreset)) out.sizePreset = parsed.sizePreset;
