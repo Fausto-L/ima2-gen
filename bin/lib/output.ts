@@ -19,6 +19,20 @@ export function die(code: number, msg?: string): never {
   process.exit(code);
 }
 
+export function fail(opts: {
+  json: boolean;
+  code: string;
+  message: string;
+  extra?: Record<string, unknown>;
+  exitCode?: number;
+}): never {
+  if (opts.json) {
+    json({ ok: false, code: opts.code, message: opts.message, ...(opts.extra ?? {}) });
+    process.exit(opts.exitCode ?? 2);
+  }
+  return die(opts.exitCode ?? 2, opts.message);
+}
+
 export interface ErrorLike {
   message?: string;
   code?: string | null;

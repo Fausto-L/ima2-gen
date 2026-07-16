@@ -1,12 +1,11 @@
 import { parseArgs } from "../lib/args.js";
-import { resolveServer, resolveHistoryReference } from "../lib/client.js";
+import { resolveServer } from "../lib/client.js";
 import { streamSse } from "../lib/sse.js";
-import { out, die, color, json, exitCodeForError } from "../lib/output.js";
-import { config } from "../../config.js";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { out, die, color, exitCodeForError } from "../lib/output.js";
+import { writeFile, mkdir } from "node:fs/promises";
+import { basename, dirname } from "node:path";
+import { runVideoGenerate } from "../lib/videoMcp.js";
 import {
-  deriveVideoMode,
   GROK_VIDEO_MODEL_15,
   GROK_VIDEO_MODEL_15_PREVIEW_ALIAS,
   GROK_VIDEO_MODEL_BASE,
@@ -77,10 +76,11 @@ async function downloadReturnedVideo(serverBase: string, data: Record<string, un
 
 const SPEC = {
   flags: {
-    duration:      { type: "string", default: "5" },
-    resolution:    { type: "string", default: "480p" },
-    "aspect-ratio": { type: "string", default: "auto" },
+    duration:      { type: "string" },
+    resolution:    { type: "string" },
+    "aspect-ratio": { type: "string" },
     model:         { type: "string" },
+    provider:      { type: "string" },
     "planner-model": { type: "string" },
     bg:            { type: "string" },
     storyboard:    { type: "boolean" },
@@ -104,7 +104,8 @@ const HELP = `
   ima2 video frame <file> [--last] [-o output.png]
   ima2 video analyze <generated-file>
 
-  Generate, edit, extend, or analyze video via Grok.
+  Generate video through a configured Grok or MCP lane; edit/extend/analyze remain Grok-only.
+  Set a default with 'ima2 defaults set video <lane>/<model>' or inspect lanes with 'ima2 models'.
 
   Subcommands:
     (default)   Generate video (T2V / I2V / Ref2V)
@@ -116,9 +117,11 @@ const HELP = `
 
   Options (generate mode):
         --duration <1..15>              Duration in seconds. Default: 5. Prompt motion should naturally fill this length
-        --resolution <480p|720p|1080p>  Default: 480p. 1080p requires --model grok-imagine-video-1.5; prompt-only uses a white-canvas I2V shim
+        --resolution <480p|720p|1080p>  Default: 480p. Default model: grok-imagine-video-1.5; prompt-only 1080p uses a white-canvas I2V shim
         --aspect-ratio <ratio|auto>     1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, auto. Default: auto
-        --model <name>                  grok-imagine-video, grok-imagine-video-1.5 (preview alias accepted)
+        --model <model|lane/model>      Bare IDs must be unique across lanes; Grok preview alias accepted
+        --provider <grok|grok-api|runway|higgsfield>
+                                        'auto' was removed; choose a lane explicitly
         --planner-model <name>          Planner model override (e.g. grok-4.3, gpt-5.5)
         --storyboard                    Enable storyboard mode (maintains character/scene continuity)
         --topic <text>                  Series topic for prompt chain continuity
@@ -163,150 +166,8 @@ export default async function videoCmd(argv: string[]) {
 
   const prompt = args.positional.join(" ");
   if (!prompt.trim()) die(2, ACTIVE_VIDEO_PROMPT_GUIDANCE);
-
-  const duration = parseIntegerFlag(args.duration, 5, "--duration");
-  if (duration < 1 || duration > 15) die(2, "--duration must be between 1 and 15");
-
-  const resolution = String(args.resolution);
-  if (!VALID_RESOLUTIONS.has(resolution)) die(2, "--resolution must be one of: 480p, 720p, 1080p");
-
-  const aspectRatio = String(args["aspect-ratio"]);
-  if (!VALID_ASPECT_RATIOS.has(aspectRatio)) die(2, "--aspect-ratio must be one of: 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, auto");
-
-  if (args.model && !VALID_MODELS.has(String(args.model))) {
-    die(2, "--model must be one of: grok-imagine-video, grok-imagine-video-1.5");
-  }
-  const model = args.model ? canonicalVideoModel(String(args.model)) : GROK_VIDEO_MODEL_BASE;
-
-  const refs = (Array.isArray(args.ref) ? args.ref : []) as string[];
-  if (refs.length > 7) die(2, "max 7 --ref attachments for video");
-  if (refs.length >= 2 && duration > 10) die(2, "--duration must be between 1 and 10 when using 2 or more --ref attachments");
-  validateCliVideoResolution(model, resolution, deriveVideoMode(refs.length));
-
-  const timeoutSeconds = parseIntegerFlag(args.timeout, 600, "--timeout");
-  if (timeoutSeconds < 1) die(2, "--timeout must be at least 1");
-  const timeoutMs = timeoutSeconds * 1000;
-
-  let server;
-  try { server = await resolveServer({ serverFlag: args.server }); }
-  catch (e: unknown) { die(exitCodeForError(e), (e as Error).message); throw e; }
-
-  let latestPromise: Promise<string> | undefined;
-  const referenceImages = await Promise.all(refs.map(async (p: string) => {
-    if (p === "@last") latestPromise ||= resolveHistoryReference(server.base, p);
-    let resolved = p === "@last" ? await latestPromise! : p;
-    if (p === "@last") resolved = join(config.storage.generatedDir, resolved);
-    const buf = await readFile(resolved);
-    return buf.toString("base64");
-  })).catch((e: any) => die(e?.code === "HISTORY_EMPTY" ? 5 : 1, e?.message || String(e)));
-
-  const requestId = `req_cli_video_${Date.now().toString(36)}`;
-
-  const body: Record<string, unknown> = {
-    prompt,
-    provider: "grok",
-    duration,
-    resolution,
-    aspectRatio,
-    requestId,
-  };
-  if (args.model) body.model = model;
-  if (args["planner-model"]) body.plannerModel = args["planner-model"];
-  if (args.bg) body.backgroundPreset = String(args.bg);
-  if (args.storyboard) body.storyboard = true;
-  if (args.session) body.sessionId = args.session;
-  if (args.topic) body.topic = args.topic;
-  if (referenceImages.length === 1) {
-    body.sourceImage = referenceImages[0];
-  } else if (referenceImages.length > 1) {
-    body.referenceImages = referenceImages;
-  }
-
-  const ac = new AbortController();
-  let timedOut = false;
-  const timeoutTimer = setTimeout(() => { timedOut = true; ac.abort(); }, timeoutMs);
-  const onSig = () => { ac.abort(); process.exit(130); };
-  process.once("SIGINT", onSig);
-  process.once("SIGTERM", onSig);
-
-  const url = `${server.base}/api/video/generate`;
-  let doneData: Record<string, unknown> | null = null;
-  let lastProgress = -1;
-
-  try {
-    for await (const ev of streamSse(url, { body, signal: ac.signal, headers: { "X-Request-Id": requestId } })) {
-      switch (ev.event) {
-        case "planning":
-          if (!args.json) out(color.dim("[planning] preparing video generation..."));
-          break;
-        case "submitted":
-          if (!args.json) out(color.dim(`[submitted] xai request: ${ev.data.xaiVideoRequestId || "..."}`));
-          break;
-        case "progress": {
-          const pct = typeof ev.data.progress === "number" ? Math.round(ev.data.progress * 100) : null;
-          if (pct !== null && pct !== lastProgress && !args.json) {
-            const bar = renderBar(pct);
-            process.stdout.write(`\r  ${bar} ${pct}%`);
-            lastProgress = pct;
-          }
-          break;
-        }
-        case "done":
-          if (!args.json && lastProgress >= 0) process.stdout.write("\n");
-          doneData = ev.data;
-          break;
-        case "error":
-          if (!args.json && lastProgress >= 0) process.stdout.write("\n");
-          die(1, `video error: ${ev.data.error || ev.data}${ev.data.guidance ? `\n${ev.data.guidance}` : ""}${ev.data.code ? ` (${ev.data.code})` : ""}`);
-      }
-    }
-  } catch (e: unknown) {
-    if ((e as Error).name === "AbortError" && !timedOut) return;
-    if (!args.json && lastProgress >= 0) process.stdout.write("\n");
-    die(exitCodeForError(e), (e as Error).message);
-  } finally {
-    clearTimeout(timeoutTimer);
-    process.off("SIGINT", onSig);
-    process.off("SIGTERM", onSig);
-  }
-
-  if (!doneData?.filename) die(1, "server did not return a video filename");
-
-  // Determine output path
-  const filename = String(doneData.filename);
-  const explicitOut = args.out ? String(args.out) : null;
-  const outDir = args["out-dir"] ? String(args["out-dir"]) : null;
-  let target: string;
-  if (explicitOut) {
-    target = explicitOut;
-  } else if (outDir) {
-    target = join(outDir, filename);
-  } else {
-    target = join(config.storage.generatedDir, filename);
-  }
-
-  // Download the video file from server
-  const videoUrl = `${server.base}${doneData.url || `/generated/${encodeURIComponent(filename)}`}`;
-  const dlRes = await fetch(videoUrl, { signal: timeoutSignal(args.timeout) });
-  if (!dlRes.ok) die(1, `failed to download video: HTTP ${dlRes.status}`);
-  const videoBuf = Buffer.from(await dlRes.arrayBuffer());
-  await writeBuffer(target, videoBuf);
-
-  if (args.json) {
-    json({
-      ok: true,
-      requestId: doneData.requestId,
-      path: target,
-      filename,
-      elapsed: doneData.elapsed,
-      video: doneData.video,
-      revisedPrompt: doneData.revisedPrompt,
-    });
-  } else {
-    out(color.green("✓ ") + target);
-    if (doneData.elapsed) out(color.dim(`elapsed ${doneData.elapsed}s`));
-    if (doneData.revisedPrompt) out(color.dim(`revised: ${String(doneData.revisedPrompt).slice(0, 80)}`));
-  }
+  if (args.duration !== undefined) parseIntegerFlag(args.duration, 5, "--duration");
+  return runVideoGenerate(argv, args, prompt);
 }
 
 function renderBar(pct: number): string {

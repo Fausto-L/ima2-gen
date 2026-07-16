@@ -11,11 +11,12 @@ describe("CLI feature parity contract", () => {
     const src = readSource("bin/commands/gen.ts");
 
     assert.match(src, /provider:\s*\{\s*type:\s*"string"\s*\}/);
-    assert.match(src, /VALID_PROVIDERS = new Set\(\["auto", "oauth", "api", "grok", "grok-api", "agy", "gemini-api"\]\)/);
-    assert.match(src, /--provider <auto\|oauth\|api\|grok\|grok-api\|agy\|gemini-api>/);
-    assert.match(src, /nano-banana-2\|nano-banana-pro/);
-    assert.match(src, /--provider must be one of: auto, oauth, api, grok, grok-api, agy, gemini-api/);
-    assert.match(src, /if \(args\.provider\) body\.provider = args\.provider/);
+    // 010 CLI strict routing: gen.ts validates providers/models through the
+    // resolver + GET /api/models catalog instead of a local enum, and lanes
+    // now include the MCP providers. `--provider auto` is removed (v3).
+    assert.match(src, /resolveTarget\(\s*"image"/);
+    assert.match(src, /--provider <oauth\|api\|grok\|grok-api\|agy\|gemini-api\|runway\|higgsfield>/);
+    assert.match(src, /'auto' was removed/);
     assert.match(src, /body\.webSearchEnabled = false/);
     assert.match(src, /body\.webSearchEnabled = true/);
   });

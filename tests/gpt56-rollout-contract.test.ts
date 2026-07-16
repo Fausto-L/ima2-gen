@@ -56,13 +56,19 @@ describe("gpt-5.6 rollout: runtime config", () => {
 
 describe("gpt-5.6 rollout: surface contracts", () => {
   it("CLI validators know the 5.6 slugs and max", () => {
-    for (const path of ["bin/commands/gen.ts", "bin/commands/edit.ts"]) {
-      const src = readSource(path);
-      for (const model of GPT56_MODELS) {
-        assert.ok(src.includes(`"${model}"`), `${path} KNOWN_IMAGE_MODELS missing ${model}`);
-      }
-      assert.match(src, /none, low, medium, high, xhigh, max/);
+    // gen.ts moved to catalog-driven validation (010 CLI strict routing):
+    // the resolver validates models against GET /api/models, so gen.ts no
+    // longer embeds a KNOWN_IMAGE_MODELS literal. Assert the resolver wiring
+    // plus the still-local reasoning ladder instead.
+    const genSrc = readSource("bin/commands/gen.ts");
+    assert.match(genSrc, /resolveTarget\(\s*"image"/);
+    assert.match(genSrc, /\/api\/models/);
+    assert.match(genSrc, /none, low, medium, high, xhigh, max/);
+    const editSrc = readSource("bin/commands/edit.ts");
+    for (const model of GPT56_MODELS) {
+      assert.ok(editSrc.includes(`"${model}"`), `bin/commands/edit.ts KNOWN_IMAGE_MODELS missing ${model}`);
     }
+    assert.match(editSrc, /none, low, medium, high, xhigh, max/);
     for (const path of ["bin/commands/multimode.ts", "bin/commands/node.ts"]) {
       assert.match(readSource(path), /none, low, medium, high, xhigh, max/);
     }

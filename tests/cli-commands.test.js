@@ -1,6 +1,7 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert";
 import { spawn } from "node:child_process";
+import { createServer } from "node:http";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -122,6 +123,117 @@ describe("ima2 CLI commands (live server)", () => {
     assert.match(stdout, /Use -n <N>/);
     assert.match(stdout, /ima2 ps --json/);
     assert.match(stdout, /ima2 cancel <requestId>/);
+    assert.match(stdout, /lane\/model/);
+    assert.match(stdout, /ima2 models/);
+  });
+
+  it("bare gen fails closed without defaults.image", async () => {
+    const { stdout, code } = await runCLI(["gen", "hi", "--json"]);
+    assert.strictEqual(code, 2);
+    const payload = JSON.parse(stdout);
+    assert.strictEqual(payload.code, "NO_DEFAULT_MODEL");
+    assert.ok(payload.models);
+    assert.deepStrictEqual(payload.fix, ["ima2 defaults set image <lane>/<model>", "ima2 models --kind image"]);
+    assert.strictEqual(stdout.trim().split("\n").length, 1);
+  });
+
+  it("gen rejects the removed provider auto with a typed envelope", async () => {
+    const { stdout, code } = await runCLI(["gen", "hi", "--provider", "auto", "--json"]);
+    assert.strictEqual(code, 2);
+    assert.strictEqual(JSON.parse(stdout).code, "PROVIDER_AUTO_REMOVED");
+  });
+
+  it("passes namespaced core lane/model through to the existing generate body", async () => {
+    let requestBody = null;
+    const fake = createServer((req, res) => {
+      res.setHeader("Content-Type", "application/json");
+      if (req.url === "/api/health") { res.end('{"ok":true}'); return; }
+      if (req.url === "/api/models") {
+        res.end(JSON.stringify({ ok: true, lanes: { oauth: { status: "ready", defaults: { image: "gpt-5.6-luna" },
+          models: { image: [{ id: "gpt-5.6-luna" }], video: [] } } } })); return;
+      }
+      if (req.url === "/api/generate" && req.method === "POST") {
+        let raw = ""; req.on("data", (chunk) => { raw += chunk; }); req.on("end", () => {
+          requestBody = JSON.parse(raw);
+          res.end(JSON.stringify({ requestId: "req_test", images: [{ image: "data:image/png;base64,aQ==", filename: "x.png" }] }));
+        }); return;
+      }
+      res.writeHead(404).end();
+    });
+    await new Promise((resolve) => fake.listen(0, "127.0.0.1", resolve));
+    const base = `http://127.0.0.1:${fake.address().port}`;
+    try {
+      const target = join(FAKE_HOME, "core.png");
+      const result = await runCLI(["gen", "hi", "--model", "oauth/luna", "--out", target, "--json", "--server", base]);
+      assert.strictEqual(result.code, 0);
+      assert.strictEqual(requestBody.provider, "oauth");
+      assert.strictEqual(requestBody.model, "gpt-5.6-luna");
+      assert.strictEqual(JSON.parse(result.stdout).images[0].path, target);
+    } finally {
+      await new Promise((resolve) => fake.close(resolve));
+    }
+  });
+
+  it("rejects unsupported flags and local references before MCP submission", async () => {
+    const fake = createServer((req, res) => {
+      res.setHeader("Content-Type", "application/json");
+      if (req.url === "/api/health") { res.end('{"ok":true}'); return; }
+      if (req.url === "/api/models") { res.end(JSON.stringify({ ok: true, lanes: { runway: {
+        status: "ready", defaults: { image: "gen-4" }, models: { image: [{ id: "gen-4", capabilities: {
+          parameters: [], inputRoles: ["text", "image_references"],
+        } }], video: [] },
+      } } })); return; }
+      res.writeHead(500).end();
+    });
+    await new Promise((resolve) => fake.listen(0, "127.0.0.1", resolve));
+    const base = `http://127.0.0.1:${fake.address().port}`;
+    try {
+      const flag = await runCLI(["gen", "hi", "--model", "runway/gen-4", "--quality", "high", "--json", "--server", base]);
+      assert.strictEqual(flag.code, 2);
+      assert.strictEqual(JSON.parse(flag.stdout).code, "FLAG_NOT_SUPPORTED");
+      const ref = await runCLI(["gen", "hi", "--model", "runway/gen-4", "--ref", "./local.png", "--json", "--server", base]);
+      assert.strictEqual(ref.code, 2);
+      assert.strictEqual(JSON.parse(ref.stdout).code, "MCP_REF_MUST_BE_GENERATED");
+    } finally {
+      await new Promise((resolve) => fake.close(resolve));
+    }
+  });
+
+  it("routes MCP image generation through the async bridge with generated references", async () => {
+    let eventResponse;
+    let submitted;
+    const fake = createServer((req, res) => {
+      if (req.url === "/api/health") { res.setHeader("Content-Type", "application/json"); res.end('{"ok":true}'); return; }
+      if (req.url === "/api/models") { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify({ ok: true, lanes: { runway: {
+        status: "ready", defaults: { image: "gen-4" }, models: { image: [{ id: "gen-4", capabilities: {
+          parameters: [], inputRoles: ["text", "image_references"],
+        } }], video: [] },
+      } } })); return; }
+      if (req.url === "/api/events") {
+        eventResponse = res; res.writeHead(200, { "Content-Type": "text/event-stream" }); res.flushHeaders(); return;
+      }
+      if (req.url === "/api/mcp/generate" && req.method === "POST") {
+        let raw = ""; req.on("data", (chunk) => { raw += chunk; }); req.on("end", () => {
+          submitted = JSON.parse(raw); res.writeHead(202, { "Content-Type": "application/json" }); res.end('{"ok":true}');
+          eventResponse.end(`id: 1\nevent: done\ndata: ${JSON.stringify({ jobId: submitted.requestId, filename: "out.png", url: "/generated/out.png" })}\n\n`);
+        }); return;
+      }
+      res.writeHead(404).end();
+    });
+    await new Promise((resolve) => fake.listen(0, "127.0.0.1", resolve));
+    const base = `http://127.0.0.1:${fake.address().port}`;
+    try {
+      const result = await runCLI(["gen", "hi", "--model", "runway/gen-4", "--ref", "1780000000000_abcd.png", "--json", "--server", base]);
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.strictEqual(result.stdout.trim().split("\n").length, 1);
+      assert.strictEqual(JSON.parse(result.stdout).url, "/generated/out.png");
+      assert.strictEqual(submitted.provider, "runway");
+      assert.strictEqual(submitted.model, "gen-4");
+      assert.deepStrictEqual(submitted.parameters, {});
+      assert.deepStrictEqual(submitted.references, [{ filename: "1780000000000_abcd.png" }]);
+    } finally {
+      await new Promise((resolve) => fake.close(resolve));
+    }
   });
 
   it("ima2 edit --help prints current payload options", async () => {
@@ -227,6 +339,7 @@ describe("ima2 CLI commands (live server)", () => {
     assert.match(stdout, /grok <sub>/);
     assert.match(stdout, /ping/);
     assert.match(stdout, /cancel <id>/);
+    assert.match(stdout, /models\s+List available lane models/);
     assert.match(stdout, /Generation workflow:/);
     assert.match(stdout, /ima2 gen -n <N>/);
     assert.match(stdout, /ima2 ps --json/);

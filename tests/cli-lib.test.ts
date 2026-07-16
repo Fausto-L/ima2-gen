@@ -7,6 +7,7 @@ import { exitCodeForError } from "../bin/lib/output.js";
 import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
 
 describe("args parser", () => {
   const spec = {
@@ -107,5 +108,32 @@ describe("exitCodeForError", () => {
     assert.strictEqual(exitCodeForError({ status: 500 }), 6);
     assert.strictEqual(exitCodeForError({ name: "TimeoutError" }), 8);
     assert.strictEqual(exitCodeForError({}), 1);
+  });
+});
+
+describe("fail", () => {
+  const outputModule = new URL("../bin/lib/output.ts", import.meta.url).href;
+
+  it("writes exactly one JSON envelope to stdout", () => {
+    const opts = { json: true, code: "NO_DEFAULT_MODEL", message: "choose a model", extra: { fix: ["ima2 models"] }, exitCode: 3 };
+    const child = spawnSync(process.execPath, [
+      "--input-type=module",
+      "--eval",
+      `const { fail } = await import(${JSON.stringify(outputModule)}); fail(${JSON.stringify(opts)});`,
+    ], { encoding: "utf8", env: { ...process.env, NO_COLOR: "1" } });
+    assert.strictEqual(child.status, 3);
+    assert.strictEqual(child.stdout, `${JSON.stringify({ ok: false, code: opts.code, message: opts.message, ...opts.extra })}\n`);
+    assert.strictEqual(child.stderr, "");
+  });
+
+  it("uses die-style stderr for human output", () => {
+    const child = spawnSync(process.execPath, [
+      "--input-type=module",
+      "--eval",
+      `const { fail } = await import(${JSON.stringify(outputModule)}); fail({ json: false, code: "BAD", message: "bad flag" });`,
+    ], { encoding: "utf8", env: { ...process.env, NO_COLOR: "1" } });
+    assert.strictEqual(child.status, 2);
+    assert.strictEqual(child.stdout, "");
+    assert.strictEqual(child.stderr, "✗ bad flag\n");
   });
 });

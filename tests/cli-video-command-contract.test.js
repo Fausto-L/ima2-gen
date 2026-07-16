@@ -22,6 +22,24 @@ const ISOLATED_HOME = mkdtempSync(join(tmpdir(), "ima2-video-cli-home-"));
 const ISOLATED_GENERATED = join(ISOLATED_HOME, "generated");
 tempDirs.push(ISOLATED_HOME);
 
+const MODEL_CATALOG = {
+  ok: true,
+  lanes: {
+    grok: { status: "ready", defaults: { video: "grok-imagine-video" }, models: { image: [], video: [
+      { id: "grok-imagine-video", capabilities: { parameters: [], inputRoles: ["text", "start_image", "image_references"] } },
+      { id: "grok-imagine-video-1.5", capabilities: { parameters: [], inputRoles: ["text", "start_image", "image_references"] } },
+    ] } },
+    runway: { status: "ready", defaults: { video: "veo-3.1" }, models: { image: [], video: [
+      { id: "veo-3.1", capabilities: { parameters: [
+        { name: "duration", type: "number", options: [4, 6, 8] },
+        { name: "resolution", type: "string", options: ["720p", "1080p"] },
+      ], aspectRatios: ["16:9", "9:16"], inputRoles: ["text", "start_image"] } },
+      { id: "gen-4.5", capabilities: { parameters: [{ name: "duration", type: "number", min: 2, max: 10 }],
+        aspectRatios: ["16:9"], inputRoles: ["text", "start_image"] } },
+    ] } },
+  },
+};
+
 function runCLI(args, opts = {}) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [...CLI_ARGS, ...args], {
@@ -61,6 +79,11 @@ function makeServer(handler) {
       res.end(JSON.stringify({ ok: true, provider: "oauth" }));
       return;
     }
+    if (req.url === "/api/models") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(MODEL_CATALOG));
+      return;
+    }
     handler(req, res);
   });
 }
@@ -90,6 +113,66 @@ describe("ima2 video CLI contracts", () => {
     assert.match(stdout, /--resolution <480p\|720p\|1080p>/);
     assert.match(stdout, /grok-imagine-video-1\.5/);
     assert.match(stdout, /preview alias accepted/);
+    assert.match(stdout, /--provider <grok\|grok-api\|runway\|higgsfield>/);
+    assert.match(stdout, /ima2 models/);
+  });
+
+  it("fails closed without defaults.video and rejects provider auto", async () => {
+    const server = makeServer((_req, res) => res.writeHead(404).end());
+    const base = await listen(server);
+    const bare = await runCLI(["video", "clip", "--json", "--server", base]);
+    assert.equal(bare.code, 2);
+    assert.equal(JSON.parse(bare.stdout).code, "NO_DEFAULT_MODEL");
+    assert.equal(bare.stdout.trim().split("\n").length, 1);
+    const auto = await runCLI(["video", "clip", "--provider", "auto", "--json", "--server", base]);
+    assert.equal(auto.code, 2);
+    assert.equal(JSON.parse(auto.stdout).code, "PROVIDER_AUTO_REMOVED");
+  });
+
+  it("rejects Grok-only flags, unsupported parameters, and local refs on MCP lanes", async () => {
+    const server = makeServer((_req, res) => res.writeHead(404).end());
+    const base = await listen(server);
+    const grokFlag = await runCLI(["video", "clip", "--model", "runway/veo-3.1", "--planner-model", "x", "--json", "--server", base]);
+    assert.equal(grokFlag.code, 2); assert.equal(JSON.parse(grokFlag.stdout).code, "FLAG_NOT_SUPPORTED");
+    const unsupported = await runCLI(["video", "clip", "--model", "runway/gen-4.5", "--resolution", "1080p", "--json", "--server", base]);
+    assert.equal(unsupported.code, 2); assert.equal(JSON.parse(unsupported.stdout).code, "MCP_PARAMETER_UNSUPPORTED");
+    const localRef = await runCLI(["video", "clip", "--model", "runway/veo-3.1", "--ref", "./local.png", "--json", "--server", base]);
+    assert.equal(localRef.code, 2); assert.equal(JSON.parse(localRef.stdout).code, "MCP_REF_MUST_BE_GENERATED");
+  });
+
+  it("passes explicit MCP parameters and generated start-frame refs through the async job bridge", async () => {
+    let eventResponse;
+    let submitted;
+    const server = makeServer((req, res) => {
+      if (req.url === "/api/events") {
+        eventResponse = res;
+        res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+        res.flushHeaders();
+        return;
+      }
+      if (req.url === "/api/mcp/generate" && req.method === "POST") {
+        let raw = ""; req.on("data", (chunk) => { raw += chunk; }); req.on("end", () => {
+          submitted = JSON.parse(raw);
+          res.writeHead(202, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true, requestId: submitted.requestId }));
+          eventResponse.end(`id: 1\nevent: done\ndata: ${JSON.stringify({ jobId: submitted.requestId, filename: "out.mp4", url: "/generated/out.mp4" })}\n\n`);
+        });
+        return;
+      }
+      res.writeHead(404).end();
+    });
+    const base = await listen(server);
+    const result = await runCLI(["video", "clip", "--model", "runway/veo-3.1", "--duration", "8",
+      "--aspect-ratio", "16:9", "--ref", "1780000000000_abcd.png", "--json", "--server", base]);
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.stdout.trim().split("\n").length, 1);
+    assert.equal(JSON.parse(result.stdout).url, "/generated/out.mp4");
+    assert.equal(submitted.provider, "runway");
+    assert.equal(submitted.model, "veo-3.1");
+    assert.deepEqual(submitted.parameters, { duration: 8 });
+    assert.equal(submitted.ratio, "16:9");
+    assert.equal(submitted.startFrameFilename, "1780000000000_abcd.png");
+    assert.equal(submitted.references, undefined);
   });
 
   it("rejects invalid generate and extend durations before network calls", async () => {
@@ -148,7 +231,7 @@ describe("ima2 video CLI contracts", () => {
       res.writeHead(404).end();
     });
     const base = await listen(server);
-    const result = await runCLI(["video", "clip", "--resolution", "1080p", "--model", "grok-imagine-video-1.5", "--server", base, "--json"]);
+    const result = await runCLI(["video", "clip", "--resolution", "1080p", "--model", "grok/grok-imagine-video-1.5", "--server", base, "--json"]);
     assert.equal(result.code, 0);
     assert.ok(
       existsSync(join(ISOLATED_GENERATED, "out.mp4")),
@@ -156,6 +239,9 @@ describe("ima2 video CLI contracts", () => {
     );
     const parsed = JSON.parse(body);
     assert.equal(parsed.model, "grok-imagine-video-1.5");
+    assert.equal(parsed.provider, "grok");
+    assert.equal(parsed.duration, 5);
+    assert.equal(parsed.aspectRatio, "auto");
     assert.equal(parsed.resolution, "1080p");
     assert.equal(parsed.sourceImage, undefined);
     assert.equal(parsed.referenceImages, undefined);

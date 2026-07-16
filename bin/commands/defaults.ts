@@ -1,34 +1,41 @@
 import { config } from "../../config.js";
 import { parseArgs } from "../lib/args.js";
 import { resolveServer, request } from "../lib/client.js";
+import type { LaneInfo } from "../lib/modelResolver.js";
 import {
   buildEffectiveConfig,
   deleteNestedKey,
   displayPath,
   envOverrideForKey,
   getNestedKey,
+  loadCliDefaults,
   loadFileCfg,
   restartNotice,
   saveFileCfg,
   setNestedKey,
   CONFIG_FILE,
 } from "../lib/config-store.js";
-import { color, die, dieWithError, json, out } from "../lib/output.js";
+import { color, die, dieWithError, fail, json, out } from "../lib/output.js";
 
 const MODEL_KEYS = ["imageModels.default", "apiProvider.defaultImageModel"] as const;
 const REASONING_KEYS = ["imageModels.reasoningEffort", "apiProvider.defaultReasoningEffort"] as const;
+type CliKind = "image" | "video";
 
 const HELP = `
   ima2 defaults [subcommand] [options]
 
-  Inspect or change persistent model/reasoning defaults.
+  Inspect or change persistent model/reasoning and CLI generation defaults.
 
   Subcommands:
     ls                         Show effective defaults
     set model <model>          Persist default model for GPT OAuth and API paths
     set reasoning <effort>     Persist default reasoning effort for GPT OAuth and API paths
+    set image <lane>/<model>    Persist the CLI image generation target
+    set video <lane>/<model>    Persist the CLI video generation target
     reset model                Remove persisted model defaults
     reset reasoning            Remove persisted reasoning defaults
+    reset image                Remove the CLI image generation target
+    reset video                Remove the CLI video generation target
 
   Options:
     --json                     Print JSON
@@ -60,6 +67,7 @@ function localDefaults() {
         size: getNestedKey(effective, "apiProvider.defaultSize"),
         webSearchEnabled: getNestedKey(effective, "apiProvider.allowWebSearch"),
       },
+      cli: loadCliDefaults(),
     },
   };
 }
@@ -73,7 +81,7 @@ async function readDefaults(args: ReturnType<typeof parseArgs>) {
       ok: true,
       source: "server",
       server: server.base,
-      defaults: capabilities.defaults,
+      defaults: { ...(capabilities.defaults ?? {}), cli: loadCliDefaults() },
     };
   } catch (error) {
     if (args.server) throw error;
@@ -93,6 +101,8 @@ function printDefaults(payload: any): void {
   if (payload.defaults?.api?.webSearchEnabled !== undefined) {
     out(`api web search: ${payload.defaults.api.webSearchEnabled ? "enabled" : "disabled"}`);
   }
+  out(`cli image: ${payload.defaults?.cli?.image ?? "none"}`);
+  out(`cli video: ${payload.defaults?.cli?.video ?? "none"}`);
 }
 
 function validateModel(value: string): void {
@@ -137,6 +147,62 @@ function resetDefaults(keys: readonly string[]): void {
   out(color.dim(restartNotice()));
 }
 
+function parseCliTarget(value: string, isJson: boolean): { lane: string; model: string } {
+  const slash = value.indexOf("/");
+  if (slash < 1 || slash === value.length - 1) {
+    fail({ json: isJson, code: "INVALID_MODEL_TARGET", message: "target must be <lane>/<model>" });
+  }
+  return { lane: value.slice(0, slash), model: value.slice(slash + 1) };
+}
+
+async function fetchModelCatalog(args: ReturnType<typeof parseArgs>): Promise<Record<string, LaneInfo>> {
+  try {
+    const server = await resolveServer({ serverFlag: args.server });
+    const catalog = await request(server.base, "/api/models", { timeoutMs: 5000 });
+    return catalog.lanes ?? {};
+  } catch (error) {
+    fail({
+      json: Boolean(args.json), code: "SERVER_UNREACHABLE",
+      message: (error as Error)?.message || "server unreachable", exitCode: 3,
+    });
+  }
+}
+
+async function validateCliTarget(kind: CliKind, value: string, args: ReturnType<typeof parseArgs>): Promise<void> {
+  const target = parseCliTarget(value, Boolean(args.json));
+  const lane = (await fetchModelCatalog(args))[target.lane];
+  if (!lane) fail({ json: Boolean(args.json), code: "LANE_NOT_FOUND", message: `unknown lane: ${target.lane}` });
+  if (lane.status !== "ready") {
+    fail({
+      json: Boolean(args.json), code: "LANE_UNAVAILABLE",
+      message: `${target.lane} is ${lane.status}${lane.reason ? `: ${lane.reason}` : ""}`,
+      extra: { lane: target.lane, status: lane.status, ...(lane.reason ? { reason: lane.reason } : {}) },
+    });
+  }
+  if (!(lane.models?.[kind] ?? []).some((entry) => entry.id === target.model)) {
+    fail({ json: Boolean(args.json), code: "MODEL_NOT_FOUND", message: `${value} is not an available ${kind} model` });
+  }
+}
+
+function setCliDefault(kind: CliKind, value: string, isJson: boolean): void {
+  const key = `defaults.${kind}`;
+  const fileCfg = loadFileCfg();
+  setNestedKey(fileCfg, key, value);
+  saveFileCfg(fileCfg);
+  if (isJson) json({ ok: true, kind, value });
+  else out(color.green("✓ ") + `wrote ${key}=${JSON.stringify(value)} to ${displayPath(CONFIG_FILE)}`);
+}
+
+function resetCliDefault(kind: CliKind, isJson: boolean): void {
+  const key = `defaults.${kind}`;
+  const fileCfg = loadFileCfg();
+  const changed = deleteNestedKey(fileCfg, key);
+  if (changed) saveFileCfg(fileCfg);
+  if (isJson) json({ ok: true, kind, reset: changed });
+  else if (changed) out(color.green("✓ ") + `removed ${key} from ${displayPath(CONFIG_FILE)}`);
+  else out(color.dim(`(no persisted default found for ${key})`));
+}
+
 async function listSub(argv: string[]): Promise<void> {
   const args = parseArgs(argv, { flags: FLAGS });
   try {
@@ -151,7 +217,7 @@ async function listSub(argv: string[]): Promise<void> {
 async function setSub(argv: string[]): Promise<void> {
   const args = parseArgs(argv, { flags: FLAGS });
   const [target, value] = args.positional;
-  if (!target || !value) die(2, "usage: defaults set <model|reasoning> <value>");
+  if (!target || !value) die(2, "usage: defaults set <model|reasoning|image|video> <value>");
   if (target === "model") {
     validateModel(value);
     setDefaults(MODEL_KEYS, value);
@@ -162,7 +228,12 @@ async function setSub(argv: string[]): Promise<void> {
     setDefaults(REASONING_KEYS, value);
     return;
   }
-  die(2, "target must be one of: model, reasoning");
+  if (target === "image" || target === "video") {
+    await validateCliTarget(target, value, args);
+    setCliDefault(target, value, Boolean(args.json));
+    return;
+  }
+  die(2, "target must be one of: model, reasoning, image, video");
 }
 
 async function resetSub(argv: string[]): Promise<void> {
@@ -176,7 +247,11 @@ async function resetSub(argv: string[]): Promise<void> {
     resetDefaults(REASONING_KEYS);
     return;
   }
-  die(2, "usage: defaults reset <model|reasoning>");
+  if (target === "image" || target === "video") {
+    resetCliDefault(target, Boolean(args.json));
+    return;
+  }
+  die(2, "usage: defaults reset <model|reasoning|image|video>");
 }
 
 export default async function defaultsCmd(argv: string[]) {

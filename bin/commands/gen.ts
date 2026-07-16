@@ -1,229 +1,265 @@
-import { parseArgs } from "../lib/args.js";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { config } from "../../config.js";
+import { errInfo } from "../../lib/errInfo.js";
+import { parseArgs, type ParsedArgs } from "../lib/args.js";
+import { wasFlagPassed } from "../lib/argsExplicit.js";
 import { resolveServer, request, normalizeGenerate } from "../lib/client.js";
 import { fileToDataUri, dataUriToFile, defaultOutName, readStdin } from "../lib/files.js";
-import { out, die, dieWithError, color, json } from "../lib/output.js";
-import { config } from "../../config.js";
+import { loadCliDefaults } from "../lib/config-store.js";
+import { runMcpJob } from "../lib/mcpJob.js";
+import { resolveTarget, type ModelCatalog, type ModelEntry, type ResolveResult } from "../lib/modelResolver.js";
+import { out, die, dieWithError, color, err, fail, json } from "../lib/output.js";
 import { createCliRequestId, recoverGeneratedOutputs, formatRecoveryHint } from "../lib/recover-output.js";
-import { canonicalizeImageModel } from "../lib/model-aliases.js";
 
-import { errInfo } from "../../lib/errInfo.js";
 const VALID_MODES = new Set(["auto", "direct"]);
 const VALID_MODERATION = new Set(["auto", "low"]);
-const VALID_PROVIDERS = new Set(["auto", "oauth", "api", "grok", "grok-api", "agy", "gemini-api"]);
-const KNOWN_IMAGE_MODELS = new Set(["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.3-codex-spark", "grok-imagine-image", "grok-imagine-image-quality", "nano-banana-2", "nano-banana-pro"]);
 const MAX_GENERATION_COUNT = Math.max(1, Math.trunc(Number(config.limits.maxGeneratedImages) || 24));
 const MAX_REFERENCE_COUNT = Math.max(1, Math.trunc(Number(config.limits.maxRefCount) || 5));
+const MCP_IMAGE_TIMEOUT_MS = 5 * 60_000 + 120_000 + 30_000;
 
 const SPEC = {
   flags: {
-    quality:   { short: "q", type: "string", default: "low" },
-    size:      { short: "s", type: "string", default: "1024x1024" },
-    count:     { short: "n", type: "string", default: "1" },
-    ref:       {              type: "string", repeatable: true },
-    out:       { short: "o", type: "string" },
+    quality: { short: "q", type: "string", default: "low" },
+    size: { short: "s", type: "string", default: "1024x1024" },
+    count: { short: "n", type: "string", default: "1" },
+    ref: { type: "string", repeatable: true },
+    out: { short: "o", type: "string" },
     "out-dir": { short: "d", type: "string" },
-    json:      {              type: "boolean" },
-    "no-save": {              type: "boolean" },
-    force:     {              type: "boolean" },
-    stdin:     {              type: "boolean" },
-    timeout:   {              type: "string", default: "180" },
-    server:    {              type: "string" },
-    model:     {              type: "string" },
-    provider:  {              type: "string" },
-    mode:      {              type: "string", default: "auto" },
-    moderation: {              type: "string", default: "low" },
-    bg:        {              type: "string" },
-    session:   {              type: "string" },
-    "reasoning-effort": {     type: "string" },
-    "web-search":      {     type: "boolean" },
-    "no-web-search":   {     type: "boolean" },
-    help:      { short: "h", type: "boolean" },
+    json: { type: "boolean" }, "no-save": { type: "boolean" }, force: { type: "boolean" },
+    stdin: { type: "boolean" }, timeout: { type: "string", default: "180" }, server: { type: "string" },
+    model: { type: "string" }, provider: { type: "string" }, mode: { type: "string", default: "auto" },
+    moderation: { type: "string", default: "low" }, bg: { type: "string" }, session: { type: "string" },
+    "reasoning-effort": { type: "string" }, "web-search": { type: "boolean" },
+    "no-web-search": { type: "boolean" }, help: { short: "h", type: "boolean" },
   },
 };
 
 const HELP = `
   ima2 gen <prompt...> [options]
 
-  Generate image(s) via the running ima2 server.
+  Generate image(s) via a configured core or MCP lane.
+  Set a default with 'ima2 defaults set image <lane>/<model>' or inspect lanes with 'ima2 models'.
 
   Batch/async note:
-    Use -n <N> for multiple candidates in one request. Independent CLI
-    commands can run concurrently against the server; monitor active requestIds
-    with 'ima2 ps --json' and stop one with 'ima2 cancel <requestId>'.
+    Use -n <N> for multiple core-lane candidates. Independent CLI commands can
+    run concurrently; monitor requestIds with 'ima2 ps --json' and cancel with
+    'ima2 cancel <requestId>'. MCP lanes support -n 1 only.
 
   Options:
-    -q, --quality <low|medium|high>         Default: low
-    -s, --size <WxH | auto>                 Default: 1024x1024
-    -n, --count <1..${MAX_GENERATION_COUNT}>                     Default: 1
-        --ref <file>                        Attach reference image (repeatable, max ${MAX_REFERENCE_COUNT})
-    -o, --out <file>                        Single-image output path (implies -n 1)
-    -d, --out-dir <dir>                     Output dir for multiple images
-        --json                              Print JSON result to stdout
-        --no-save                           Skip save; print b64 to stdout (use --force for TTY)
-        --bg <chroma-green|white|black>     Uniform background preset (asset keying)
-        --stdin                              Read prompt from stdin
+    -q, --quality <low|medium|high>         Core lanes only. Default: low
+    -s, --size <WxH | auto>                 Core lanes only. Default: 1024x1024
+    -n, --count <1..${MAX_GENERATION_COUNT}>                     MCP lanes: 1 only
+        --ref <file|generated-filename>     Local file on core; generated filename on MCP
+    -o, --out <file>                        Single-image output path
+    -d, --out-dir <dir>                     Output directory
+        --json                              Print one JSON result to stdout
+        --no-save                           Core lanes only
+        --stdin                              Read prompt from stdin (core lanes only)
         --timeout <sec>                     Default: 180
         --server <url>                      Override server URL
-        --model <gpt-5.5|gpt-5.4|gpt-5.4-mini|gpt-5.6-sol|gpt-5.6-terra|gpt-5.6-luna|gpt-5.3-codex-spark|grok-imagine-image|grok-imagine-image-quality|nano-banana-2|nano-banana-pro>
-                                            Aliases: luna, sol, terra, spark
-        --provider <auto|oauth|api|grok|grok-api|agy|gemini-api>
-                                            Provider (oauth = GPT OAuth; grok = xAI Grok; agy/gemini-api = Gemini)
-        --mode <auto|direct>                Prompt handling mode. Default: auto
-        --moderation <auto|low>             Default: low
-        --session <id>                      Apply session style sheet if enabled
+        --model <model|lane/model>          Bare IDs must be unique across lanes
+                                            Core aliases: luna, sol, terra, spark
+        --provider <oauth|api|grok|grok-api|agy|gemini-api|runway|higgsfield>
+                                            'auto' was removed; choose a lane explicitly
+        --mode <auto|direct>                Core lanes only. Default: auto
+        --moderation <auto|low>             Core lanes only. Default: low
+        --session <id>                      Core lanes only
         --reasoning-effort <none|low|medium|high|xhigh|max>
-                                            Override server's reasoning effort
-        --web-search / --no-web-search      Override default web-search toggle
+                                            Core lanes only
+        --web-search / --no-web-search      Core lanes only
 
   Examples:
+    ima2 defaults set image oauth/gpt-5.6-luna
     ima2 gen "a shiba in space"
-    ima2 gen "a shiba in space" -n 4 -d ./out
-    ima2 gen "poster" --model gpt-5.4 --mode direct --moderation low
-    ima2 gen "merge" --ref a.png --ref b.png -q high -o out.png
-    cat prompt.txt | ima2 gen --stdin -n 2 -d ./out
+    ima2 gen "poster" --model oauth/luna --mode direct
+    ima2 gen "campaign still" --model runway/gen-4 --ref 1780000000000_abcd.png
 `;
 
-export default async function genCmd(argv: string[]) {
-  const args = parseArgs(argv, SPEC);
-  if (args.help) { out(HELP); return; }
+type ResolvedTarget = Extract<ResolveResult, { ok: true }>;
+type ImageContext = {
+  server: { base: string };
+  catalog: ModelCatalog;
+  target: ResolvedTarget;
+  prompt: string;
+  refs: string[];
+  explicitOut: string | null;
+  outDir: string | null;
+};
 
-  let prompt = args.positional.join(" ");
-  if (args.stdin) {
-    const piped = await readStdin();
-    if (piped) prompt = prompt ? `${prompt} ${piped}` : piped;
+function failServer(jsonMode: boolean, error: unknown): never {
+  const message = (error as Error)?.message || "server unreachable";
+  if (jsonMode) err("Hint: start the server with `ima2 serve`.");
+  fail({ json: jsonMode, code: "SERVER_UNREACHABLE", message: `${message}\nHint: run ima2 serve`, exitCode: 3 });
+}
+
+async function fetchCatalog(serverFlag: unknown, jsonMode: boolean) {
+  try {
+    const server = await resolveServer({ serverFlag });
+    const catalog = await request(server.base, "/api/models", { timeoutMs: 5000 }) as ModelCatalog;
+    return { server, catalog };
+  } catch (error) {
+    failServer(jsonMode, error);
   }
-  if (!prompt) die(2, "prompt is required (positional or via --stdin)");
+}
 
+function resolveImageTarget(args: ParsedArgs, catalog: ModelCatalog): ResolvedTarget {
+  const result = resolveTarget("image", {
+    model: args.model ? String(args.model) : undefined,
+    provider: args.provider ? String(args.provider) : undefined,
+  }, catalog, loadCliDefaults());
+  if (!result.ok) {
+    fail({ json: Boolean(args.json), code: result.code, message: result.message, extra: result.extra });
+  }
+  return result;
+}
+
+function inputRoles(entry: ModelEntry | undefined): string[] {
+  const capabilities = entry?.capabilities;
+  if (!capabilities || typeof capabilities !== "object" || Array.isArray(capabilities)) return [];
+  const roles = (capabilities as Record<string, unknown>).inputRoles;
+  return Array.isArray(roles) ? roles.filter((role): role is string => typeof role === "string") : [];
+}
+
+function generatedFilename(value: string): boolean {
+  return /^\d{10,}_[A-Za-z0-9_-]+\.(?:png|jpe?g|webp)$/i.test(value);
+}
+
+function rejectUnsupportedMcpFlags(argv: string[], args: ParsedArgs): void {
+  const forbidden: Array<[string, string[]]> = [
+    ["--quality", ["--quality", "-q"]], ["--size", ["--size", "-s"]],
+    ["--no-save", ["--no-save"]], ["--force", ["--force"]], ["--stdin", ["--stdin"]],
+    ["--mode", ["--mode"]], ["--moderation", ["--moderation"]], ["--bg", ["--bg"]],
+    ["--session", ["--session"]], ["--reasoning-effort", ["--reasoning-effort"]],
+    ["--web-search", ["--web-search"]], ["--no-web-search", ["--no-web-search"]],
+  ];
+  const match = forbidden.find(([, flags]) => wasFlagPassed(argv, ...flags));
+  if (match) fail({ json: Boolean(args.json), code: "FLAG_NOT_SUPPORTED", message: `${match[0]} is not supported for MCP image lanes`, extra: { flag: match[0] } });
+  const count = Number(args.count);
+  if (!Number.isInteger(count) || count !== 1) fail({ json: Boolean(args.json), code: "FLAG_NOT_SUPPORTED", message: "MCP image lanes support --count 1 only", extra: { flag: "--count" } });
+}
+
+function validateMcpRefs(refs: string[], roles: string[], jsonMode: boolean): void {
+  const invalid = refs.find((ref) => !generatedFilename(ref));
+  if (invalid) fail({ json: jsonMode, code: "MCP_REF_MUST_BE_GENERATED", message: `MCP references must be generated filenames: ${invalid}` });
+  if (refs.length > 0 && !roles.includes("image_references")) {
+    fail({ json: jsonMode, code: "MCP_PARAMETER_UNSUPPORTED", message: "selected model does not support image references", extra: { parameter: "references" } });
+  }
+  if (refs.length === 0 && roles.includes("start_image") && !roles.includes("text")) {
+    fail({ json: jsonMode, code: "MISSING_START_FRAME", message: "selected model requires a generated start image" });
+  }
+}
+
+async function downloadMcpResult(serverBase: string, url: string, target: string): Promise<void> {
+  const response = await fetch(`${serverBase}${url}`);
+  if (!response.ok) die(1, `failed to download image: HTTP ${response.status}`);
+  await mkdir(dirname(target), { recursive: true });
+  await writeFile(target, Buffer.from(await response.arrayBuffer()));
+}
+
+async function runMcpImage(argv: string[], args: ParsedArgs, context: ImageContext): Promise<void> {
+  rejectUnsupportedMcpFlags(argv, args);
   const refs = (Array.isArray(args.ref) ? args.ref : []) as string[];
-  if (refs.length > MAX_REFERENCE_COUNT) die(2, `max ${MAX_REFERENCE_COUNT} --ref attachments`);
+  const entry = context.catalog.lanes[context.target.lane]?.models.image.find((item) => item.id === context.target.model);
+  validateMcpRefs(refs, inputRoles(entry), Boolean(args.json));
+  const requestId = createCliRequestId("req_cli_gen");
+  const body = { provider: context.target.lane, kind: "image", prompt: context.prompt, model: context.target.model,
+    requestId, parameters: {}, ...(refs.length ? { references: refs.map((filename) => ({ filename })) } : {}) };
+  try {
+    const result = await runMcpJob({ serverBase: context.server.base, kind: "image", body, requestId,
+      timeoutMs: MCP_IMAGE_TIMEOUT_MS, json: Boolean(args.json), onProgress: (phase: unknown) => err(`[${String(phase)}]`) });
+    const target = args.out ? String(args.out) : args["out-dir"] ? join(String(args["out-dir"]), result.filename) : undefined;
+    if (target) await downloadMcpResult(context.server.base, result.url, target);
+    if (args.json) json({ ok: true, requestId, filename: result.filename, url: result.url, ...(target ? { path: target } : {}) });
+    else out(color.green("✓ ") + (target ?? `${context.server.base}${result.url}`));
+  } catch (error) {
+    const typed = error as Error & { code?: string };
+    fail({ json: Boolean(args.json), code: typed.code ?? "MCP_GENERATION_FAILED", message: typed.message, exitCode: 1 });
+  }
+}
+
+function validateCoreFlags(args: ParsedArgs): void {
   if (!VALID_MODES.has(String(args.mode))) die(2, "--mode must be one of: auto, direct");
   if (!VALID_MODERATION.has(String(args.moderation))) die(2, "--moderation must be one of: auto, low");
-  if (args.provider && !VALID_PROVIDERS.has(String(args.provider))) {
-    die(2, "--provider must be one of: auto, oauth, api, grok, grok-api, agy, gemini-api");
-  }
-  const model = canonicalizeImageModel(args.model);
-  if (model && !KNOWN_IMAGE_MODELS.has(model)) {
-    die(2, "--model must be one of: gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.3-codex-spark, grok-imagine-image, grok-imagine-image-quality, nano-banana-2, nano-banana-pro");
-  }
-  const VALID_REASONING = new Set(["none", "low", "medium", "high", "xhigh", "max"]);
-  if (args["reasoning-effort"] && !VALID_REASONING.has(String(args["reasoning-effort"]))) {
-    die(2, "--reasoning-effort must be one of: none, low, medium, high, xhigh, max");
-  }
-  if (args["web-search"] && args["no-web-search"]) {
-    die(2, "--web-search and --no-web-search are mutually exclusive");
-  }
+  const validReasoning = new Set(["none", "low", "medium", "high", "xhigh", "max"]);
+  if (args["reasoning-effort"] && !validReasoning.has(String(args["reasoning-effort"]))) die(2, "--reasoning-effort must be one of: none, low, medium, high, xhigh, max");
+  if (args["web-search"] && args["no-web-search"]) die(2, "--web-search and --no-web-search are mutually exclusive");
+}
 
-  const n = Math.max(1, Math.min(MAX_GENERATION_COUNT, parseInt(String(args.count)) || 1));
-  const timeoutMs = (parseInt(String(args.timeout)) || 180) * 1000;
-
-  let server;
-  try {
-    server = await resolveServer({ serverFlag: args.server });
-  } catch (e) {
-    const err = errInfo(e);
-    if (args.json) json({ ok: false, error: err.message, code: err.code, status: err.status });
-    dieWithError(e);
-  }
-
-  const references = await Promise.all(refs.map((p: string) => fileToDataUri(p)));
-
-  const outDir = args["out-dir"] ? String(args["out-dir"]) : null;
-  const explicitOut = args.out ? String(args.out) : null;
-  const requestId = createCliRequestId("req_cli_gen");
-
-  const body: any = {
-    prompt,
-    quality: args.quality,
-    size: args.size,
-    n,
-    references,
-    model,
-    mode: args.mode,
-    moderation: args.moderation,
-    sessionId: args.session,
-    requestId,
-  };
+async function requestCoreImage(args: ParsedArgs, context: ImageContext, n: number, requestId: string) {
+  const references = await Promise.all(context.refs.map((path: string) => fileToDataUri(path)));
+  const body: Record<string, unknown> = { prompt: context.prompt, quality: args.quality, size: args.size, n, references,
+    model: context.target.model, mode: args.mode, moderation: args.moderation, sessionId: args.session,
+    provider: context.target.lane };
+  body.requestId = requestId;
   if (args.bg) body.backgroundPreset = String(args.bg);
   if (args["reasoning-effort"]) body.reasoningEffort = args["reasoning-effort"];
-  if (args.provider) body.provider = args.provider;
   if (args["no-web-search"]) body.webSearchEnabled = false;
   else if (args["web-search"]) body.webSearchEnabled = true;
+  return request(context.server.base, "/api/generate", { method: "POST", body,
+    timeoutMs: (parseInt(String(args.timeout)) || 180) * 1000, headers: { "X-Request-Id": requestId } });
+}
 
-  let resp;
-  try {
-    resp = await request(server.base, "/api/generate", {
-      method: "POST",
-      body,
-      timeoutMs,
-      headers: { "X-Request-Id": requestId },
-    });
-  } catch (e) {
-    const err = errInfo(e);
-    const isTimeout = err.name === "TimeoutError" || err.name === "AbortError";
-    if (isTimeout && (explicitOut || outDir)) {
-      const result = await recoverGeneratedOutputs(server.base, requestId, {
-        explicitOut,
-        outDir,
-        expectedCount: n,
-        json: Boolean(args.json),
-      });
-      if (result.recovered) {
-        if (args.json) {
-          json({ ok: true, requestId, recovered: true, images: result.paths.map((p) => ({ path: p })) });
-        } else {
-          out(formatRecoveryHint(result));
-          for (const p of result.paths) out(color.green("✓ ") + p + color.dim(" (recovered)"));
-        }
-        return;
-      }
-      if (!args.json) out(formatRecoveryHint(result));
-    }
-    if (args.json) json({ ok: false, error: err.message, code: err.code, status: err.status, requestId });
-    dieWithError(e);
+async function recoverCoreTimeout(args: ParsedArgs, context: ImageContext, requestId: string, n: number): Promise<boolean> {
+  if (!context.explicitOut && !context.outDir) return false;
+  const result = await recoverGeneratedOutputs(context.server.base, requestId, { explicitOut: context.explicitOut,
+    outDir: context.outDir, expectedCount: n, json: Boolean(args.json) });
+  if (!result.recovered) { if (!args.json) out(formatRecoveryHint(result)); return false; }
+  if (args.json) json({ ok: true, requestId, recovered: true, images: result.paths.map((path) => ({ path })) });
+  else for (const path of result.paths) out(color.green("✓ ") + path + color.dim(" (recovered)"));
+  return true;
+}
+
+async function runCoreImage(args: ParsedArgs, context: ImageContext): Promise<void> {
+  validateCoreFlags(args);
+  const n = Math.max(1, Math.min(MAX_GENERATION_COUNT, parseInt(String(args.count)) || 1));
+  const requestId = createCliRequestId("req_cli_gen");
+  let response;
+  try { response = await requestCoreImage(args, context, n, requestId); }
+  catch (error) {
+    const info = errInfo(error);
+    const timedOut = info.name === "TimeoutError" || info.name === "AbortError";
+    if (timedOut && await recoverCoreTimeout(args, context, requestId, n)) return;
+    if (args.json) json({ ok: false, error: info.message, code: info.code, status: info.status, requestId });
+    dieWithError(error);
   }
-
-  const norm = normalizeGenerate(resp);
+  const norm = normalizeGenerate(response);
   if (norm.images.length === 0) die(1, "server returned no images");
-
-  // --no-save path
   if (args["no-save"]) {
-    const totalBytes = norm.images.reduce((s: number, im) => s + (im.image?.length ?? 0), 0);
-    if (process.stdout.isTTY && totalBytes > 2 * 1024 * 1024 && !args.force) {
-      die(2, "refusing to print >2MB of b64 to TTY; use --force or drop --no-save");
-    }
-    for (const im of norm.images) out(im.image);
+    const bytes = norm.images.reduce((sum: number, image) => sum + (image.image?.length ?? 0), 0);
+    if (process.stdout.isTTY && bytes > 2 * 1024 * 1024 && !args.force) die(2, "refusing to print >2MB of b64 to TTY; use --force or drop --no-save");
+    for (const image of norm.images) out(image.image);
     return;
   }
-
-  // Save path
-  if (explicitOut && norm.images.length > 1) {
-    die(2, "--out only supports a single image; use --out-dir for n>1");
-  }
-
-  const savedPaths: string[] = [];
-  for (let i = 0; i < norm.images.length; i++) {
-    const im = norm.images[i];
+  if (context.explicitOut && norm.images.length > 1) die(2, "--out only supports a single image; use --out-dir for n>1");
+  const paths: string[] = [];
+  for (let i = 0; i < norm.images.length; i += 1) {
     let target: string;
-    if (explicitOut) {
-      target = explicitOut;
-    } else if (outDir) {
-      target = `${outDir}/${defaultOutName(i, norm.images.length)}`;
-    } else {
-      target = `${config.storage.generatedDir}/${defaultOutName(i, norm.images.length)}`;
-    }
-    await dataUriToFile(String(im.image), target);
-    savedPaths.push(target);
+    if (context.explicitOut) target = context.explicitOut;
+    else if (context.outDir) target = `${context.outDir}/${defaultOutName(i, norm.images.length)}`;
+    else target = `${config.storage.generatedDir}/${defaultOutName(i, norm.images.length)}`;
+    await dataUriToFile(String(norm.images[i].image), target);
+    paths.push(target);
   }
+  if (args.json) json({ ok: true, requestId: norm.requestId, elapsed: norm.elapsed,
+    images: paths.map((path, index) => ({ path, filename: norm.images[index].filename })) });
+  else { for (const path of paths) out(color.green("✓ ") + path); if (norm.elapsed) out(color.dim(`elapsed ${norm.elapsed}s`)); }
+}
 
-  if (args.json) {
-    json({
-      ok: true,
-      requestId: norm.requestId,
-      elapsed: norm.elapsed,
-      images: savedPaths.map((p, i) => ({ path: p, filename: norm.images[i].filename })),
-    });
-  } else {
-    for (const p of savedPaths) out(color.green("✓ ") + p);
-    if (norm.elapsed) out(color.dim(`elapsed ${norm.elapsed}s`));
-  }
+export default async function genCmd(argv: string[]): Promise<void> {
+  const args = parseArgs(argv, SPEC);
+  if (args.help) { out(HELP); return; }
+  let prompt = args.positional.join(" ");
+  if (!prompt && !args.stdin) die(2, "prompt is required (positional or via --stdin)");
+  const refs = (Array.isArray(args.ref) ? args.ref : []) as string[];
+  if (refs.length > MAX_REFERENCE_COUNT) die(2, `max ${MAX_REFERENCE_COUNT} --ref attachments`);
+  const { server, catalog } = await fetchCatalog(args.server, Boolean(args.json));
+  const target = resolveImageTarget(args, catalog);
+  let context = { server, catalog, target, prompt, refs, explicitOut: args.out ? String(args.out) : null,
+    outDir: args["out-dir"] ? String(args["out-dir"]) : null };
+  if (target.transport === "mcp") return runMcpImage(argv, args, context);
+  if (args.stdin) { const piped = await readStdin(); if (piped) prompt = prompt ? `${prompt} ${piped}` : piped; }
+  if (!prompt) die(2, "prompt is required (positional or via --stdin)");
+  context = { ...context, prompt };
+  return runCoreImage(args, context);
 }

@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { registerCapabilitiesRoutes } from "./capabilities.js";
+import { registerModelsRoutes } from "./models.js";
 import { registerEventsRoute } from "./events.js";
 import { registerHealthRoutes } from "./health.js";
 import { registerHistoryRoutes } from "./history.js";
@@ -73,6 +74,7 @@ export function configureRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
   registerQuotaRoutes(app, ctx);
   registerAuthRoutes(app);
   registerMcpConnectionRoutes(app, ctx);
+  registerModelsRoutes(app, ctx);
   registerMcpMediaRoutes(app, ctx);
   registerContractRoutes(app, ctx);
   mountKeyRoutes(app, ctx);

@@ -895,6 +895,17 @@ live only in `${configDir}/mcp/<provider>.json` (0600).
 
 List registry providers with per-provider connection status.
 
+### `GET /api/models`
+
+Canonical lane catalog for CLI/agent routing. Returns
+`{ ok, lanes: { [lane]: { status, reason?, defaults: { image?, video? }, models: { image[], video[] } } } }`
+for the six core lanes (`oauth|api|grok|grok-api|agy|gemini-api`) plus MCP lanes
+(`runway|higgsfield`). Status is one of `ready|locked|disconnected|key-missing`
+with precedence `locked > key-missing|disconnected > ready`. MCP static snapshot
+models are always listed; dynamic (`models_explore`) models appear only while
+connected. Consumed by `ima2 models`, `ima2 defaults set image|video`, and the
+CLI model resolver.
+
 ### `GET /api/mcp/providers/:id/status`
 
 Connection status: `disconnected | connecting | auth_required | connected | offline | error`.

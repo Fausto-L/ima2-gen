@@ -51,7 +51,14 @@ export function registerMcpConnectionRoutes(app: Express, ctxRaw: RouteRuntimeCo
 
   app.get("/api/mcp/providers", (_req: Request, res: Response) => {
     const providers = listProviders(ctx.config.mcp.enabledProviders)
-      .map((p) => ({ ...p, status: manager.status(p.id) }));
+      .map(({ id, endpoint, enabled, executable, lockReason }) => ({
+        id,
+        endpoint,
+        enabled,
+        executable,
+        ...(lockReason ? { lockReason } : {}),
+        status: manager.status(id),
+      }));
     res.json({ ok: true, providers });
   });
 
