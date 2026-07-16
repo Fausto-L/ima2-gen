@@ -56,7 +56,7 @@ export function SettingsWorkspace() {
   const galleryDefaultScope = useAppStore((s) => s.galleryDefaultScope);
   const setGalleryDefaultScope = useAppStore((s) => s.setGalleryDefaultScope);
   const provider = useAppStore((s) => s.provider);
-  const workspaceRef = useRef<HTMLElement | null>(null);
+  const contentRef = useRef<HTMLElement | null>(null);
   const unlockTimerRef = useRef<number | null>(null);
   const isProgrammaticScroll = useRef(false);
   const sectionRefs = useRef<Record<SettingsSection, HTMLElement | null>>({
@@ -72,10 +72,17 @@ export function SettingsWorkspace() {
   const scrollToSection = (section: SettingsSection) => {
     setActive(section);
     isProgrammaticScroll.current = true;
-    sectionRefs.current[section]?.scrollIntoView({
-      behavior: "auto",
-      block: "start",
-    });
+    const content = contentRef.current;
+    const target = sectionRefs.current[section];
+    if (content && target) {
+      const contentTop = content.getBoundingClientRect().top;
+      const targetTop = target.getBoundingClientRect().top;
+      const scrollMarginTop = Number.parseFloat(window.getComputedStyle(target).scrollMarginTop) || 0;
+      content.scrollTo({
+        top: content.scrollTop + targetTop - contentTop - scrollMarginTop,
+        behavior: "auto",
+      });
+    }
     if (unlockTimerRef.current !== null) {
       window.clearTimeout(unlockTimerRef.current);
     }
@@ -94,7 +101,7 @@ export function SettingsWorkspace() {
   }, [closeSettings]);
 
   useEffect(() => {
-    const root = workspaceRef.current;
+    const root = contentRef.current;
     if (!root || typeof IntersectionObserver !== "function") return;
     const observer = new IntersectionObserver(
       (entries) => {
@@ -123,11 +130,7 @@ export function SettingsWorkspace() {
   }, []);
 
   return (
-    <main
-      ref={workspaceRef}
-      className="settings-workspace"
-      aria-labelledby="settings-title"
-    >
+    <main className="settings-workspace" aria-labelledby="settings-title">
       <div className="settings-shell">
         <header className="settings-header">
           <div>
@@ -178,7 +181,7 @@ export function SettingsWorkspace() {
             ))}
           </nav>
 
-          <section className="settings-content" aria-label={t("settings.contentAria")}>
+          <section ref={contentRef} className="settings-content" aria-label={t("settings.contentAria")}>
             <SettingsSectionBlock id="providers" setRef={setSectionRef}>
               <AccountSettings />
               <McpProviderConnections />

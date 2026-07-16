@@ -36,6 +36,14 @@ test("settings workspace keeps mobile and desktop navigation from occupying the 
   assert.match(mobileToggle, /openComposeSheet\("controls"\)/);
 });
 
+test("settings section shortcuts scroll only the settings content container", () => {
+  assert.match(settings, /const contentRef = useRef<HTMLElement \| null>\(null\)/);
+  assert.match(settings, /const root = contentRef\.current/);
+  assert.match(settings, /<section ref=\{contentRef\} className="settings-content"/);
+  assert.match(settings, /content\.scrollTo\(\{/);
+  assert.doesNotMatch(settings, /scrollIntoView/);
+});
+
 test("desktop settings rows use a compact title-control-description stack", () => {
   assert.match(
     css,
