@@ -129,6 +129,8 @@ export type McpGenerationBuildState = {
   mcpParameters?: Record<string, McpPresetValue>;
   /** Filename of the currently viewed image, used as the video start frame. */
   currentImageFilename?: string | null;
+  /** Generated-storage filenames from @element mentions (style/subject refs). */
+  elementReferenceFilenames?: string[];
 };
 
 /**
@@ -146,6 +148,9 @@ export function buildMcpGenerationInput(
   const kind = resolveMcpMediaKind(state.mcpMediaKind);
   const ratio = normalizeMcpRatio(state.mcpRatio);
   const parameters = normalizeMcpParameters(state.mcpParameters);
+  const referenceFilenames = (state.elementReferenceFilenames ?? [])
+    .filter((name) => typeof name === "string" && name)
+    .slice(0, 3);
   return {
     provider,
     kind,
@@ -156,6 +161,7 @@ export function buildMcpGenerationInput(
     ...(ratio ? { ratio } : {}),
     ...(Object.keys(parameters).length > 0 ? { parameters } : {}),
     startFrameFilename: kind === "video" ? state.currentImageFilename ?? undefined : undefined,
+    ...(referenceFilenames.length > 0 ? { referenceFilenames } : {}),
     ...(requestId ? { requestId } : {}),
   };
 }

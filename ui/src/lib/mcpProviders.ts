@@ -44,6 +44,8 @@ export type McpGenerateInput = {
   ratio?: string;
   parameters?: Record<string, McpPresetValue>;
   startFrameFilename?: string;
+  /** Up to 3 generated-storage filenames used as style/subject references. */
+  referenceFilenames?: string[];
   requestId?: string;
 };
 

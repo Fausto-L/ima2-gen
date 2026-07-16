@@ -36,6 +36,17 @@ async function runMcpGenerate(get: StoreGet): Promise<void> {
     return;
   }
   const prompt = composePrompt(state.prompt, state.insertedPrompts);
+  // @element mentions: map selected element assets to their reference files
+  // (generated-storage filenames). The server uploads them and passes
+  // provider-hosted URLs via the model's image_references role.
+  const selectedIds: string[] = (state as unknown as { selectedElementIds?: string[] }).selectedElementIds ?? [];
+  const elementReferenceFilenames = selectedIds
+    .map((id) => state.assets.find((asset) => asset.id === id))
+    .flatMap((asset) => {
+      const refs = (asset?.metadata as { refs?: unknown } | undefined)?.refs;
+      return Array.isArray(refs) ? refs.filter((ref): ref is string => typeof ref === "string") : [];
+    })
+    .slice(0, 3);
   const input = buildMcpGenerationInput(
     {
       mcpProvider: state.mcpProvider,
@@ -44,6 +55,7 @@ async function runMcpGenerate(get: StoreGet): Promise<void> {
       mcpRatio: state.mcpRatio,
       mcpParameters: state.mcpParameters,
       currentImageFilename: state.currentImage?.filename ?? null,
+      ...(elementReferenceFilenames.length > 0 ? { elementReferenceFilenames } : {}),
     },
     prompt,
     `mcp_ui_${Date.now()}`,
