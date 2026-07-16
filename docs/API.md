@@ -35,7 +35,7 @@ Generation section below for the full endpoint specification.
 | `GET` | `/api/oauth/status` | OAuth proxy status and visible models |
 | `GET` | `/api/grok/status` | Bundled progrok status and visible xAI image models |
 | `GET` | `/api/billing` | Billing/status probe, including API key source when configured |
-| `GET` | `/api/quota` | Provider quota: returns `{ codex, grok }`. Grok result includes `billing: { usedUsd, limitUsd }` and a `monthly` percent window drawn from the xAI billing API. |
+| `GET` | `/api/quota` | Provider quota: returns `{ codex, grok }`. Eligible Grok Build xAI OIDC/external auth returns a `weekly` percentage/reset window from `GET /v1/billing?format=credits`. If unavailable, the legacy endpoint may return a `monthly` window plus `billing: { usedUsd, limitUsd }`. |
 
 ## Account Switching
 

@@ -115,7 +115,7 @@ The `gemini-api` provider supports two models: `nano-banana-2` (Gemini 3.1 Flash
 
 ### How do I re-authenticate Grok or Codex without restarting?
 
-Use the **Switch Account** button in Settings > QuotaCard for the provider. This starts a device-code OAuth flow: a new browser tab opens the verification URL, you complete the login, and the server automatically picks up the new credentials. The Grok quota bar also shows `$used / $limit` (in USD) drawn from the xAI billing API.
+Use the **Switch Account** button in Settings > QuotaCard for the provider. This starts a device-code OAuth flow: a new browser tab opens the verification URL, you complete the login, and the server automatically picks up the new credentials. For current Grok Build xAI auth, the quota bar shows the server-calculated weekly usage percentage and reset time. Legacy auth falls back to the older monthly `$used / $limit` billing view when available.
 
 ## Models and quota
 

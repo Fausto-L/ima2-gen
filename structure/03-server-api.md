@@ -54,7 +54,7 @@ graph TD
 | `GET` | `/api/health` | `{ ok, version, provider, uptimeSec, activeJobs, pid, startedAt, runtime }` | Used by CLI discovery and health checks |
 | `GET` | `/api/oauth/status` | `{ status, models?, runtime }` | Checks whether the OAuth proxy is ready and reports actual proxy URL/port |
 | `GET` | `/api/billing` | `{ oauth, apiKeyValid, apiKeySource, credits?, costs? }` | Probes billing/model state when an API key exists |
-| `GET` | `/api/quota` | `{ codex?, grok? }` | Grok billing quota (`billing.usedUsd` / `billing.limitUsd`); web-UI only |
+| `GET` | `/api/quota` | `{ codex?, grok? }` | Grok Build weekly credits percentage/reset via `billing?format=credits`; optional legacy monthly dollar fallback; web-UI only |
 | `GET` | `/api/keys/status` | masked key status + `geminiAuthMode` | Settings > API Keys aggregate |
 | `PUT` | `/api/keys/:provider` | `{ apiKey }` | Save `openai` / `xai` / `gemini` key |
 | `DELETE` | `/api/keys/:provider` | none | Remove config-sourced key |
