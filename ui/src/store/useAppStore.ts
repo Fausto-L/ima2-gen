@@ -583,7 +583,7 @@ importLocalImageToHistory: async (file) => importLocalImageToHistoryImpl(file, s
 
   importPromptsToLibrary: (files) => importPromptsToLibraryImpl(files, set, get),
 
-  toggleGalleryFavorite: (filename) => toggleGalleryFavoriteImpl(filename, set, get),
+  toggleGalleryFavorite: (item) => toggleGalleryFavoriteImpl(item, set, get),
 
   // Canvas Mode actions (0.24)
   openCanvas: () => set({ canvasOpen: true, canvasZoom: 1, canvasPanX: 0, canvasPanY: 0 }),

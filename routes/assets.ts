@@ -7,10 +7,12 @@ import { requireRuntimeContext, type RouteRuntimeContext } from "../lib/runtimeC
 import { assertRegularGeneratedPath, resolveInGenerated } from "../lib/assetLifecycle.js";
 import {
   assertAssetKind,
+  canonicalizeStoredPath,
   createAsset,
   deleteAsset,
   deleteFolder,
   createFolder,
+  getAsset,
   listAssets,
   listFolders,
   listTags,
@@ -42,6 +44,24 @@ function sendError(res: Response, e: unknown) {
 
 function queryStr(value: unknown): string | undefined {
  return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+function validateElementMetadata(metadata: unknown, notes: unknown) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    throw httpError(400, "INVALID_ELEMENT_METADATA", "element metadata required");
+  }
+  const element = metadata as { elementKind?: unknown; refs?: unknown; notes?: unknown };
+  if (typeof element.elementKind !== "string" || !element.elementKind.trim()) {
+    throw httpError(400, "INVALID_ELEMENT_KIND", "elementKind required for element assets");
+  }
+  if (!Array.isArray(element.refs) || element.refs.length < 1 || element.refs.length > 6 ||
+    element.refs.some((ref) => typeof ref !== "string" || !ref.trim())) {
+    throw httpError(400, "INVALID_ELEMENT_REFS", "element refs must contain 1-6 paths");
+  }
+  const elementNotes = notes ?? element.notes;
+  if (typeof elementNotes === "string" && elementNotes.length > 800) {
+    throw httpError(400, "INVALID_ELEMENT_NOTES", "element notes must be at most 800 characters");
+  }
 }
 
 async function resolveValidatedFilePath(kind: string, raw: unknown): Promise<string | null> {
@@ -123,8 +143,10 @@ export function registerAssetsRoutes(app: Express, ctxRaw: RouteRuntimeContext) 
   app.get("/api/assets", (req: Request, res: Response) => {
     try {
       const limitRaw = queryStr(req.query.limit);
+      const filePath = queryStr(req.query.filePath);
       const result = listAssets({
         kind: queryStr(req.query.kind),
+        filePath: filePath === undefined ? undefined : canonicalizeStoredPath(filePath) ?? "",
         folderId: queryStr(req.query.folderId),
         tag: queryStr(req.query.tag),
         q: queryStr(req.query.q),
@@ -132,6 +154,52 @@ export function registerAssetsRoutes(app: Express, ctxRaw: RouteRuntimeContext) 
         limit: limitRaw ? Number(limitRaw) : undefined,
       });
       res.json(result);
+    } catch (e) {
+      sendError(res, e);
+    }
+  });
+
+  app.get("/api/assets/:id", (req: Request<IdParams>, res: Response) => {
+    try {
+      const asset = getAsset(req.params.id);
+      if (!asset) {
+        return res
+          .status(404)
+          .json({ error: { code: "ASSET_NOT_FOUND", message: "Asset not found" } });
+      }
+      res.json({ asset });
+    } catch (e) {
+      sendError(res, e);
+    }
+  });
+
+  app.post("/api/assets/promote-element", async (req: Request, res: Response) => {
+    try {
+      const body = (req.body ?? {}) as {
+        result?: { path?: unknown; filePath?: unknown };
+        path?: unknown;
+        filePath?: unknown;
+        elementKind?: unknown;
+        name?: unknown;
+        notes?: unknown;
+        folderId?: unknown;
+        tags?: unknown;
+      };
+      const resultPath = body.result?.path ?? body.result?.filePath ?? body.path ?? body.filePath;
+      const ref = await resolveValidatedFilePath("element", resultPath);
+      if (!ref) throw httpError(400, "INVALID_ELEMENT_REFS", "gallery result path required");
+      const metadata = { elementKind: body.elementKind, refs: [ref] };
+      validateElementMetadata(metadata, body.notes);
+      const asset = createAsset({
+        kind: "element",
+        name: body.name,
+        folderId: body.folderId,
+        notes: body.notes,
+        metadata,
+        tags: body.tags,
+      });
+      logEvent("assets", "promote-element", { assetId: asset.id });
+      res.status(201).json({ asset });
     } catch (e) {
       sendError(res, e);
     }
@@ -149,6 +217,7 @@ export function registerAssetsRoutes(app: Express, ctxRaw: RouteRuntimeContext) 
         tags?: unknown;
       };
       const kind = assertAssetKind(body.kind);
+      if (kind === "element") validateElementMetadata(body.metadata, body.notes);
       const filePath = await resolveValidatedFilePath(kind, body.filePath);
       const asset = createAsset({
         kind,
@@ -175,13 +244,41 @@ export function registerAssetsRoutes(app: Express, ctxRaw: RouteRuntimeContext) 
         tags?: unknown;
         metadata?: unknown;
       };
+      const existing = getAsset(req.params.id);
+      if (!existing) {
+        return res
+          .status(404)
+          .json({ error: { code: "ASSET_NOT_FOUND", message: "Asset not found" } });
+      }
+      if (existing.kind === "element") {
+        validateElementMetadata(body.metadata ?? existing.metadata, body.notes ?? existing.notes);
+      }
       const asset = updateAsset(req.params.id, body);
+      res.json({ asset });
+    } catch (e) {
+      sendError(res, e);
+    }
+  });
+
+  app.post("/api/assets/:id/test-sheet", (req: Request<IdParams>, res: Response) => {
+    try {
+      const asset = getAsset(req.params.id);
       if (!asset) {
         return res
           .status(404)
           .json({ error: { code: "ASSET_NOT_FOUND", message: "Asset not found" } });
       }
-      res.json({ asset });
+      if (asset.kind !== "element") {
+        return res
+          .status(400)
+          .json({ error: { code: "INVALID_ASSET_KIND", message: "Test sheets require an element asset" } });
+      }
+      res.status(501).json({
+        error: {
+          code: "TEST_SHEET_NOT_IMPLEMENTED",
+          message: "Element test-sheet generation requires multimode service extraction",
+        },
+      });
     } catch (e) {
       sendError(res, e);
     }

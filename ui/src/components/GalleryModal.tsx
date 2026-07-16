@@ -391,7 +391,7 @@ export function GalleryModal() {
           close();
         }}
         onDelete={handleDelete}
-        onToggleFavorite={(next) => void toggleGalleryFavorite(next.filename!)}
+        onToggleFavorite={(next) => void toggleGalleryFavorite(next)}
         t={t}
       />
     );

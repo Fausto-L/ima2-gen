@@ -61,6 +61,11 @@ export function AssetsWorkspace() {
   const saveElement = async (draft: ElementDraft) => {
     if (!draft.id || !await updateAssetItem(draft.id, { name: draft.name, notes: draft.notes })) showToast(t("assets.actionFailed"), true);
   };
+  const renameAsset = async (id: string, name: string) => {
+    const renamed = await updateAssetItem(id, { name });
+    if (!renamed) showToast(t("assets.actionFailed"), true);
+    return renamed;
+  };
   const deleteElement = async (id: string) => { if (await deleteAssetItem(id)) closeDetail(); else showToast(t("assets.actionFailed"), true); };
   const runTestSheet = async () => showToast("Element test sheets are not available yet.", true);
   return <section className={`assets-workspace${selectedAsset ? " assets-workspace--detail-open" : ""}`} aria-labelledby="assets-title">
@@ -89,19 +94,51 @@ export function AssetsWorkspace() {
         </div>
       ) : <AssetsGrid selectedId={selectedAssetId ?? undefined} onSelectAsset={setSelectedAssetId} onPreviewAsset={(asset) => setPreviewItem(assetToPreviewItem(asset))} />}
     </main>
-    {selectedAsset && <aside className="assets-workspace__detail" aria-label={`${selectedAsset.name} details`}><button type="button" className="assets-workspace__detail-close" onClick={closeDetail} aria-label={t("assets.detailClose")}>×</button>{selectedElement ? <ElementDetail element={selectedElement} saving={false} testing={false} onSave={saveElement} onDelete={deleteElement} onRunTestSheet={runTestSheet} /> : <AssetMetaDetail asset={selectedAsset} />}</aside>}
+    {selectedAsset && <aside className="assets-workspace__detail" aria-label={`${selectedAsset.name} details`}><button type="button" className="assets-workspace__detail-close" onClick={closeDetail} aria-label={t("assets.detailClose")}>×</button>{selectedElement ? <ElementDetail element={selectedElement} saving={false} testing={false} onSave={saveElement} onDelete={deleteElement} onRunTestSheet={runTestSheet} /> : <AssetMetaDetail asset={selectedAsset} onRename={(name) => renameAsset(selectedAsset.id, name)} />}</aside>}
     <KeyingPanel />
     {previewItem ? <AssetMediaLightbox item={previewItem} onClose={closePreview} /> : null}
   </section>;
 }
 
-function AssetMetaDetail({ asset }: { asset: AssetItem }) {
+function AssetMetaDetail({ asset, onRename }: { asset: AssetItem; onRename: (name: string) => Promise<boolean> }) {
   const { t } = useI18n();
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(asset.name);
   const prompt = typeof asset.metadata?.prompt === "string" ? asset.metadata.prompt : null;
   const provider = typeof asset.metadata?.provider === "string" ? asset.metadata.provider : null;
+
+  useEffect(() => {
+    setName(asset.name);
+    setEditing(false);
+  }, [asset.id, asset.name]);
+
+  async function commitRename() {
+    const next = name.trim();
+    if (!next || next === asset.name) {
+      setName(asset.name);
+      setEditing(false);
+      return;
+    }
+    if (!await onRename(next)) setName(asset.name);
+    setEditing(false);
+  }
+
   return (
     <div className="assets-workspace__detail-meta">
-      <h2>{asset.name}</h2>
+      <div className="assets-workspace__detail-title">
+        {editing ? (
+          <input className="assets-folder-input assets-workspace__detail-name-input" value={name} autoFocus
+            aria-label={t("assets.renameAsset")} onChange={(event) => setName(event.target.value)}
+            onBlur={() => void commitRename()} onKeyDown={(event) => {
+              if (event.key === "Enter") void commitRename();
+              if (event.key === "Escape") { setName(asset.name); setEditing(false); }
+            }} />
+        ) : (
+          <><h2>{asset.name}</h2><button type="button" className="assets-workspace__detail-rename"
+            aria-label={t("assets.renameAsset")} title={t("assets.renameAsset")}
+            onClick={() => setEditing(true)}>✎</button></>
+        )}
+      </div>
       <dl>
         <dt>{t("assets.detailKind")}</dt>
         <dd>{t(`assets.kind${asset.kind[0].toUpperCase()}${asset.kind.slice(1)}`)}</dd>

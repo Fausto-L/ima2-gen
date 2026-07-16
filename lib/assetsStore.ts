@@ -5,6 +5,8 @@ import { getDb } from "./db.js";
 
 export const ASSET_KINDS = ["image", "video", "element", "preset", "template"] as const;
 export type AssetKind = (typeof ASSET_KINDS)[number];
+export const ELEMENT_KINDS = ["character", "product", "style", "scene"] as const;
+export type ElementKind = (typeof ELEMENT_KINDS)[number];
 
 export type AssetRecord = {
   id: string;
@@ -29,12 +31,16 @@ export type AssetFolderRecord = {
 
 export type ListAssetsQuery = {
   kind?: string;
+  elementKind?: unknown;
+  filePath?: string;
   folderId?: string;
   tag?: string;
   q?: string;
   cursor?: string;
   limit?: number;
 };
+
+export type ListElementsQuery = Omit<ListAssetsQuery, "kind">;
 
 const MAX_NAME = 200;
 const MAX_NOTES = 10_000;
@@ -90,7 +96,7 @@ function normalizeTags(value: unknown): string[] {
 }
 
 /** Canonicalize stored paths: absolute paths inside generatedDir become relative. */
-function normalizeFilePath(value: unknown): string | null {
+export function canonicalizeStoredPath(value: unknown): string | null {
   const raw = typeof value === "string" && value.trim() ? value.trim() : null;
   if (!raw || !isAbsolute(raw)) return raw;
   const base = resolve(config.storage.generatedDir);
@@ -118,6 +124,53 @@ function parseMetadata(value: string | null): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+function assertElementMetadata(value: unknown) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+    throw storeError(400, "INVALID_ELEMENT_METADATA", "element metadata is required");
+  }
+  const metadata = value as Record<string, unknown>;
+  if (
+    typeof metadata.elementKind !== "string" ||
+    !(ELEMENT_KINDS as readonly string[]).includes(metadata.elementKind)
+  ) {
+    throw storeError(
+      400,
+      "INVALID_ELEMENT_METADATA",
+      `elementKind must be one of ${ELEMENT_KINDS.join("|")}`,
+    );
+  }
+  if (typeof metadata.name !== "string" || metadata.name.length < 1 || metadata.name.length > 80) {
+    throw storeError(400, "INVALID_ELEMENT_METADATA", "element name must be 1-80 characters");
+  }
+  if (
+    !Array.isArray(metadata.refs) ||
+    metadata.refs.length < 1 ||
+    metadata.refs.length > 6 ||
+    metadata.refs.some((ref) => typeof ref !== "string")
+  ) {
+    throw storeError(400, "INVALID_ELEMENT_METADATA", "element refs must be an array of 1-6 file paths");
+  }
+  if (metadata.notes !== undefined && (typeof metadata.notes !== "string" || metadata.notes.length > 800)) {
+    throw storeError(400, "INVALID_ELEMENT_METADATA", "element notes must be at most 800 characters");
+  }
+  if (
+    metadata.defaultStrength !== undefined &&
+    (typeof metadata.defaultStrength !== "number" ||
+      !Number.isFinite(metadata.defaultStrength) ||
+      metadata.defaultStrength < 0 ||
+      metadata.defaultStrength > 1)
+  ) {
+    throw storeError(400, "INVALID_ELEMENT_METADATA", "element defaultStrength must be a number from 0 to 1");
+  }
+}
+
+function assertElementKind(value: unknown): ElementKind {
+  if (typeof value !== "string" || !(ELEMENT_KINDS as readonly string[]).includes(value)) {
+    throw storeError(400, "INVALID_ELEMENT_KIND", `elementKind must be one of ${ELEMENT_KINDS.join("|")}`);
+  }
+  return value as ElementKind;
 }
 
 type AssetRow = {
@@ -188,11 +241,12 @@ export function createAsset(input: {
   tags?: unknown;
 }): AssetRecord {
   const kind = assertAssetKind(input.kind);
-  const filePath = normalizeFilePath(input.filePath);
+  const filePath = canonicalizeStoredPath(input.filePath);
   const folderId = requireFolder(input.folderId);
   const name = normalizeName(input.name, filePath ?? "Untitled");
   const notes = normalizeNotes(input.notes);
   const metadata = serializeMetadata(input.metadata);
+  if (kind === "element") assertElementMetadata(parseMetadata(metadata));
   const tags = normalizeTags(input.tags);
   const id = "a_" + ulid();
   const t = now();
@@ -220,6 +274,13 @@ export function createAsset(input: {
 
 export function getAsset(id: string): AssetRecord | null {
   const row = getDb().prepare(`${ASSET_SELECT} WHERE id = ?`).get(id) as AssetRow | undefined;
+  return row ? toRecord(row) : null;
+}
+
+export function getElementById(id: string): AssetRecord | null {
+  const row = getDb()
+    .prepare(`${ASSET_SELECT} WHERE id = ? AND kind = 'element'`)
+    .get(id) as AssetRow | undefined;
   return row ? toRecord(row) : null;
 }
 
@@ -257,6 +318,14 @@ export function listAssets(query: ListAssetsQuery = {}): {
     where.push("kind = ?");
     params.push(assertAssetKind(query.kind));
   }
+  if (query.elementKind !== undefined) {
+    where.push("json_valid(metadata) AND json_extract(metadata, '$.elementKind') = ?");
+    params.push(assertElementKind(query.elementKind));
+  }
+  if (query.filePath !== undefined) {
+    where.push("file_path = ?");
+    params.push(query.filePath);
+  }
   if (query.folderId != null && query.folderId !== "") {
     where.push("folder_id = ?");
     params.push(query.folderId);
@@ -289,6 +358,13 @@ export function listAssets(query: ListAssetsQuery = {}): {
   return { assets: page.map(toRecord), nextCursor };
 }
 
+export function listElements(query: ListElementsQuery = {}): {
+  assets: AssetRecord[];
+  nextCursor: string | null;
+} {
+  return listAssets({ ...query, kind: "element" });
+}
+
 export function updateAsset(
   id: string,
   patch: {
@@ -313,6 +389,7 @@ export function updateAsset(
     patch.metadata === undefined
       ? serializeMetadata(existing.metadata)
       : serializeMetadata(patch.metadata);
+  if (existing.kind === "element") assertElementMetadata(parseMetadata(metadata));
   const tags = patch.tags === undefined ? existing.tags : normalizeTags(patch.tags);
   const t = now();
   const run = db.transaction(() => {

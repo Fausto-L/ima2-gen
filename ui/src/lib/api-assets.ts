@@ -7,22 +7,43 @@ export type AssetUpdatePatch = {
   folderId?: string | null;
   notes?: string;
   tags?: string[];
+  metadata?: Record<string, unknown>;
 };
 
-export function getAssets(input: AssetsFilters & { cursor?: string | null; limit?: number }): Promise<AssetsPage> {
+export type PromoteToElementParams = {
+  result: { path?: string; filePath?: string };
+  elementKind: string;
+  name?: string;
+  notes?: string;
+  folderId?: string | null;
+  tags?: string[];
+};
+
+export type GetAssetsParams = AssetsFilters & {
+  cursor?: string | null;
+  limit?: number;
+  filePath?: string;
+};
+
+export function getAssets(input: GetAssetsParams): Promise<AssetsPage> {
   const params = new URLSearchParams();
   if (input.kind) params.set("kind", input.kind);
   if (input.folderId) params.set("folderId", input.folderId);
   if (input.tag) params.set("tag", input.tag);
   if (input.q) params.set("q", input.q);
+  if (input.filePath) params.set("filePath", input.filePath);
   if (input.cursor) params.set("cursor", input.cursor);
   if (input.limit) params.set("limit", String(input.limit));
   const query = params.toString();
   return jsonFetch<AssetsPage>(`/api/assets${query ? `?${query}` : ""}`);
 }
 
+export function getAssetById(id: string): Promise<{ asset: AssetItem }> {
+  return jsonFetch(`/api/assets/${encodeURIComponent(id)}`);
+}
+
 export function createAsset(input: {
-  filePath: string;
+  filePath?: string;
   kind: AssetItem["kind"];
   name?: string;
   folderId?: string;
@@ -32,8 +53,61 @@ export function createAsset(input: {
   return jsonFetch("/api/assets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
 }
 
+export function promoteToElement(input: PromoteToElementParams): Promise<{ asset: AssetItem }> {
+  return jsonFetch("/api/assets/promote-element", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
 export function updateAsset(id: string, patch: AssetUpdatePatch): Promise<{ asset: AssetItem }> {
   return jsonFetch(`/api/assets/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+}
+
+export function updateAssetWithMetadata(
+  id: string,
+  patch: Record<string, unknown>,
+): Promise<{ asset: AssetItem }> {
+  return updateAsset(id, { metadata: patch });
+}
+
+export async function uploadDerivedAsset(blob: Blob, input: {
+  source: string;
+  projectId?: string | null;
+  name?: string;
+  meta?: Record<string, unknown>;
+}): Promise<{ filePath: string; asset: AssetItem }> {
+  const params = new URLSearchParams();
+  params.set("source", input.source);
+  params.set("kind", "keyed-png");
+  if (input.projectId) params.set("projectId", input.projectId);
+  if (input.name) params.set("name", input.name);
+  if (input.meta) params.set("meta", JSON.stringify(input.meta));
+  const res = await fetch(`/api/assets/derived?${params.toString()}`, {
+    method: "POST",
+    headers: { "Content-Type": "image/png" },
+    body: blob,
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error((detail as { error?: string }).error || `derived upload failed (${res.status})`);
+  }
+  return res.json() as Promise<{ filePath: string; asset: AssetItem }>;
+}
+
+export function requestVideoKeying(input: {
+  source: string;
+  keyParams: { tolerance: number; softness: number; keyColor?: { r: number; g: number; b: number } };
+  projectId?: string | null;
+  name?: string;
+  requestId?: string;
+}): Promise<{ requestId: string; filePath: string }> {
+  return jsonFetch("/api/video/keying", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...input, projectId: input.projectId ?? undefined }),
+  });
 }
 
 export function deleteAsset(id: string): Promise<{ ok: true }> {

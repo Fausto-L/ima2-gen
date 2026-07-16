@@ -6,9 +6,12 @@ import {
   toggleGalleryFavorite,
   importPromptLibrary,
 } from "../lib/api";
+import { createAsset, getAssets, updateAsset } from "../lib/api-assets";
+import { syncStarredAsset } from "../lib/starAssetSync";
 import { t } from "../i18n";
 import { saveGenerationDefaultsPatch } from "./storePersistence";
 import type { InsertedPrompt, StoreSet, StoreGet } from "./storeTypes";
+import type { GenerateItem } from "../types";
 
 export function insertPromptToComposerImpl(prompt: InsertedPrompt, set: StoreSet): void {
   set((state) => {
@@ -143,21 +146,38 @@ export async function importPromptsToLibraryImpl(files: File[], _set: StoreSet, 
   }
 }
 
-export async function toggleGalleryFavoriteImpl(filename: string, set: StoreSet, _get: StoreGet): Promise<void> {
+export async function toggleGalleryFavoriteImpl(item: GenerateItem, set: StoreSet, get: StoreGet): Promise<void> {
+  const filename = item.filename;
+  if (!filename) return;
+  let isFavorite: boolean;
   try {
     const result = await toggleGalleryFavorite(filename);
+    isFavorite = result.isFavorite;
     set((s) => {
       const next = new Set(s.galleryFavorites);
-      if (result.isFavorite) next.add(filename);
+      if (isFavorite) next.add(filename);
       else next.delete(filename);
       return { galleryFavorites: next };
     });
     set((s) => ({
       history: s.history.map((h) =>
-        h.filename === filename ? { ...h, isFavorite: result.isFavorite } : h,
+        h.filename === filename ? { ...h, isFavorite } : h,
       ),
     }));
   } catch (err) {
     console.error("[GalleryFavorite] toggle failed", err);
+    return;
+  }
+
+  if (!isFavorite) return;
+  try {
+    const syncResult = await syncStarredAsset(
+      { ...item, filename },
+      { getAssets, createAsset, updateAsset },
+    );
+    if (syncResult !== "noop") get().showToast(t("assets.starSaved"));
+  } catch (err) {
+    console.error("[GalleryFavorite] asset sync failed", err);
+    get().showToast(t("assets.starSaveFailed"), true);
   }
 }
