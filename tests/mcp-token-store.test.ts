@@ -1,6 +1,6 @@
 import { test, type TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { linkSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { linkSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServerOAuthProvider } from "../lib/mcp/oauthProvider.js";
@@ -148,7 +148,9 @@ test("OAuth provider keeps PKCE in memory, hides mismatched credentials, and ado
   assert.equal(provider.codeVerifier(), "memory-verifier");
   assert.equal(readTokenRecord(dir, "runway")?.codeVerifier, "legacy-verifier");
 
+  const beforeRegistration = readFileSync(join(dir, "runway.json"), "utf8");
   provider.saveClientInformation({ client_id: "new-client" });
+  assert.equal(readFileSync(join(dir, "runway.json"), "utf8"), beforeRegistration);
   provider.saveTokens({ access_token: "new-token", token_type: "bearer" });
   provider.invalidateCredentials?.("tokens");
   provider.saveTokens({ access_token: "retried-token", token_type: "bearer" });

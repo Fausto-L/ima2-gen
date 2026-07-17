@@ -9,6 +9,7 @@ import {
   parseLocalhostPortFromUrl,
   parseOAuthReadyUrl,
 } from "../lib/runtimePorts.ts";
+import { shutdownServerAndMcp } from "../lib/mcp/shutdown.ts";
 
 function occupy(port) {
   return new Promise<import("node:net").Server>((resolve) => {
@@ -48,4 +49,23 @@ test("OAuth ready URL parser returns actual fallback port", () => {
   const url = parseOAuthReadyUrl("OpenAI-compatible endpoint ready at http://127.0.0.1:10532/v1");
   assert.equal(url, "http://127.0.0.1:10532");
   assert.equal(parseLocalhostPortFromUrl(url), 10532);
+});
+
+test("server accept-stop and MCP shutdown start together and both settle", async () => {
+  const started: string[] = [];
+  let finishServer!: () => void;
+  let finishMcp!: () => void;
+  const closing = shutdownServerAndMcp({
+    closeServer: () => { started.push("server"); return new Promise<void>((resolve) => { finishServer = resolve; }); },
+    shutdownMcp: () => { started.push("mcp"); return new Promise<void>((resolve) => { finishMcp = resolve; }); },
+  });
+  assert.deepEqual(started, ["server", "mcp"]);
+  finishMcp();
+  let settled = false;
+  void closing.then(() => { settled = true; });
+  await Promise.resolve();
+  assert.equal(settled, false);
+  finishServer();
+  await closing;
+  assert.equal(settled, true);
 });

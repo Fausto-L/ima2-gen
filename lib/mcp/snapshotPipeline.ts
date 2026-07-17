@@ -84,6 +84,7 @@ export interface IngestLiveToolsInput {
   entitlementTag: string;
   snapshotDir: string;
   packageRoot: string;
+  isCurrent?: () => boolean;
 }
 
 /** Connect/refresh success path (040 audit round 1): sanitize live tools, diff
@@ -105,6 +106,7 @@ export async function ingestLiveTools(input: IngestLiveToolsInput): Promise<{ sn
     provider: input.listing.provider,
   });
   const diff = previous ? diffSnapshot(previous, snapshot) : { drifted: [], missing: [], added: snapshot.tools.map((t) => t.name) };
+  if (input.isCurrent && !input.isCurrent()) throw new Error("MCP_SNAPSHOT_IDENTITY_STALE");
   saveLocalSnapshot(input.snapshotDir, snapshot);
   return { snapshot, diff };
 }

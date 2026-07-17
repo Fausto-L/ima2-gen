@@ -5,38 +5,10 @@ import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { listProviders, resolveProviderEndpoint } from "./providerRegistry.js";
 import { createServerOAuthProvider, type ServerOAuthProvider } from "./oauthProvider.js";
 import { tombstoneTokenRecord } from "./tokenStore.js";
+import { addCandidate, inspectRestore, isTerminalTransportError, publicStatus, removeCandidate, runBounded, sameConnection } from "./connectionRuntime.js";
+import type { McpConnectionIdentity, McpConnectionManagerOptions, PendingAuth, ProviderSession } from "./connectionRuntime.js";
 import type { McpConnectionStatus, McpToolListing } from "./types.js";
-
 const DEFAULT_PENDING_AUTH_TTL_MS = 10 * 60 * 1000;
-
-interface ProviderSession {
-  state: McpConnectionStatus["state"];
-  client?: Client;
-  transport?: StreamableHTTPClientTransport;
-  authorizationUrl?: string;
-  detail?: string;
-  connectedAt?: string;
-  toolCount?: number;
-  snapshotDiff?: { drifted: string[]; missing: string[]; added: string[] };
-}
-
-interface PendingAuth {
-  provider: string;
-  generation: number;
-  transport: StreamableHTTPClientTransport;
-  expiresAt: number;
-}
-
-export interface McpConnectionManagerOptions {
-  enabledProviders: string[];
-  tokenDir: string;
-  getOrigin: () => string;
-  now?: () => number;
-  pendingAuthTtlMs?: number;
-  transportFactory?: (endpoint: string, authProvider: ServerOAuthProvider) => StreamableHTTPClientTransport;
-  clientFactory?: () => Client;
-}
-
 export class McpConnectionManager {
   private readonly sessions = new Map<string, ProviderSession>();
   private readonly pendingAuth = new Map<string, PendingAuth>();
@@ -49,9 +21,11 @@ export class McpConnectionManager {
   private readonly callbackFlights = new Map<string, { generation: number; promise: Promise<McpConnectionStatus> }>();
   private readonly disconnectFlights = new Map<string, Promise<McpConnectionStatus>>();
   private readonly disconnectIntents = new Set<string>();
-
+  private readonly reconnectTimers = new Map<string, NodeJS.Timeout>();
+  private readonly restoreControllers = new Map<string, { generation: number; controller: AbortController }>();
+  private epoch = 0;
+  private shuttingDown = false;
   constructor(private readonly options: McpConnectionManagerOptions) {}
-
   private now(): number { return this.options.now?.() ?? Date.now(); }
   private generation(provider: string): number { return this.generations.get(provider) ?? 0; }
   private bumpGeneration(provider: string): number {
@@ -59,69 +33,46 @@ export class McpConnectionManager {
     this.generations.set(provider, next);
     return next;
   }
-
   private makeTransport(endpoint: string, authProvider: ServerOAuthProvider): StreamableHTTPClientTransport {
     if (this.options.transportFactory) return this.options.transportFactory(endpoint, authProvider);
     return new StreamableHTTPClientTransport(new URL(endpoint), { authProvider });
   }
-
   private makeClient(): Client {
     if (this.options.clientFactory) return this.options.clientFactory();
     return new Client({ name: "ima2-gen", version: "2.x" }, { capabilities: {} });
   }
-
   private knownProvider(provider: string): { enabled: boolean } {
     const descriptor = listProviders(this.options.enabledProviders).find((entry) => entry.id === provider);
     if (!descriptor) throw new Error(`MCP_PROVIDER_UNKNOWN:${provider}`);
     return descriptor;
   }
-
   private mutableSession(provider: string): ProviderSession {
     let session = this.sessions.get(provider);
     if (!session) { session = { state: "disconnected" }; this.sessions.set(provider, session); }
     return session;
   }
-
-  private disconnectedStatus(provider: string): McpConnectionStatus {
-    return { provider, state: "disconnected" };
-  }
-
   status(provider: string): McpConnectionStatus {
     const descriptor = this.knownProvider(provider);
-    if (!descriptor.enabled) return this.disconnectedStatus(provider);
+    if (!descriptor.enabled) return publicStatus(provider);
     const session = this.sessions.get(provider);
-    if (!session) return this.disconnectedStatus(provider);
-    return {
-      provider,
-      state: session.state,
-      ...(session.authorizationUrl ? { authorizationUrl: session.authorizationUrl } : {}),
-      ...(session.detail ? { detail: session.detail } : {}),
-      ...(session.toolCount !== undefined ? { toolCount: session.toolCount } : {}),
-      ...(session.connectedAt ? { connectedAt: session.connectedAt } : {}),
-      ...(session.snapshotDiff ? { snapshotDiff: session.snapshotDiff } : {}),
-    };
+    return publicStatus(provider, session);
   }
-
-  private addCandidate(provider: string, transport: StreamableHTTPClientTransport): void {
-    const set = this.candidates.get(provider) ?? new Set<StreamableHTTPClientTransport>();
-    set.add(transport);
-    this.candidates.set(provider, set);
-  }
-
-  private removeCandidate(provider: string, transport: StreamableHTTPClientTransport): void {
-    const set = this.candidates.get(provider);
-    set?.delete(transport);
-    if (set?.size === 0) this.candidates.delete(provider);
-  }
-
   private isCurrent(provider: string, generation: number): boolean {
     return this.generation(provider) === generation && !this.disconnectIntents.has(provider);
   }
-
   async connect(provider: string): Promise<McpConnectionStatus> {
+    if (this.shuttingDown) throw new Error("MCP_SHUTTING_DOWN");
     const endpoint = resolveProviderEndpoint(provider, this.options.enabledProviders);
+    const restore = this.restoreControllers.get(provider);
+    if (restore) {
+      this.restoreControllers.delete(provider);
+      restore.controller.abort();
+      this.bumpGeneration(provider);
+      this.markDisconnected(provider);
+      await this.closeProviderWork(provider);
+    }
     const disconnect = this.disconnectFlights.get(provider);
-    if (disconnect || this.disconnectIntents.has(provider)) return disconnect ?? this.disconnectedStatus(provider);
+    if (disconnect || this.disconnectIntents.has(provider)) return disconnect ?? publicStatus(provider);
     const reset = this.resetFlights.get(provider);
     if (reset) { await reset; return this.status(provider); }
     const refresh = this.refreshFlights.get(provider);
@@ -131,22 +82,30 @@ export class McpConnectionManager {
     if (callback) this.callbackFlights.delete(provider);
     return this.connectAtGeneration(provider, endpoint, this.generation(provider));
   }
-
-  private connectAtGeneration(provider: string, endpoint: string, generation: number): Promise<McpConnectionStatus> {
+  private connectAtGeneration(
+    provider: string,
+    endpoint: string,
+    generation: number,
+    requestOptions?: { signal?: AbortSignal; timeout?: number; maxTotalTimeout?: number },
+  ): Promise<McpConnectionStatus> {
     if (!this.isCurrent(provider, generation)) return Promise.resolve(this.status(provider));
     const session = this.sessions.get(provider);
     if (session?.state === "connected") return Promise.resolve(this.status(provider));
     const current = this.connectFlights.get(provider);
     if (current?.generation === generation) return current.promise;
-    const promise = this.performConnect(provider, endpoint, generation);
+    const promise = this.performConnect(provider, endpoint, generation, requestOptions);
     this.connectFlights.set(provider, { generation, promise });
     void promise.finally(() => {
       if (this.connectFlights.get(provider)?.promise === promise) this.connectFlights.delete(provider);
     }).catch(() => undefined);
     return promise;
   }
-
-  private async performConnect(provider: string, endpoint: string, generation: number): Promise<McpConnectionStatus> {
+  private async performConnect(
+    provider: string,
+    endpoint: string,
+    generation: number,
+    requestOptions?: { signal?: AbortSignal; timeout?: number; maxTotalTimeout?: number },
+  ): Promise<McpConnectionStatus> {
     const session = this.mutableSession(provider);
     session.state = "connecting";
     session.authorizationUrl = undefined;
@@ -162,17 +121,23 @@ export class McpConnectionManager {
     });
     const transport = this.makeTransport(endpoint, authProvider);
     const client = this.makeClient();
-    this.addCandidate(provider, transport);
+    const identity = { generation, epoch: ++this.epoch };
+    client.onerror = (error) => this.handleRuntimeError(provider, identity, error);
+    client.onclose = () => this.handleRuntimeClose(provider, identity);
+    addCandidate(this.candidates, provider, transport);
     try {
-      await client.connect(transport);
+      await client.connect(transport, requestOptions);
       if (!this.isCurrent(provider, generation)) return this.closeStale(provider, transport);
-      this.removeCandidate(provider, transport);
+      removeCandidate(this.candidates, provider, transport);
       Object.assign(session, {
         state: "connected",
         client,
         transport,
         connectedAt: new Date(this.now()).toISOString(),
         detail: undefined,
+        identity,
+        expectedClose: false,
+        reconnectUsed: false,
       });
       return this.status(provider);
     } catch (error) {
@@ -184,7 +149,7 @@ export class McpConnectionManager {
         session.authorizationUrl = authProvider.lastAuthorizationUrl ?? undefined;
         return this.status(provider);
       }
-      this.removeCandidate(provider, transport);
+      removeCandidate(this.candidates, provider, transport);
       await transport.close().catch(() => undefined);
       if (!this.isCurrent(provider, generation)) return this.status(provider);
       session.state = "error";
@@ -192,9 +157,34 @@ export class McpConnectionManager {
       return this.status(provider);
     }
   }
-
+  private handleRuntimeError(provider: string, identity: McpConnectionIdentity, error: Error): void {
+    const session = this.sessions.get(provider);
+    if (!session || !sameConnection(session.identity, identity) || session.expectedClose) return;
+    if (isTerminalTransportError(error)) { this.markOffline(provider, identity); return; }
+    session.detail = "MCP_TRANSPORT_DEGRADED";
+  }
+  private handleRuntimeClose(provider: string, identity: McpConnectionIdentity): void {
+    const session = this.sessions.get(provider);
+    if (!sameConnection(session?.identity, identity) || session?.expectedClose) return;
+    this.markOffline(provider, identity);
+  }
+  private markOffline(provider: string, identity: McpConnectionIdentity): void {
+    const session = this.sessions.get(provider);
+    if (!session || !sameConnection(session.identity, identity)) return;
+    session.state = "offline";
+    session.detail = "MCP_TRANSPORT_OFFLINE";
+    if (session.reconnectUsed || this.shuttingDown) return;
+    session.reconnectUsed = true;
+    const timer = setTimeout(() => {
+      this.reconnectTimers.delete(provider);
+      if (!sameConnection(this.sessions.get(provider)?.identity, identity)) return;
+      void this.refresh(provider).catch(() => undefined);
+    }, this.options.reconnectDelayMs ?? 250);
+    timer.unref?.();
+    this.reconnectTimers.set(provider, timer);
+  }
   private async closeStale(provider: string, transport: StreamableHTTPClientTransport): Promise<McpConnectionStatus> {
-    this.removeCandidate(provider, transport);
+    removeCandidate(this.candidates, provider, transport);
     await transport.close().catch(() => undefined);
     return this.status(provider);
   }
@@ -208,7 +198,7 @@ export class McpConnectionManager {
     const old = [...this.pendingAuth.entries()].find(([, value]) => value.provider === provider);
     if (old) {
       this.pendingAuth.delete(old[0]);
-      this.removeCandidate(provider, old[1].transport);
+      removeCandidate(this.candidates, provider, old[1].transport);
       await old[1].transport.close().catch(() => undefined);
     }
     if (!this.isCurrent(provider, generation)) return false;
@@ -243,7 +233,7 @@ export class McpConnectionManager {
 
   private async rejectInvalidCallback(pending?: PendingAuth): Promise<never> {
     if (pending) {
-      this.removeCandidate(pending.provider, pending.transport);
+      removeCandidate(this.candidates, pending.provider, pending.transport);
       await pending.transport.close().catch(() => undefined);
       if (this.isCurrent(pending.provider, pending.generation)) this.markDisconnected(pending.provider);
     }
@@ -264,13 +254,13 @@ export class McpConnectionManager {
       if (this.activeCallbacks.get(state) !== pending || !this.isCurrent(pending.provider, pending.generation)) {
         throw new Error("MCP_OAUTH_GENERATION_STALE");
       }
-      this.removeCandidate(pending.provider, pending.transport);
+      removeCandidate(this.candidates, pending.provider, pending.transport);
       this.sessions.set(pending.provider, { state: "disconnected" });
       const endpoint = resolveProviderEndpoint(pending.provider, this.options.enabledProviders);
       return this.connectAtGeneration(pending.provider, endpoint, pending.generation);
     } catch (error) {
       await pending.transport.close().catch(() => undefined);
-      this.removeCandidate(pending.provider, pending.transport);
+      removeCandidate(this.candidates, pending.provider, pending.transport);
       const codeOnly = String((error as Error)?.message ?? error).split(":")[0];
       if (codeOnly === "MCP_OAUTH_GENERATION_STALE" || codeOnly === "MCP_TOKEN_REVISION_STALE") {
         throw new Error("MCP_OAUTH_GENERATION_STALE");
@@ -297,6 +287,8 @@ export class McpConnectionManager {
       delete current.transport;
       delete current.connectedAt;
       delete current.toolCount;
+      delete current.identity;
+      delete current.expectedClose;
     }
   }
 
@@ -304,12 +296,13 @@ export class McpConnectionManager {
     const session = this.sessions.get(provider);
     if (!session) { this.sessions.set(provider, { state: "disconnected" }); return; }
     session.state = "disconnected";
+    session.expectedClose = true;
     session.authorizationUrl = undefined;
     session.detail = undefined;
     session.snapshotDiff = undefined;
   }
-
   reset(provider: string): Promise<void> {
+    if (this.shuttingDown) return Promise.reject(new Error("MCP_SHUTTING_DOWN"));
     resolveProviderEndpoint(provider, this.options.enabledProviders);
     const disconnect = this.disconnectFlights.get(provider);
     if (disconnect || this.disconnectIntents.has(provider)) return disconnect?.then(() => undefined) ?? Promise.resolve();
@@ -324,11 +317,11 @@ export class McpConnectionManager {
     }).catch(() => undefined);
     return promise;
   }
-
   refresh(provider: string): Promise<McpConnectionStatus> {
+    if (this.shuttingDown) return Promise.reject(new Error("MCP_SHUTTING_DOWN"));
     const endpoint = resolveProviderEndpoint(provider, this.options.enabledProviders);
     const disconnect = this.disconnectFlights.get(provider);
-    if (disconnect || this.disconnectIntents.has(provider)) return disconnect ?? Promise.resolve(this.disconnectedStatus(provider));
+    if (disconnect || this.disconnectIntents.has(provider)) return disconnect ?? Promise.resolve(publicStatus(provider));
     const reset = this.resetFlights.get(provider);
     if (reset) return reset.then(() => this.status(provider));
     const existing = this.refreshFlights.get(provider);
@@ -348,8 +341,8 @@ export class McpConnectionManager {
     if (!this.isCurrent(provider, generation)) return this.status(provider);
     return this.connectAtGeneration(provider, endpoint, generation);
   }
-
   disconnect(provider: string): Promise<McpConnectionStatus> {
+    if (this.shuttingDown) return Promise.reject(new Error("MCP_SHUTTING_DOWN"));
     const endpoint = resolveProviderEndpoint(provider, this.options.enabledProviders);
     const existing = this.disconnectFlights.get(provider);
     if (existing) return existing;
@@ -379,9 +372,69 @@ export class McpConnectionManager {
     return this.status(provider);
   }
 
+  async restoreStoredConnections(): Promise<void> {
+    if (this.shuttingDown) return;
+    await runBounded(this.options.enabledProviders, 2, async (provider) => {
+      const endpoint = resolveProviderEndpoint(provider, this.options.enabledProviders);
+      const inspection = inspectRestore(this.options.tokenDir, provider, endpoint, this.options.getOrigin());
+      if (inspection.state === "binding-mismatch") {
+        const session = this.mutableSession(provider);
+        session.state = "auth_required";
+        session.detail = "MCP_CREDENTIAL_BINDING_MISMATCH";
+        return;
+      }
+      if (inspection.state !== "usable") return;
+      const timeout = this.options.restoreTimeoutMs ?? 15_000;
+      const controller = new AbortController();
+      const generation = this.generation(provider);
+      this.restoreControllers.set(provider, { generation, controller });
+      const timer = setTimeout(() => {
+        controller.abort();
+        if (this.isCurrent(provider, generation)) {
+          this.bumpGeneration(provider);
+          this.markDisconnected(provider);
+          void this.closeProviderWork(provider);
+        }
+      }, timeout);
+      timer.unref?.();
+      try {
+        await this.connectAtGeneration(provider, endpoint, generation, {
+          signal: controller.signal,
+          timeout,
+          maxTotalTimeout: timeout,
+        });
+      } finally {
+        clearTimeout(timer);
+        if (this.restoreControllers.get(provider)?.controller === controller) this.restoreControllers.delete(provider);
+      }
+    });
+  }
+
+  connectionIdentity(provider: string): McpConnectionIdentity | null {
+    const session = this.sessions.get(provider);
+    return session?.state === "connected" && session.identity ? { ...session.identity } : null;
+  }
+
+  async shutdown(): Promise<void> {
+    if (this.shuttingDown) return;
+    this.shuttingDown = true;
+    for (const value of this.restoreControllers.values()) value.controller.abort();
+    this.restoreControllers.clear();
+    for (const timer of this.reconnectTimers.values()) clearTimeout(timer);
+    this.reconnectTimers.clear();
+    const providers = listProviders(this.options.enabledProviders).filter((entry) => entry.enabled).map((entry) => entry.id);
+    const closing = Promise.all(providers.map(async (provider) => {
+      this.bumpGeneration(provider);
+      this.markDisconnected(provider);
+      await this.closeProviderWork(provider);
+    }));
+    await Promise.race([closing, new Promise<void>((resolve) => setTimeout(resolve, 2_000))]);
+  }
+
   async listTools(provider: string): Promise<McpToolListing> {
     const session = this.sessions.get(provider);
     if (session?.state !== "connected" || !session.client) throw new Error("MCP_NOT_CONNECTED");
+    const identity = this.connectionIdentity(provider);
     const tools: Array<Record<string, unknown>> = [];
     let cursor: string | undefined;
     do {
@@ -389,7 +442,7 @@ export class McpConnectionManager {
       tools.push(...(page.tools as Array<Record<string, unknown>>));
       cursor = page.nextCursor;
     } while (cursor);
-    session.toolCount = tools.length;
+    if (sameConnection(this.connectionIdentity(provider), identity)) session.toolCount = tools.length;
     const client = session.client as unknown as { getServerVersion?: () => Record<string, unknown> | undefined };
     const transport = session.transport as unknown as { protocolVersion?: string } | undefined;
     return {
@@ -401,9 +454,13 @@ export class McpConnectionManager {
     };
   }
 
-  attachSnapshotDiff(provider: string, diff: { drifted: string[]; missing: string[]; added: string[] }): void {
+  attachSnapshotDiff(
+    provider: string,
+    identity: McpConnectionIdentity | null,
+    diff: { drifted: string[]; missing: string[]; added: string[] },
+  ): void {
     const session = this.sessions.get(provider);
-    if (!session || session.state !== "connected") throw new Error("MCP_NOT_CONNECTED");
+    if (!session || session.state !== "connected" || !sameConnection(session.identity, identity)) return;
     session.snapshotDiff = diff;
   }
 
@@ -415,7 +472,9 @@ export class McpConnectionManager {
   ): Promise<Record<string, unknown>> {
     const session = this.sessions.get(provider);
     if (session?.state !== "connected" || !session.client) throw new Error("MCP_NOT_CONNECTED");
-    const raw = await (session.client.callTool as unknown as (
+    const identity = this.connectionIdentity(provider);
+    try {
+      const raw = await (session.client.callTool as unknown as (
       params: { name: string; arguments: Record<string, unknown> },
       schema?: undefined,
       opts?: { signal?: AbortSignal; timeout?: number },
@@ -424,7 +483,17 @@ export class McpConnectionManager {
       undefined,
       { ...(options.signal ? { signal: options.signal } : {}), timeout: options.timeoutMs ?? 120_000 },
     );
-    if ((raw as { isError?: boolean }).isError) throw new Error(`MCP_TOOL_ERROR:${name}`);
-    return raw;
+      if ((raw as { isError?: boolean }).isError) throw new Error(`MCP_TOOL_ERROR:${name}`);
+      return raw;
+    } catch (error) {
+      if (error instanceof UnauthorizedError || /unauthorized|connection closed/i.test(String((error as Error)?.message))) {
+        const current = this.sessions.get(provider);
+        if (sameConnection(current?.identity, identity)) {
+          current!.state = "offline";
+          current!.detail = "MCP_SESSION_INVALID";
+        }
+      }
+      throw error;
+    }
   }
 }

@@ -23,6 +23,7 @@ import { configureApiCachePolicy } from "./lib/apiCachePolicy.js";
 import { configureRoutes } from "./routes/index.js";
 import { config } from "./config.js";
 import { getServerPort, listenWithPortFallback } from "./lib/runtimePorts.js";
+import { shutdownServerAndMcp } from "./lib/mcp/shutdown.js";
 import type { RuntimeContext, RuntimeContextOverrides, ApiKeySource } from "./lib/runtimeContext.js";
 
 import { closeDb } from "./lib/db.js";
@@ -438,8 +439,11 @@ export async function startServer(overrides: StartServerOverrides = {}) {
     stopAgentQueueWorker();
     clearInterval(reapTimer);
     if (tempReferenceReapTimer) clearInterval(tempReferenceReapTimer);
-    await new Promise<void>((resolve) => {
-      if (server) server.close(() => resolve()); else resolve();
+    await shutdownServerAndMcp({
+      closeServer: () => new Promise<void>((resolve) => {
+        if (server) server.close(() => resolve()); else resolve();
+      }),
+      shutdownMcp: () => ctx.mcpConnectionManager?.shutdown() ?? Promise.resolve(),
     });
     closeDb();
   });
@@ -454,6 +458,9 @@ export async function startServer(overrides: StartServerOverrides = {}) {
   });
   ctx.serverActualPort = getServerPort(server) || ctx.config.server.port;
   ctx.serverUrl = `http://${runtimeHostUrl(ctx.config.server.host)}:${ctx.serverActualPort}`;
+  void ctx.mcpConnectionManager?.restoreStoredConnections().catch((error) => {
+    console.warn(`[mcp.restore] code=${String((error as Error)?.message ?? error).split(":")[0]}`);
+  });
   console.log(`Image Gen running at ${ctx.serverUrl}`);
   console.log(`Provider policy: GPT OAuth, API-key Responses, and Grok Images providers. GPT OAuth proxy port ${ctx.oauthPort}; Grok proxy port ${ctx.grokActualPort || ctx.grokPort}.`);
   advertise(ctx);

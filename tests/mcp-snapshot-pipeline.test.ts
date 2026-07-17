@@ -80,7 +80,9 @@ test("route boundary: connect response carries snapshotDiff after ingest", async
     async listTools(id: string) {
       return { provider: id, fetchedAt: new Date().toISOString(), tools: rawTools, serverInfo: { name: "runway-mcp" }, protocolVersion: "2025-06-18" };
     },
-    attachSnapshotDiff(_id: string, diff: unknown) { this.statusValue.snapshotDiff = diff; },
+    connectionIdentity() { return { generation: 1, epoch: 1 }; },
+    attachSnapshotDiff(_id: string, _identity: unknown, diff: unknown) { this.statusValue.snapshotDiff = diff; },
+    async refresh(id: string) { return { provider: id, state: "connected" }; },
     async reset() {}, async disconnect(id: string) { return { provider: id, state: "disconnected" }; },
     async handleOAuthCallback() { throw new Error("MCP_OAUTH_STATE_INVALID"); },
   };
@@ -99,4 +101,17 @@ test("route boundary: connect response carries snapshotDiff after ingest", async
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
+});
+
+test("stale connection identity rejects snapshot persistence before write", async () => {
+  rmSync(join(snapshotDir, "runway.json"), { force: true });
+  await assert.rejects(() => ingestLiveTools({
+    listing: { provider: "runway", fetchedAt: new Date().toISOString(), tools: rawTools },
+    endpoint: "https://mcp.runwayml.com/mcp",
+    entitlementTag: "user-oauth-account",
+    snapshotDir,
+    packageRoot,
+    isCurrent: () => false,
+  }), /MCP_SNAPSHOT_IDENTITY_STALE/);
+  assert.equal(readLocalSnapshot(snapshotDir, "runway"), null);
 });

@@ -33,6 +33,10 @@ const LEGACY_PROVIDER_ENDPOINTS: Record<string, string> = {
   higgsfield: "https://mcp.higgsfield.ai/mcp",
 };
 
+export function legacyEndpointForProvider(provider: string): string | undefined {
+  return LEGACY_PROVIDER_ENDPOINTS[provider];
+}
+
 function asRecord(value: OAuthClientInformationMixed | OAuthTokens): Record<string, unknown> {
   return value as unknown as Record<string, unknown>;
 }
@@ -57,6 +61,7 @@ export function createServerOAuthProvider(options: {
   let record: McpTokenRecord = readTokenRecord(tokenDir, provider) ?? {};
   let expectedRevision = inspection.revision;
   let verifier: string | undefined;
+  let stagedClientInformation: Record<string, unknown> | undefined;
   let lastAuthorizationUrl: string | null = null;
 
   const ensureCurrent = () => {
@@ -77,6 +82,7 @@ export function createServerOAuthProvider(options: {
   const invalidate = (scope: McpCredentialScope) => {
     ensureCurrent();
     if (scope === "verifier" || scope === "all") verifier = undefined;
+    if (scope === "client" || scope === "all") stagedClientInformation = undefined;
     if (scope === "discovery" || (scope === "verifier" && !record.codeVerifier)) return;
     adopt(invalidateTokenRecord(tokenDir, provider, scope, expectedRevision));
   };
@@ -91,10 +97,14 @@ export function createServerOAuthProvider(options: {
       token_endpoint_auth_method: "none",
     } satisfies OAuthClientMetadata,
     state: () => oauthState,
-    clientInformation: () => credentialsVisible()
-      ? record.clientInformation as OAuthClientInformationMixed | undefined
-      : undefined,
+    clientInformation: () => stagedClientInformation as OAuthClientInformationMixed | undefined
+      ?? (credentialsVisible() ? record.clientInformation as OAuthClientInformationMixed | undefined : undefined),
     saveClientInformation(info) {
+      if (!tokenBindingMatches(record, current) || record.tombstone) {
+        ensureCurrent();
+        stagedClientInformation = asRecord(info);
+        return;
+      }
       persist((previous) => {
         const base = tokenBindingMatches(previous, current) && !previous.tombstone ? previous : {};
         return {
@@ -115,12 +125,14 @@ export function createServerOAuthProvider(options: {
         return {
           ...base,
           binding: makeTokenBinding(current),
+          ...(stagedClientInformation ? { clientInformation: stagedClientInformation } : {}),
           tokens: asRecord(tokens),
           codeVerifier: undefined,
           origin: undefined,
           tombstone: undefined,
         };
       });
+      stagedClientInformation = undefined;
     },
     redirectToAuthorization(url) { ensureCurrent(); lastAuthorizationUrl = url.toString(); },
     saveCodeVerifier(value) { ensureCurrent(); verifier = value; },

@@ -34,11 +34,16 @@ const fakeManager = {
     this.last.set(id, status);
     return status;
   },
-  handleOAuthCallback: async (state: string) => {
+  async handleOAuthCallback(state: string) {
     if (state !== "good-state") throw new Error("MCP_OAUTH_STATE_INVALID");
-    return { provider: "runway", state: "connected" };
+    const status = { provider: "runway", state: "connected" };
+    this.last.set("runway", status);
+    return status;
   },
   reset: async () => undefined,
+  async refresh(id: string) { const status = { provider: id, state: "connected" }; this.last.set(id, status); return status; },
+  connectionIdentity: () => null,
+  attachSnapshotDiff: () => undefined,
   async disconnect(id: string) { const status = { provider: id, state: "disconnected" }; this.last.set(id, status); return status; },
 };
 
@@ -72,8 +77,15 @@ test("providers listing includes registry entries with per-provider status", asy
 test("connect returns 202 with authorizationUrl when auth is required", async () => withApp(async (base) => {
   const response = await fetch(`${base}/api/mcp/providers/runway/connect`, { method: "POST" });
   assert.equal(response.status, 202);
-  const body = await response.json() as { status: { authorizationUrl: string } };
+  const body = await response.json() as { ok: boolean; status: { authorizationUrl: string } };
+  assert.equal(body.ok, false);
   assert.match(body.status.authorizationUrl, /provider\.example/);
+}));
+
+test("unknown status returns canonical 404", async () => withApp(async (base) => {
+  const response = await fetch(`${base}/api/mcp/providers/unknown/status`);
+  assert.equal(response.status, 404);
+  assert.equal(((await response.json()) as { error: { code: string } }).error.code, "MCP_PROVIDER_UNKNOWN");
 }));
 
 test("callback validates params and state before any exchange", async () => withApp(async (base) => {

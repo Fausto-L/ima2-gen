@@ -104,14 +104,33 @@ Add activation cases for:
 | generation consumer | first submit call fails terminally | exactly one tool call and one error event; no replay/save |
 | action/upload consumer | init/upload/action call fails | exactly one failing tool call path; no automatic retry or billed fallback |
 
+## A-gate SDK 1.29 corrections (authoritative)
+
+These corrections override any broader wording above:
+
+- Bind runtime handlers and expected-close suppression to an exact published client/transport epoch, not only provider generation. Initialization candidates, callback transports, and replaced sessions cannot publish events.
+- SDK 1.29 retry exhaustion may emit terminal `onerror` without `onclose`; initialization failure may internally close. Tests must distinguish transient current-epoch error, terminal/retry-exhausted error, terminal close, and expected initialization/callback/refresh/disconnect/shutdown close.
+- Every published or reconnected session receives a new `{ generation, epoch }` opaque identity. `listTools` toolCount and snapshot attachment require the captured identity to remain exact-current.
+- One reconnect budget belongs to the exact epoch/transport. Consume it before one unref'd bounded-delay attempt; failed reconnect never recursively schedules. Explicit later Connect/Refresh starts a new epoch/budget.
+- Restore timeout is cancellation, not `Promise.race`: pass SDK timeout/max-total-timeout/AbortSignal where supported, invalidate generation, close transport, await settlement, then release one of two semaphore slots. User lifecycle intent and shutdown always win late restore completion.
+- Interactive mismatch keeps the old file byte-for-byte through registration and redirect. Stage new client registration in memory and atomically replace binding/client/tokens only after successful token exchange.
+- Complete final state mapping after snapshot ingest and a fresh `status()` read: connected 200/ok, auth_required 202, connecting 202, disconnected 409, offline 503, error 502; non-connected terminal responses use `ok:false`. Callback HTML follows the same mapping and only connected says success.
+- Start `server.close()` and `mcpConnectionManager.shutdown()` together, await both within the existing global three-second grace, give MCP two seconds internally, then close DB. Add bootstrap proof with active MCP work.
+- No billed replay means one ima2 host-level manager invocation. SDK's documented bounded 401/403 authentication resend may occur inside that call; transport/fetch tests distinguish the two layers.
+- Add activation tests for terminal `onerror` without close, initialization close suppression, stale epoch toolCount/snapshot rejection, restore versus user/shutdown races, both mismatch replacement stages, complete HTTP mapping, and active-request shutdown.
+- Pinned SDK 1.29 terminal-error rule is an exact version-owned allowlist: only `error.message.startsWith("Maximum reconnection attempts (")` is retry-exhausted terminal; other transport `onerror` events remain transient until `onclose` or a manager operation proves terminal. A contract test pins this SDK string so an upgrade fails visibly instead of silently changing state semantics.
+- Split epoch/event/reconnect primitives into new `lib/mcp/connectionRuntime.ts` and shutdown grace coordination into new `lib/mcp/shutdown.ts`; keep `connectionManager.ts` below 500 lines. Add both modules to scoped diff checks.
+- Add `lib/mcp/oauthProvider.ts` and `tests/mcp-token-store.test.ts` to WP2 write/verification scope for staged-registration and token-exchange-only mismatch replacement.
+- Export a small `shutdownServerAndMcp()` coordinator from `lib/mcp/shutdown.ts`; `server.ts` calls it, and `tests/runtime-ports.test.ts` proves server accept-stop and MCP close start concurrently and both settle before DB-close continuation.
+
 ## Verification
 
 ```bash
 npm run typecheck
 npm run typecheck:tests
-node --test --import tsx tests/mcp-connection-manager.test.ts tests/mcp-connection-routes.test.ts tests/models-endpoint-contract.test.ts tests/mcp-generation-integration.test.ts tests/mcp-media-action.test.ts tests/runtime-ports.test.ts tests/runtime-context-normalize.test.ts
+node --test --import tsx tests/mcp-token-store.test.ts tests/mcp-connection-manager.test.ts tests/mcp-connection-routes.test.ts tests/models-endpoint-contract.test.ts tests/mcp-generation-integration.test.ts tests/mcp-media-action.test.ts tests/runtime-ports.test.ts tests/runtime-context-normalize.test.ts
 npm run test:inventory
-git diff --check -- lib/mcp/connectionManager.ts routes/mcpConnections.ts server.ts tests/mcp-connection-manager.test.ts tests/mcp-connection-routes.test.ts tests/models-endpoint-contract.test.ts tests/mcp-generation-integration.test.ts tests/mcp-media-action.test.ts tests/runtime-ports.test.ts
+git diff --check -- lib/mcp/connectionManager.ts lib/mcp/connectionRuntime.ts lib/mcp/shutdown.ts lib/mcp/oauthProvider.ts routes/mcpConnections.ts server.ts tests/mcp-token-store.test.ts tests/mcp-connection-manager.test.ts tests/mcp-connection-routes.test.ts tests/models-endpoint-contract.test.ts tests/mcp-generation-integration.test.ts tests/mcp-media-action.test.ts tests/runtime-ports.test.ts
 ```
 
 ## Exit criteria

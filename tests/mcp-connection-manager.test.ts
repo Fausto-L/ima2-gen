@@ -31,16 +31,20 @@ function tempDir(t: TestContext): string {
 }
 
 function makeHarness(t: TestContext, options: {
-  connects?: Array<(transport: FakeTransport) => Promise<void>>;
+  connects?: Array<(transport: FakeTransport, options?: { signal?: AbortSignal }) => Promise<void>>;
   now?: () => number;
   pendingAuthTtlMs?: number;
   enabledProviders?: string[];
   finishAuth?: (transport: FakeTransport, code: string) => Promise<void>;
   closeTransport?: (transport: FakeTransport) => Promise<void>;
+  restoreTimeoutMs?: number;
+  reconnectDelayMs?: number;
+  callTool?: () => Promise<Record<string, unknown>>;
 } = {}) {
   const dir = tempDir(t);
   const transports: FakeTransport[] = [];
   const providers: ServerOAuthProvider[] = [];
+  const clients: Array<{ onerror?: (error: Error) => void; onclose?: () => void }> = [];
   const attemptWaiters = new Map<number, () => void>();
   let connectAttempts = 0;
   const manager = new McpConnectionManager({
@@ -49,6 +53,8 @@ function makeHarness(t: TestContext, options: {
     getOrigin: () => "http://localhost:4545",
     ...(options.now ? { now: options.now } : {}),
     ...(options.pendingAuthTtlMs ? { pendingAuthTtlMs: options.pendingAuthTtlMs } : {}),
+    ...(options.restoreTimeoutMs ? { restoreTimeoutMs: options.restoreTimeoutMs } : {}),
+    ...(options.reconnectDelayMs !== undefined ? { reconnectDelayMs: options.reconnectDelayMs } : {}),
     transportFactory: (_endpoint, authProvider) => {
       providers.push(authProvider);
       const transport: FakeTransport = {
@@ -70,25 +76,28 @@ function makeHarness(t: TestContext, options: {
     },
     clientFactory: () => {
       const index = connectAttempts;
-      return {
-        async connect(transport: FakeTransport) {
+      const client = {
+        async connect(transport: FakeTransport, requestOptions?: { signal?: AbortSignal }) {
           connectAttempts += 1;
           attemptWaiters.get(connectAttempts)?.();
           attemptWaiters.delete(connectAttempts);
           const behavior = options.connects?.[index];
-          if (behavior) await behavior(transport);
+          if (behavior) await behavior(transport, requestOptions);
         },
         async listTools(params: { cursor?: string }) {
           if (!params.cursor) return { tools: [{ name: "a" }, { name: "b" }], nextCursor: "p2" };
           return { tools: [{ name: "c" }] };
         },
-      } as never;
+        async callTool() { return options.callTool ? options.callTool() : {}; },
+      };
+      clients.push(client as unknown as (typeof clients)[number]);
+      return client as never;
     },
   });
   const waitForAttempt = (attempt: number) => connectAttempts >= attempt
     ? Promise.resolve()
     : new Promise<void>((resolve) => attemptWaiters.set(attempt, resolve));
-  return { manager, dir, transports, providers, attempts: () => connectAttempts, waitForAttempt };
+  return { manager, dir, transports, providers, clients, attempts: () => connectAttempts, waitForAttempt };
 }
 
 function pendingState(manager: McpConnectionManager): string {
@@ -347,4 +356,122 @@ test("listTools still paginates after lifecycle hardening", async (t) => {
   await h.manager.connect("runway");
   const listing = await h.manager.listTools("runway");
   assert.deepEqual(listing.tools.map((tool) => tool.name), ["a", "b", "c"]);
+});
+
+test("startup restore connects one same-binding stored grant without opening authorization", async (t) => {
+  const h = makeHarness(t);
+  writeTokenRecord(h.dir, "runway", {
+    schemaVersion: 1,
+    revision: 1,
+    binding: {
+      provider: "runway",
+      endpoint: "https://mcp.runwayml.com/mcp",
+      redirectOrigin: "http://localhost:4545",
+      updatedAt: "2026-07-17T00:00:00.000Z",
+    },
+    tokens: { access_token: "stored-token" },
+  });
+  await h.manager.restoreStoredConnections();
+  assert.equal(h.attempts(), 1);
+  assert.equal(h.manager.status("runway").state, "connected");
+  assert.equal(h.providers[0].lastAuthorizationUrl, null);
+});
+
+test("passive restore preserves binding mismatch and performs no network", async (t) => {
+  const h = makeHarness(t);
+  writeTokenRecord(h.dir, "runway", {
+    schemaVersion: 1,
+    revision: 1,
+    binding: {
+      provider: "runway",
+      endpoint: "https://old.example/mcp",
+      redirectOrigin: "http://localhost:4545",
+      updatedAt: "2026-07-17T00:00:00.000Z",
+    },
+    tokens: { access_token: "stored-token" },
+  });
+  await h.manager.restoreStoredConnections();
+  assert.equal(h.attempts(), 0);
+  assert.equal(h.manager.status("runway").state, "auth_required");
+  assert.ok(readTokenRecord(h.dir, "runway")?.tokens);
+});
+
+test("restore timeout aborts, invalidates, and closes its candidate", async (t) => {
+  const h = makeHarness(t, {
+    restoreTimeoutMs: 5,
+    connects: [async (_transport, options) => new Promise<void>((_resolve, reject) => {
+      options?.signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+    })],
+  });
+  writeTokenRecord(h.dir, "runway", {
+    schemaVersion: 1, revision: 1,
+    binding: { provider: "runway", endpoint: "https://mcp.runwayml.com/mcp", redirectOrigin: "http://localhost:4545", updatedAt: "2026-07-17T00:00:00.000Z" },
+    tokens: { access_token: "stored" },
+  });
+  await h.manager.restoreStoredConnections();
+  assert.equal(h.manager.status("runway").state, "disconnected");
+  assert.ok(h.transports[0].closeCalls >= 1);
+});
+
+test("explicit Connect aborts an in-flight restore and wins with a new generation", async (t) => {
+  const h = makeHarness(t, { connects: [async (_transport, options) => new Promise<void>((_resolve, reject) => {
+    options?.signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+  })] });
+  writeTokenRecord(h.dir, "runway", {
+    schemaVersion: 1, revision: 1,
+    binding: { provider: "runway", endpoint: "https://mcp.runwayml.com/mcp", redirectOrigin: "http://localhost:4545", updatedAt: "2026-07-17T00:00:00.000Z" },
+    tokens: { access_token: "stored" },
+  });
+  const restore = h.manager.restoreStoredConnections();
+  await h.waitForAttempt(1);
+  const connected = await h.manager.connect("runway");
+  await restore;
+  assert.equal(connected.state, "connected");
+  assert.equal(h.attempts(), 2);
+});
+
+test("SDK terminal onerror goes offline and schedules one reconnect; transient error stays connected", async (t) => {
+  const h = makeHarness(t, { reconnectDelayMs: 0 });
+  await h.manager.connect("runway");
+  h.clients[0].onerror?.(new Error("temporary stream issue"));
+  assert.equal(h.manager.status("runway").state, "connected");
+  assert.equal(h.manager.status("runway").detail, "MCP_TRANSPORT_DEGRADED");
+  h.clients[0].onerror?.(new Error("Maximum reconnection attempts (2) exceeded."));
+  assert.equal(h.manager.status("runway").state, "offline");
+  await h.waitForAttempt(2);
+  assert.equal(h.attempts(), 2);
+});
+
+test("shutdown closes live resources once and retains stored tokens", async (t) => {
+  const h = makeHarness(t);
+  writeTokenRecord(h.dir, "runway", { origin: "http://localhost:4545", tokens: { access_token: "stored" } });
+  await h.manager.connect("runway");
+  await h.manager.shutdown();
+  assert.ok(h.transports[0].closeCalls >= 1);
+  assert.ok(readTokenRecord(h.dir, "runway")?.tokens);
+  await assert.rejects(() => h.manager.connect("runway"), /MCP_SHUTTING_DOWN/);
+  await assert.rejects(() => h.manager.refresh("runway"), /MCP_SHUTTING_DOWN/);
+});
+
+test("unexpected close reconnects once while expected reset close stays disconnected", async (t) => {
+  const h = makeHarness(t, { reconnectDelayMs: 0 });
+  await h.manager.connect("runway");
+  h.clients[0].onclose?.();
+  assert.equal(h.manager.status("runway").state, "offline");
+  await h.waitForAttempt(2);
+  await h.manager.reset("runway");
+  h.clients[1].onclose?.();
+  assert.equal(h.manager.status("runway").state, "disconnected");
+  assert.equal(h.attempts(), 2);
+});
+
+test("stale callTool failure cannot mark a newer epoch offline", async (t) => {
+  const callGate = deferred();
+  const h = makeHarness(t, { callTool: async () => { await callGate.promise; throw new UnauthorizedError("Unauthorized"); } });
+  await h.manager.connect("runway");
+  const oldCall = h.manager.callTool("runway", "x", {});
+  await h.manager.refresh("runway");
+  callGate.resolve();
+  await assert.rejects(() => oldCall, /Unauthorized/);
+  assert.equal(h.manager.status("runway").state, "connected");
 });

@@ -26,6 +26,7 @@ async function ingestAfterConnect(
   provider: string,
 ): Promise<void> {
   try {
+    const identity = manager.connectionIdentity(provider);
     const listing = await manager.listTools(provider);
     const { diff } = await ingestLiveTools({
       listing,
@@ -33,11 +34,24 @@ async function ingestAfterConnect(
       entitlementTag: "user-oauth-account",
       snapshotDir: ctx.config.mcp.snapshotDir,
       packageRoot: ctx.config.storage.packageRoot,
+      isCurrent: () => {
+        const current = manager.connectionIdentity(provider);
+        return Boolean(identity && current && identity.generation === current.generation && identity.epoch === current.epoch);
+      },
     });
-    manager.attachSnapshotDiff(provider, diff);
+    manager.attachSnapshotDiff(provider, identity, diff);
   } catch {
     /* snapshot ingest is best-effort; connection status remains authoritative */
   }
+}
+
+function httpForState(state: ReturnType<McpConnectionManager["status"]>["state"]): number {
+  const codes = { connected: 200, auth_required: 202, connecting: 202, disconnected: 409, offline: 503, error: 502 } as const;
+  return codes[state];
+}
+
+function sendConnectionStatus(res: Response, status: ReturnType<McpConnectionManager["status"]>) {
+  return res.status(httpForState(status.state)).json({ ok: status.state === "connected", status });
 }
 
 export function registerMcpConnectionRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
@@ -63,7 +77,11 @@ export function registerMcpConnectionRoutes(app: Express, ctxRaw: RouteRuntimeCo
   });
 
   app.get("/api/mcp/providers/:id/status", (req: Request, res: Response) => {
-    res.json({ ok: true, status: manager.status(String(req.params.id)) });
+    const id = String(req.params.id);
+    const descriptor = listProviders(ctx.config.mcp.enabledProviders).find((entry) => entry.id === id);
+    if (!descriptor) return typedError(res, 404, "MCP_PROVIDER_UNKNOWN", "Unknown MCP provider");
+    if (!descriptor.enabled) return typedError(res, 409, "MCP_PROVIDER_DISABLED", "MCP provider is disabled");
+    res.json({ ok: true, status: manager.status(id) });
   });
 
   // 040 — provider model catalog. Read-only: the resolver can only ever call
@@ -103,7 +121,7 @@ export function registerMcpConnectionRoutes(app: Express, ctxRaw: RouteRuntimeCo
     try {
       const status = await manager.connect(String(req.params.id));
       if (status.state === "connected") await ingestAfterConnect(manager, ctx, String(req.params.id));
-      res.status(status.state === "auth_required" ? 202 : 200).json({ ok: true, status: manager.status(String(req.params.id)) });
+      sendConnectionStatus(res, manager.status(String(req.params.id)));
     } catch (error) {
       typedError(res, 400, errorCode(error), "MCP connect failed");
     }
@@ -116,7 +134,9 @@ export function registerMcpConnectionRoutes(app: Express, ctxRaw: RouteRuntimeCo
     try {
       const status = await manager.handleOAuthCallback(state, code);
       if (status.state === "connected") await ingestAfterConnect(manager, ctx, status.provider);
-      res.type("html").send(`<h2>ima2: ${status.provider} 연결 완료. 이 창은 닫아도 됩니다.</h2>`);
+      const final = manager.status(status.provider);
+      if (final.state !== "connected") return res.status(httpForState(final.state)).type("html").send(`<h2>ima2: 연결을 완료하지 못했습니다.</h2>`);
+      res.type("html").send(`<h2>ima2: ${final.provider} 연결 완료. 이 창은 닫아도 됩니다.</h2>`);
     } catch (error) {
       typedError(res, 400, errorCode(error), "OAuth callback rejected");
     }
@@ -124,10 +144,9 @@ export function registerMcpConnectionRoutes(app: Express, ctxRaw: RouteRuntimeCo
 
   app.post("/api/mcp/providers/:id/refresh", async (req: Request, res: Response) => {
     try {
-      await manager.reset(String(req.params.id));
-      const status = await manager.connect(String(req.params.id));
+      const status = await manager.refresh(String(req.params.id));
       if (status.state === "connected") await ingestAfterConnect(manager, ctx, String(req.params.id));
-      res.json({ ok: true, status: manager.status(String(req.params.id)) });
+      sendConnectionStatus(res, manager.status(String(req.params.id)));
     } catch (error) {
       typedError(res, 400, errorCode(error), "MCP refresh failed");
     }
