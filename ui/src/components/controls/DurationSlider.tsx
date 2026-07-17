@@ -43,6 +43,7 @@ export function DurationSlider({ values, value, defaultValue, onChange, allowAut
           <button
             type="button"
             className={`option-btn ctl-duration__auto${isAuto ? " active" : ""}`}
+            aria-pressed={isAuto}
             disabled={disabled}
             onClick={() => onChange(null)}
           >

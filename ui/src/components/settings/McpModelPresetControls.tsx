@@ -88,7 +88,7 @@ function PresetRow({ parameter, value, disabled, onChange }: {
       <div className="section-title">{label}</div>
       <div className="mcp-preset-row__options" role="group" aria-label={label}>
         {!parameter.required ? (
-          <button type="button" className={`option-btn${value === undefined ? " active" : ""}`} disabled={disabled} onClick={() => onChange(null)}>
+          <button type="button" className={`option-btn${value === undefined ? " active" : ""}`} aria-pressed={value === undefined} disabled={disabled} onClick={() => onChange(null)}>
             {t("size.autoLabel")}
           </button>
         ) : null}
@@ -97,6 +97,7 @@ function PresetRow({ parameter, value, disabled, onChange }: {
             key={`${typeof option}:${String(option)}`}
             type="button"
             className={`option-btn${value === option ? " active" : ""}`}
+            aria-pressed={value === option}
             disabled={disabled}
             onClick={() => onChange(option)}
             title={parameter.description}
@@ -141,8 +142,8 @@ export function McpModelPresetControls({ entry, ratio, parameters, disabled, onR
         <div className="mcp-preset-row">
           <div className="section-title">{t("mcp.aspectRatioLabel")}</div>
           <div className="mcp-preset-row__options" role="group" aria-label={t("mcp.aspectRatioLabel")}>
-            <button type="button" className={`option-btn${ratio === null ? " active" : ""}`} disabled={disabled} onClick={() => onRatio(null)}>{t("size.autoLabel")}</button>
-            {ratios.map((value) => <button key={value} type="button" className={`option-btn${ratio === value ? " active" : ""}`} disabled={disabled} onClick={() => onRatio(value)}>{value}</button>)}
+            <button type="button" className={`option-btn${ratio === null ? " active" : ""}`} aria-pressed={ratio === null} disabled={disabled} onClick={() => onRatio(null)}>{t("size.autoLabel")}</button>
+            {ratios.map((value) => <button key={value} type="button" className={`option-btn${ratio === value ? " active" : ""}`} aria-pressed={ratio === value} disabled={disabled} onClick={() => onRatio(value)}>{value}</button>)}
           </div>
         </div>
       ) : null}

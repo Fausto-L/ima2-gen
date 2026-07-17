@@ -178,6 +178,24 @@
   background: var(--red);
 }
 
+.mcp-catalog-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.mcp-catalog-state .settings-action-btn {
+  flex: 0 0 auto;
+}
+
+.settings-action-btn[aria-busy="true"] {
+  cursor: progress;
+}
+
 /* Settings-scoped kit sizing (worker test contract: .settings-row__control .ctl-select) */
 .settings-row__control .ctl-select {
   min-width: 220px;

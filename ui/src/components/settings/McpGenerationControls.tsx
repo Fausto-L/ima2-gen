@@ -35,7 +35,8 @@ export function McpGenerationControls({ record }: { record: McpProviderRecord | 
   const storedMcpParameters = useAppStore((s) => s.mcpParameters);
   const mcpParameters = storedMcpParameters ?? EMPTY_PARAMETERS;
   const [catalog, setCatalog] = useState<McpModelCatalog>(EMPTY_CATALOG);
-  const [catalogFailed, setCatalogFailed] = useState(false);
+  const [catalogState, setCatalogState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [catalogRetryToken, setCatalogRetryToken] = useState(0);
 
   const locked = mcpProvider === "higgsfield";
   const connected = record?.status.state === "connected";
@@ -44,23 +45,27 @@ export function McpGenerationControls({ record }: { record: McpProviderRecord | 
     // Catalog browsing is allowed while generation is locked (040).
     if (!mcpProvider || !connected) {
       setCatalog(EMPTY_CATALOG);
+      setCatalogState("idle");
       return;
     }
     const controller = new AbortController();
-    setCatalogFailed(false);
+    setCatalog(EMPTY_CATALOG);
+    setCatalogState("loading");
     void getMcpModelCatalog(mcpProvider, controller.signal)
       .then((next) => {
-        if (!controller.signal.aborted) setCatalog(next);
+        if (controller.signal.aborted) return;
+        setCatalog(next);
+        setCatalogState("ready");
       })
       .catch((cause) => {
         if ((cause as { name?: string }).name === "AbortError") return;
         if (!controller.signal.aborted) {
           setCatalog(EMPTY_CATALOG);
-          setCatalogFailed(true);
+          setCatalogState("error");
         }
       });
     return () => controller.abort();
-  }, [mcpProvider, connected]);
+  }, [mcpProvider, connected, catalogRetryToken]);
 
   if (!mcpProvider) return null;
 
@@ -95,6 +100,7 @@ export function McpGenerationControls({ record }: { record: McpProviderRecord | 
               <button
                 type="button"
                 className={`option-btn${mcpMediaKind === "image" ? " active" : ""}`}
+                aria-pressed={mcpMediaKind === "image"}
                 onClick={() => setKind("image")}
               >
                 {t("grokMode.image")}
@@ -102,6 +108,7 @@ export function McpGenerationControls({ record }: { record: McpProviderRecord | 
               <button
                 type="button"
                 className={`option-btn${mcpMediaKind === "video" ? " active" : ""}`}
+                aria-pressed={mcpMediaKind === "video"}
                 onClick={() => setKind("video")}
               >
                 {t("grokMode.video")}
@@ -110,8 +117,22 @@ export function McpGenerationControls({ record }: { record: McpProviderRecord | 
           </div>
           <div className="option-group">
             <div className="section-title">{t("mcp.modelSectionTitle")}</div>
-            {catalogFailed ? <p className="option-help">{t("mcp.modelsLoadFailed")}</p> : null}
-            {selectedEntry ? (
+            {catalogState === "loading" ? (
+              <p className="option-help" role="status">{t("mcp.loadingModels")}</p>
+            ) : catalogState === "error" ? (
+              <div className="mcp-catalog-state" role="alert">
+                <span>{t("mcp.modelsLoadFailed")}</span>
+                <button
+                  type="button"
+                  className="settings-action-btn"
+                  onClick={() => setCatalogRetryToken((value) => value + 1)}
+                >
+                  {t("mcp.retryModels")}
+                </button>
+              </div>
+            ) : catalogState === "ready" && models.length === 0 ? (
+              <p className="option-help">{t("mcp.noModels")}</p>
+            ) : selectedEntry ? (
               <>
                 <div className="mcp-selected-model">
                   <strong>{selectedEntry.label}</strong>

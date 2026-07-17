@@ -23,11 +23,22 @@ function diffCount(provider: McpProviderRecord): number {
 export function McpProviderConnections() {
   const { t } = useI18n();
   const { providers, loading, error, refresh } = useMcpProviders();
-  const [busyProvider, setBusyProvider] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<{ provider: string; action: "connect" | "refresh" | "disconnect" } | null>(null);
+  const [listRefreshBusy, setListRefreshBusy] = useState(false);
   const [actionError, setActionError] = useState<{ provider: string; message: string } | null>(null);
 
+  const runListRefresh = async () => {
+    if (listRefreshBusy) return;
+    setListRefreshBusy(true);
+    try {
+      await refresh();
+    } finally {
+      setListRefreshBusy(false);
+    }
+  };
+
   const runAction = async (provider: McpProviderRecord, action: "connect" | "refresh" | "disconnect") => {
-    setBusyProvider(provider.id);
+    setBusyAction({ provider: provider.id, action });
     setActionError(null);
     try {
       if (action === "connect") await connectMcpProvider(provider.id);
@@ -40,7 +51,7 @@ export function McpProviderConnections() {
         : t("mcp.connectionActionFailed");
       setActionError({ provider: provider.id, message });
     } finally {
-      setBusyProvider(null);
+      setBusyAction(null);
     }
   };
 
@@ -52,20 +63,27 @@ export function McpProviderConnections() {
           <p>{t("mcp.connectionsBody")}</p>
         </div>
         <div className="settings-row__control">
-          <button type="button" className="settings-action-btn" onClick={() => void refresh()} disabled={loading}>
-            {loading ? t("mcp.loadingProviders") : t("mcp.refreshList")}
+          <button
+            type="button"
+            className="settings-action-btn"
+            onClick={() => void runListRefresh()}
+            disabled={loading || listRefreshBusy}
+            aria-busy={loading || listRefreshBusy}
+          >
+            {loading || listRefreshBusy ? t("mcp.loadingProviders") : t("mcp.refreshList")}
           </button>
         </div>
       </article>
 
-      {error && providers.length === 0 ? (
+      {error ? (
         <p role="alert" className="settings-row__microcopy">{t("mcp.providersLoadFailed")}</p>
       ) : null}
 
       {providers.map((provider) => {
         const state = provider.status.state;
         const locked = provider.id === "higgsfield" || !provider.enabled;
-        const busy = busyProvider === provider.id;
+        const activeAction = busyAction?.provider === provider.id ? busyAction.action : null;
+        const busy = activeAction !== null;
         const changes = diffCount(provider);
         return (
           <article className="provider-card" key={provider.id}>
@@ -107,14 +125,16 @@ export function McpProviderConnections() {
                     className="settings-action-btn"
                     onClick={() => void runAction(provider, "refresh")}
                     disabled={busy}
+                    aria-busy={activeAction === "refresh"}
                   >
-                    {t("mcp.refreshConnection")}
+                    {activeAction === "refresh" ? t("mcp.refreshingConnection") : t("mcp.refreshConnection")}
                   </button>
                   <button
                     type="button"
                     className="settings-action-btn settings-action-btn--danger"
                     onClick={() => void runAction(provider, "disconnect")}
                     disabled={busy}
+                    aria-busy={activeAction === "disconnect"}
                   >
                     {t("mcp.disconnect")}
                   </button>
@@ -125,9 +145,10 @@ export function McpProviderConnections() {
                   className="settings-action-btn"
                   onClick={() => void runAction(provider, "connect")}
                   disabled={busy || locked}
+                  aria-busy={activeAction === "connect"}
                   title={locked ? t("mcp.higgsfieldLocked") : t("mcp.connectOpensBrowser")}
                 >
-                  {busy ? t("mcp.connecting") : t("mcp.connect")}
+                  {activeAction === "connect" ? t("mcp.connecting") : t("mcp.connect")}
                 </button>
               )}
             </div>

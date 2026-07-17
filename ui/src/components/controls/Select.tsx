@@ -90,6 +90,7 @@ export function Select<V extends string>({
   const [open, setOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<MenuPos>({ top: 0, left: 0, width: 200, maxHeight: 260 });
   const { flat, rendered } = flattenGroups(groups, items);
+  const isEmpty = flat.length === 0;
   const [activeIndex, setActiveIndex] = useState(() =>
     Math.max(0, flat.findIndex((it) => it.value === value)),
   );
@@ -170,9 +171,16 @@ export function Select<V extends string>({
   }, [open, activeIndex]);
 
   const openList = () => {
+    if (isEmpty) return;
     setActiveIndex(Math.max(0, flat.findIndex((it) => it.value === value)));
     setOpen(true);
   };
+
+  useEffect(() => {
+    if (!isEmpty) return;
+    setOpen(false);
+    setActiveIndex(0);
+  }, [isEmpty]);
 
   const move = (step: number) => {
     let next = activeIndex;
@@ -232,7 +240,7 @@ export function Select<V extends string>({
   };
 
   let flatIndex = -1;
-  const list = open ? (
+  const list = open && !isEmpty ? (
     <ul
       className={`ctl-select__list${portal ? " ctl-select__list--portal" : ""}`}
       role="listbox"
@@ -292,10 +300,10 @@ export function Select<V extends string>({
         role="combobox"
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-controls={listId}
-        aria-activedescendant={open ? optionId(activeIndex) : undefined}
+        aria-controls={open ? listId : undefined}
+        aria-activedescendant={open && flat[activeIndex] ? optionId(activeIndex) : undefined}
         aria-label={ariaLabel}
-        disabled={disabled}
+        disabled={disabled || isEmpty}
         title={title}
         onClick={() => (open ? setOpen(false) : openList())}
         onKeyDown={onKeyDown}
