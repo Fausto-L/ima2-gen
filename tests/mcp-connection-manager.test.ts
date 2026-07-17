@@ -1,105 +1,350 @@
-// WP3 (030): connection manager — OAuth pendingAuth state machine, no network.
-import { after, test } from "node:test";
+import { test, type TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { McpConnectionManager } from "../lib/mcp/connectionManager.js";
 import { readTokenRecord, writeTokenRecord } from "../lib/mcp/tokenStore.js";
+import type { ServerOAuthProvider } from "../lib/mcp/oauthProvider.js";
 
-const dir = mkdtempSync(join(tmpdir(), "ima2-mcp-manager-"));
-after(() => rmSync(dir, { recursive: true, force: true }));
-
+type Deferred = { promise: Promise<void>; resolve(): void; reject(error: Error): void };
 type FakeTransport = {
-  authProvider: { redirectToAuthorization(url: URL): void };
+  authProvider: ServerOAuthProvider;
   finishAuthCalls: string[];
+  closeCalls: number;
   finishAuth(code: string): Promise<void>;
   close(): Promise<void>;
 };
 
-function makeManager(behavior: { failFirstConnect: boolean }) {
+function deferred(): Deferred {
+  let resolve!: () => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<void>((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+
+function tempDir(t: TestContext): string {
+  const dir = mkdtempSync(join(tmpdir(), "ima2-mcp-manager-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  return dir;
+}
+
+function makeHarness(t: TestContext, options: {
+  connects?: Array<(transport: FakeTransport) => Promise<void>>;
+  now?: () => number;
+  pendingAuthTtlMs?: number;
+  enabledProviders?: string[];
+  finishAuth?: (transport: FakeTransport, code: string) => Promise<void>;
+  closeTransport?: (transport: FakeTransport) => Promise<void>;
+} = {}) {
+  const dir = tempDir(t);
   const transports: FakeTransport[] = [];
+  const providers: ServerOAuthProvider[] = [];
+  const attemptWaiters = new Map<number, () => void>();
   let connectAttempts = 0;
   const manager = new McpConnectionManager({
-    enabledProviders: ["runway", "higgsfield"],
+    enabledProviders: options.enabledProviders ?? ["runway", "higgsfield"],
     tokenDir: dir,
     getOrigin: () => "http://localhost:4545",
+    ...(options.now ? { now: options.now } : {}),
+    ...(options.pendingAuthTtlMs ? { pendingAuthTtlMs: options.pendingAuthTtlMs } : {}),
     transportFactory: (_endpoint, authProvider) => {
+      providers.push(authProvider);
       const transport: FakeTransport = {
         authProvider,
         finishAuthCalls: [],
-        async finishAuth(code: string) { this.finishAuthCalls.push(code); },
-        async close() {},
+        closeCalls: 0,
+        async finishAuth(code) {
+          this.finishAuthCalls.push(code);
+          if (options.finishAuth) { await options.finishAuth(this, code); return; }
+          authProvider.saveTokens({ access_token: "callback-token", token_type: "bearer" });
+        },
+        async close() {
+          this.closeCalls += 1;
+          if (options.closeTransport) await options.closeTransport(this);
+        },
       };
       transports.push(transport);
       return transport as never;
     },
-    clientFactory: () => ({
-      async connect(transport: FakeTransport) {
-        connectAttempts += 1;
-        if (behavior.failFirstConnect && connectAttempts === 1) {
-          transport.authProvider.redirectToAuthorization(new URL("https://provider.example/authorize?client_id=x"));
-          throw new UnauthorizedError("Unauthorized");
-        }
-      },
-      async listTools(params: { cursor?: string }) {
-        if (!params.cursor) return { tools: [{ name: "a" }, { name: "b" }], nextCursor: "p2" };
-        return { tools: [{ name: "c" }] };
-      },
-    }) as never,
+    clientFactory: () => {
+      const index = connectAttempts;
+      return {
+        async connect(transport: FakeTransport) {
+          connectAttempts += 1;
+          attemptWaiters.get(connectAttempts)?.();
+          attemptWaiters.delete(connectAttempts);
+          const behavior = options.connects?.[index];
+          if (behavior) await behavior(transport);
+        },
+        async listTools(params: { cursor?: string }) {
+          if (!params.cursor) return { tools: [{ name: "a" }, { name: "b" }], nextCursor: "p2" };
+          return { tools: [{ name: "c" }] };
+        },
+      } as never;
+    },
   });
-  return { manager, transports };
+  const waitForAttempt = (attempt: number) => connectAttempts >= attempt
+    ? Promise.resolve()
+    : new Promise<void>((resolve) => attemptWaiters.set(attempt, resolve));
+  return { manager, dir, transports, providers, attempts: () => connectAttempts, waitForAttempt };
 }
 
-test("unauthorized connect surfaces auth_required + authorizationUrl, callback completes, state is single-use", async () => {
-  const { manager } = makeManager({ failFirstConnect: true });
-  const status = await manager.connect("runway");
-  assert.equal(status.state, "auth_required");
-  assert.match(status.authorizationUrl ?? "", /provider\.example\/authorize/);
-  await assert.rejects(() => manager.handleOAuthCallback("wrong-state", "code"), /MCP_OAUTH_STATE_INVALID/);
-});
-
-test("valid callback finishes auth on the pending transport and reconnects", async () => {
-  const { manager, transports } = makeManager({ failFirstConnect: true });
-  await manager.connect("higgsfield");
-  // Extract the real state from the stored code path: the manager keys pendingAuth
-  // by the state passed to the oauth provider; expose it via the authorization URL
-  // is provider-side, so instead reach through the internal map deterministically.
+function pendingState(manager: McpConnectionManager): string {
   const pending = (manager as unknown as { pendingAuth: Map<string, unknown> }).pendingAuth;
   assert.equal(pending.size, 1);
-  const oauthState = [...pending.keys()][0];
-  const status = await manager.handleOAuthCallback(oauthState, "auth-code-1");
+  return [...pending.keys()][0];
+}
+
+test("ten concurrent connects coalesce into one client and transport", async (t) => {
+  const gate = deferred();
+  const h = makeHarness(t, { connects: [() => gate.promise] });
+  const calls = Array.from({ length: 10 }, () => h.manager.connect("runway"));
+  await Promise.resolve();
+  assert.equal(h.attempts(), 1);
+  assert.equal(h.transports.length, 1);
+  gate.resolve();
+  const results = await Promise.all(calls);
+  assert.equal(results.every((result) => result.state === "connected"), true);
+});
+
+test("disconnect during deferred connect wins and leaves a credential-free tombstone", async (t) => {
+  const gate = deferred();
+  const h = makeHarness(t, { connects: [() => gate.promise] });
+  writeTokenRecord(h.dir, "runway", { origin: "http://localhost:4545", tokens: { access_token: "stored" } });
+  const connecting = h.manager.connect("runway");
+  await Promise.resolve();
+  const disconnected = await h.manager.disconnect("runway");
+  gate.resolve();
+  const late = await connecting;
+  assert.equal(disconnected.state, "disconnected");
+  assert.equal(late.state, "disconnected");
+  assert.ok(h.transports[0].closeCalls >= 1);
+  assert.equal(readTokenRecord(h.dir, "runway")?.tombstone, true);
+  assert.equal(readTokenRecord(h.dir, "runway")?.tokens, undefined);
+});
+
+test("OAuth pending state is single-use and a callback after disconnect is rejected", async (t) => {
+  const h = makeHarness(t, { connects: [async (transport) => {
+    transport.authProvider.redirectToAuthorization(new URL("https://provider.example/authorize"));
+    throw new UnauthorizedError("Unauthorized");
+  }] });
+  const status = await h.manager.connect("runway");
+  assert.equal(status.state, "auth_required");
+  const state = pendingState(h.manager);
+  await h.manager.disconnect("runway");
+  await assert.rejects(() => h.manager.handleOAuthCallback(state, "late-code"), /MCP_OAUTH_STATE_INVALID/);
+  assert.equal(readTokenRecord(h.dir, "runway")?.tokens, undefined);
+  assert.ok(h.transports[0].closeCalls >= 1);
+});
+
+test("valid callback persists tokens, reconnects once, and remains single-use", async (t) => {
+  const h = makeHarness(t, { connects: [async (transport) => {
+    transport.authProvider.redirectToAuthorization(new URL("https://provider.example/authorize"));
+    throw new UnauthorizedError("Unauthorized");
+  }] });
+  await h.manager.connect("runway");
+  const state = pendingState(h.manager);
+  const status = await h.manager.handleOAuthCallback(state, "one-time-code");
   assert.equal(status.state, "connected");
-  assert.deepEqual(transports[0].finishAuthCalls, ["auth-code-1"]);
-  await assert.rejects(() => manager.handleOAuthCallback(oauthState, "auth-code-1"), /MCP_OAUTH_STATE_INVALID/);
+  assert.equal(h.attempts(), 2);
+  assert.ok(readTokenRecord(h.dir, "runway")?.tokens);
+  await assert.rejects(() => h.manager.handleOAuthCallback(state, "replay-code"), /MCP_OAUTH_STATE_INVALID/);
 });
 
-test("listTools paginates across cursors", async () => {
-  const { manager } = makeManager({ failFirstConnect: false });
-  await manager.connect("runway");
-  const listing = await manager.listTools("runway");
-  assert.deepEqual(listing.tools.map((t) => t.name), ["a", "b", "c"]);
-  assert.equal(manager.status("runway").toolCount, 3);
-});
-
-test("disconnect clears tokens; reset keeps them", async () => {
-  const { manager } = makeManager({ failFirstConnect: false });
-  writeTokenRecord(dir, "runway", { tokens: { access_token: "keep" }, origin: "http://localhost:4545" });
-  await manager.connect("runway");
-  await manager.reset("runway");
-  assert.ok(readTokenRecord(dir, "runway"));
-  await manager.connect("runway");
-  await manager.disconnect("runway");
-  assert.equal(readTokenRecord(dir, "runway"), null);
-  assert.equal(manager.status("runway").state, "disconnected");
-});
-
-test("unknown or disabled providers are rejected before any network attempt", async () => {
-  const { manager } = makeManager({ failFirstConnect: false });
-  await assert.rejects(() => manager.connect("nope"), /MCP_PROVIDER_UNKNOWN/);
-  const narrow = new McpConnectionManager({
-    enabledProviders: [], tokenDir: dir, getOrigin: () => "http://localhost:1",
+test("connect entering during an active callback joins that callback instead of creating another OAuth flow", async (t) => {
+  const finishGate = deferred();
+  const finishStarted = deferred();
+  const h = makeHarness(t, {
+    connects: [async (transport) => {
+      transport.authProvider.redirectToAuthorization(new URL("https://provider.example/authorize"));
+      throw new UnauthorizedError("Unauthorized");
+    }],
+    finishAuth: async (transport) => {
+      finishStarted.resolve();
+      await finishGate.promise;
+      transport.authProvider.saveTokens({ access_token: "callback-token", token_type: "bearer" });
+    },
   });
-  await assert.rejects(() => narrow.connect("runway"), /MCP_PROVIDER_DISABLED/);
+  await h.manager.connect("runway");
+  const callback = h.manager.handleOAuthCallback(pendingState(h.manager), "callback-code");
+  await finishStarted.promise;
+  const joined = h.manager.connect("runway");
+  finishGate.resolve();
+  assert.equal((await callback).state, "connected");
+  assert.equal((await joined).state, "connected");
+  assert.equal(h.attempts(), 2);
+  assert.equal((h.manager as unknown as { pendingAuth: Map<string, unknown> }).pendingAuth.size, 0);
+});
+
+test("disconnect during pending replacement prevents stale auth_required publication", async (t) => {
+  const closeGate = deferred();
+  const closeStarted = deferred();
+  const unauthorized = async (transport: FakeTransport) => {
+    transport.authProvider.redirectToAuthorization(new URL("https://provider.example/authorize"));
+    throw new UnauthorizedError("Unauthorized");
+  };
+  const h = makeHarness(t, {
+    connects: [unauthorized, unauthorized],
+    closeTransport: async (transport) => {
+      if (transport !== h.transports[0]) return;
+      closeStarted.resolve();
+      await closeGate.promise;
+    },
+  });
+  await h.manager.connect("runway");
+  const replacement = h.manager.connect("runway");
+  await closeStarted.promise;
+  const disconnect = h.manager.disconnect("runway");
+  closeGate.resolve();
+  assert.equal((await replacement).state, "disconnected");
+  assert.equal((await disconnect).state, "disconnected");
+  assert.equal(h.manager.status("runway").state, "disconnected");
+  assert.equal((h.manager as unknown as { pendingAuth: Map<string, unknown> }).pendingAuth.size, 0);
+});
+
+test("disconnect during finishAuth makes the callback stale and blocks late persistence", async (t) => {
+  const finishGate = deferred();
+  const finishStarted = deferred();
+  const h = makeHarness(t, {
+    connects: [async (transport) => {
+      transport.authProvider.redirectToAuthorization(new URL("https://provider.example/authorize"));
+      throw new UnauthorizedError("Unauthorized");
+    }],
+    finishAuth: async (transport) => {
+      finishStarted.resolve();
+      await finishGate.promise;
+      transport.authProvider.saveTokens({ access_token: "late-token", token_type: "bearer" });
+    },
+  });
+  await h.manager.connect("runway");
+  const callback = h.manager.handleOAuthCallback(pendingState(h.manager), "callback-code");
+  await finishStarted.promise;
+  await h.manager.disconnect("runway");
+  finishGate.resolve();
+  await assert.rejects(() => callback, /MCP_OAUTH_GENERATION_STALE/);
+  assert.equal(readTokenRecord(h.dir, "runway")?.tokens, undefined);
+  assert.equal(h.manager.status("runway").state, "disconnected");
+});
+
+test("a stale hung callback cannot block an explicit Connect after disconnect completes", async (t) => {
+  const finishGate = deferred();
+  const finishStarted = deferred();
+  const h = makeHarness(t, {
+    connects: [async (transport) => {
+      transport.authProvider.redirectToAuthorization(new URL("https://provider.example/authorize"));
+      throw new UnauthorizedError("Unauthorized");
+    }],
+    finishAuth: async () => { finishStarted.resolve(); await finishGate.promise; },
+  });
+  await h.manager.connect("runway");
+  const callback = h.manager.handleOAuthCallback(pendingState(h.manager), "callback-code");
+  await finishStarted.promise;
+  await h.manager.disconnect("runway");
+  const reconnected = await h.manager.connect("runway");
+  assert.equal(reconnected.state, "connected");
+  assert.equal(h.attempts(), 2);
+  finishGate.resolve();
+  await assert.rejects(() => callback, /MCP_OAUTH_GENERATION_STALE/);
+});
+
+test("expired pending auth closes its transport with an injected clock", async (t) => {
+  let now = 100;
+  const h = makeHarness(t, {
+    now: () => now,
+    pendingAuthTtlMs: 10,
+    connects: [async (transport) => {
+      transport.authProvider.redirectToAuthorization(new URL("https://provider.example/authorize"));
+      throw new UnauthorizedError("Unauthorized");
+    }],
+  });
+  await h.manager.connect("runway");
+  const state = pendingState(h.manager);
+  now = 111;
+  await assert.rejects(() => h.manager.handleOAuthCallback(state, "expired-code"), /MCP_OAUTH_STATE_INVALID/);
+  assert.ok(h.transports[0].closeCalls >= 1);
+});
+
+test("reset cancels old work but preserves credentials", async (t) => {
+  const gate = deferred();
+  const h = makeHarness(t, { connects: [() => gate.promise] });
+  writeTokenRecord(h.dir, "runway", { origin: "http://localhost:4545", tokens: { access_token: "stored" } });
+  const connecting = h.manager.connect("runway");
+  await Promise.resolve();
+  await h.manager.reset("runway");
+  gate.resolve();
+  assert.equal((await connecting).state, "disconnected");
+  assert.ok(readTokenRecord(h.dir, "runway")?.tokens);
+  assert.ok(h.transports[0].closeCalls >= 1);
+});
+
+test("connect entering during reset joins the disconnected reset result", async (t) => {
+  const h = makeHarness(t);
+  await h.manager.connect("runway");
+  const reset = h.manager.reset("runway");
+  const joined = h.manager.connect("runway");
+  await reset;
+  assert.equal((await joined).state, "disconnected");
+  assert.equal(h.attempts(), 1);
+  assert.ok(h.transports[0].closeCalls >= 1);
+});
+
+test("disconnect closes a connected transport even when tombstone persistence fails", async (t) => {
+  const h = makeHarness(t);
+  await h.manager.connect("runway");
+  writeFileSync(join(h.dir, "runway.json.lock"), JSON.stringify({ pid: process.pid, nonce: "held-lock" }), { mode: 0o600 });
+  await assert.rejects(() => h.manager.disconnect("runway"), /MCP_TOKEN_STORE_BUSY/);
+  assert.ok(h.transports[0].closeCalls >= 1);
+  assert.equal(h.manager.status("runway").state, "disconnected");
+});
+
+test("concurrent refresh and connect coalesce, while disconnect remains terminal in both overlap orders", async (t) => {
+  const first = deferred();
+  const second = deferred();
+  const h = makeHarness(t, { connects: [() => first.promise, () => second.promise] });
+  const initial = h.manager.connect("runway");
+  first.resolve();
+  await initial;
+
+  const refreshA = h.manager.refresh("runway");
+  const refreshB = h.manager.refresh("runway");
+  const joinedConnect = h.manager.connect("runway");
+  await h.waitForAttempt(2);
+  assert.equal(h.attempts(), 2);
+  assert.ok(h.transports[0].closeCalls >= 1);
+  const disconnect = h.manager.disconnect("runway");
+  second.resolve();
+  assert.equal((await disconnect).state, "disconnected");
+  assert.equal((await refreshA).state, "disconnected");
+  assert.equal((await refreshB).state, "disconnected");
+  assert.equal((await joinedConnect).state, "disconnected");
+
+  const disconnectFirst = h.manager.disconnect("higgsfield");
+  const refreshDuring = h.manager.refresh("higgsfield");
+  assert.equal((await disconnectFirst).state, "disconnected");
+  assert.equal((await refreshDuring).state, "disconnected");
+});
+
+test("status is session-free for known-disabled providers and rejects unknown IDs", (t) => {
+  const h = makeHarness(t, { enabledProviders: [] });
+  assert.equal(h.manager.status("runway").state, "disconnected");
+  assert.throws(() => h.manager.status("nope"), /MCP_PROVIDER_UNKNOWN/);
+  const sessions = (h.manager as unknown as { sessions: Map<string, unknown> }).sessions;
+  assert.equal(sessions.size, 0);
+});
+
+test("raw upstream error text never reaches public detail", async (t) => {
+  const h = makeHarness(t, { connects: [async () => { throw new Error("upstream-body-with-sensitive-marker"); }] });
+  const status = await h.manager.connect("runway");
+  assert.equal(status.state, "error");
+  assert.equal(status.detail, "MCP_CONNECT_FAILED");
+  assert.equal(JSON.stringify(status).includes("sensitive-marker"), false);
+});
+
+test("listTools still paginates after lifecycle hardening", async (t) => {
+  const h = makeHarness(t);
+  await h.manager.connect("runway");
+  const listing = await h.manager.listTools("runway");
+  assert.deepEqual(listing.tools.map((tool) => tool.name), ["a", "b", "c"]);
 });

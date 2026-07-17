@@ -2,11 +2,17 @@
 // shapes may carry tokens, codes, or account data.
 
 export type McpConnectionState =
+  /** No live or pending transport is owned by this process. */
   | "disconnected"
+  /** One current-generation connect attempt is in flight. */
   | "connecting"
+  /** A current, single-use browser authorization is pending. */
   | "auth_required"
+  /** The current-generation client completed MCP initialization. */
   | "connected"
+  /** A previously connected transport closed; recovery is owned by WP2. */
   | "offline"
+  /** The current attempt failed with a secret-free diagnostic code. */
   | "error";
 
 export interface McpProviderInfo {
@@ -20,7 +26,7 @@ export interface McpConnectionStatus {
   state: McpConnectionState;
   /** Present only while an OAuth authorization is pending. */
   authorizationUrl?: string;
-  /** Secret-free diagnostic message. */
+  /** Allowlisted secret-free diagnostic code; never a raw upstream body. */
   detail?: string;
   toolCount?: number;
   connectedAt?: string;

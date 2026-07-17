@@ -2,7 +2,7 @@
 
 Date: 2026-07-17
 Class: C4 auth and credential lifecycle
-Status: WP0 docs-only; production code changes are forbidden in this cycle
+Status: WP1 implementation active after WP0 docs-only roadmap completion
 
 ## Objective
 
@@ -28,7 +28,7 @@ Make an authenticated MCP provider recover after an ima2 server restart without 
 ## Threat model
 
 - Protected assets: OAuth access/refresh tokens, dynamic client registration, PKCE verifier/state, account-bound provider session, and secret-free diagnostics.
-- Adversaries/failures: stale concurrent callbacks, a second local process, malformed OAuth errors, endpoint or callback-origin changes, remote transport interruption, and accidental log exposure.
+- Adversaries/failures: stale concurrent callbacks, a second local process sharing the token directory, malformed OAuth errors, endpoint or callback-origin changes, remote transport interruption, and accidental log exposure.
 - Trust boundaries: local browser ↔ callback route; ima2 ↔ remote MCP endpoint; token file ↔ in-memory OAuth provider; server lifecycle ↔ MCP Client/transport.
 - Blast radius: one provider account per local config directory; stale writes can restore access after the user chose Disconnect.
 
@@ -65,6 +65,6 @@ Each work phase runs one full PABCD cycle. WP1 must land before WP2; WP2 consume
 
 ## Evidence inputs
 
-- Baseline focused suite: 16 tests passed, 0 failed on 2026-07-17.
+- Baseline focused suite: 10 tests passed, 0 failed on 2026-07-17 (`mcp-token-store` 5 + `mcp-connection-manager` 5).
 - Read-only explorer: restart activation, lifecycle races, stale status, origin deletion, SDK invalidation, and shutdown gaps confirmed.
 - Three `gpt-5.6-sol/high/priority` audits independently confirmed credential persistence, missing startup restore, generation races, `onerror`/`onclose` separation, missing security tests, and unsynchronized source-of-truth docs.
