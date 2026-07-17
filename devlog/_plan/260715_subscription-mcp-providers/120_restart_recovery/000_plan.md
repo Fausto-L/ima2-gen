@@ -2,7 +2,7 @@
 
 Date: 2026-07-17
 Class: C4 auth and credential lifecycle
-Status: WP3 verification closeout active; WP0-WP2 implemented
+Status: completed — DONE (logical completion inside the active parent initiative)
 
 ## Objective
 
@@ -74,5 +74,10 @@ Each work phase runs one full PABCD cycle. WP1 must land before WP2; WP2 consume
 - WP1 `716fdbb`: versioned endpoint/origin binding, revision/tombstone CAS, PID+nonce recovery lock, memory-only PKCE, scoped SDK invalidation, and generation-safe single-flight lifecycle.
 - WP2 `53656b5`: post-listen restore, generation+epoch transport ownership, truthful state transitions and route status, one bounded terminal reconnect, stale snapshot/tool suppression, and coordinated shutdown.
 - WP3 blocker correction `4b15ec7`: explicit post-listen activation helper and regression proving restore is inert until `serverActualPort` is published.
-- Focused MCP suite before WP3 closeout: 135 passed, 0 failed; typechecks, inventory, scoped whitespace, and secret scan passed. Final clean-worktree full-suite and independent review are recorded only after fresh execution.
+- WP3 SOT `d4cc5bc`, `f7d24a7`: API, architecture, operations, parent roadmap, devlog map, and committed-tree line counts synchronized.
+- Final adversarial correction `a9b70e1`: malformed token bundles fail closed as corrupt; a post-connect Unauthorized/closed `tools/list` invalidates only the current epoch and produces truthful `offline`/503 instead of 200 connected.
+- Detached committed-tree evidence: MCP 138 passed, 0 failed; API/structure contracts 3/3; scoped whitespace exit 0; gitleaks scanned six recovery commits with 0 leaks.
+- Integrated worktree evidence: server and test typechecks exit 0, inventory exit 0, full suite 1659 passed, 0 failed after a temporary mechanical line-count refresh for unrelated in-progress files; the committed-tree line-count SOT was restored immediately afterward.
+- Final `gpt-5.6-sol/high/priority` review first found two blockers, then re-audited `a9b70e1` and returned `VERDICT: PASS`; no High/Critical finding remains.
 - Provider generation calls: 0. No publish or push is part of this unit.
+- Archive policy: keep `120_restart_recovery/` under the active `260715_subscription-mcp-providers` parent; move it only when the parent initiative closes.

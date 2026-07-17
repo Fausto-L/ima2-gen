@@ -103,7 +103,15 @@ Additional checks:
 
 ## Completion evidence
 
-Record exact commands, exit codes, test counts, activation observations, reviewer verdict, scoped commit IDs, and any pre-existing failures. Do not mark a criterion met from memory or a prior run.
+Completed 2026-07-17 with terminal outcome `DONE`.
+
+- Scoped commits: `716fdbb`, `53656b5`, `4b15ec7`, `d4cc5bc`, `f7d24a7`, `a9b70e1`.
+- Detached committed-tree activation: `node --test --import tsx tests/mcp-*.test.ts` → 138/138; same-binding startup restore connected once with no authorization URL; malformed token bundles, mismatched binding, terminal/transient transport events, post-connect auth failure, stale epochs, and concurrent shutdown all exercised with fakes.
+- Detached committed-tree docs: line-count refresh check plus API/structure contracts → 3/3; `git diff --check 716fdbb^..HEAD -- <manifest>` → exit 0; `gitleaks git --log-opts='716fdbb^..HEAD' --redact --no-banner` → 0 leaks.
+- Integrated worktree: `npm run typecheck`, `npm run typecheck:tests`, and `npm run test:inventory` → exit 0; full `npm test` → 1659/1659 after temporary mechanical line-count synchronization for unrelated in-progress source files. The temporary table update was reverted to the committed HEAD SOT after the run.
+- The detached HEAD cannot typecheck or pass inventory alone because other active work references uncommitted source files and an uncommitted inventory; those pre-existing files are outside this recovery manifest. The integrated worktree proves those repository-wide gates, while the detached worktree proves the exact recovery commits and docs.
+- Final Sol/high/priority review: initial `GO-WITH-FIXES` identified malformed token reuse and stale 200 after a failed tool probe; `a9b70e1` added fail-closed validation and current-epoch invalidation; re-review returned `VERDICT: PASS` with focused 41/41.
+- Paid/provider generation calls: 0. Push/publish: not performed.
 
 ## Exit criteria
 
