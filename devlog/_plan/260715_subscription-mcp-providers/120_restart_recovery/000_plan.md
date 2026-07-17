@@ -68,4 +68,3 @@ Each work phase runs one full PABCD cycle. WP1 must land before WP2; WP2 consume
 - Baseline focused suite: 16 tests passed, 0 failed on 2026-07-17.
 - Read-only explorer: restart activation, lifecycle races, stale status, origin deletion, SDK invalidation, and shutdown gaps confirmed.
 - Three `gpt-5.6-sol/high/priority` audits independently confirmed credential persistence, missing startup restore, generation races, `onerror`/`onclose` separation, missing security tests, and unsynchronized source-of-truth docs.
-

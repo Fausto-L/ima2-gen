@@ -67,4 +67,3 @@ Purpose: research record only; implementation diffs live in the decade documents
 - Existing focused tests cover sequential connect/callback/list/reset/disconnect and token atomicity only.
 - No fresh-manager restore, concurrent operation, stale callback, origin binding, scoped invalidation, transport callback, shutdown, or truthful-response activation test exists.
 - `structure/03-server-api.md`, `structure/06-infra-operations.md`, and `docs/API.md` do not describe startup restore or terminal recovery semantics.
-
