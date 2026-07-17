@@ -101,7 +101,7 @@ Out of scope and read-only: untracked `FavoriteStarButton.tsx`, `favorite-star.c
 | Source mismatch | Send an unknown source id or a source whose canonical path differs from the promoted ref | route rejects with a typed 400/404 envelope; no Element is created. |
 | Unsupported tile | Render an element, preset, template, or source without `filePath` | no `@` button is rendered and no request path is reachable. |
 | Star independence | Toggle star before/after `@` | `starred` lives on source tags; Element marker lives on the separate Element record; neither mutation changes the other. |
-| Mobile | 390px/coarse pointer | star then `@` remain visible, do not overlap delete, each target is 44px, only glyph color changes. |
+| Mobile | 390px/coarse pointer | star then `@` remain visible and do not overlap delete; the `@` target is 44px and only its glyph color changes. The parallel-owned star stylesheet currently resolves to 36px because its own coarse override loses specificity; that separate defect is not absorbed here. |
 
 ## Verification plan
 
@@ -128,6 +128,25 @@ Round 3 — same `gpt-5.6-sol`, reasoning high, priority — `VERDICT: PASS`. Th
 
 Dirty-file judgment accepted: `AssetsGrid.tsx` receives only one import and one render line. Whole-file staging is forbidden; the commit must be assembled from an index patch and inspected with `git diff --cached`/`git show --stat`.
 
+## Follow-up — visible button chrome
+
+- Class: bounded C2 rendered regression repair across the owning CSS, its focused contract, and this existing 070 record.
+- Trigger: the `@` glyph renders, but its intended scrim and border are not visible over card media.
+- Root cause: `.assets-tile button` has higher specificity than `.asset-element-toggle`, so it wins `border: 0` and `background: transparent`; the box declarations exist but never reach computed style.
+- Plan: scope the existing rule as `.assets-tile .asset-element-toggle` and apply equivalent specificity to hover/active/focus/disabled plus coarse-pointer, reduced-motion, and forced-colors overrides. Preserve desktop 36px/left 47px, coarse `@` 44px/left 55px, the star-matched dark translucent scrim/border/shadow, and red-glyph-only active state.
+- Regression proof: first make the focused contract require the scoped selector layers plus border/background and observe RED, then patch CSS and observe GREEN. Browser computed style must report a non-transparent background, non-zero border, correct desktop geometry, and the resolved red color in active state without changing the background.
+- Scope boundary: no component, state, API, i18n, parallel-owned `favorite-star.css`, or unrelated dirty-file edits. The star's independent coarse-pointer specificity defect is recorded but not folded into this user-requested `@` box correction.
+
+### Follow-up A audit synthesis
+
+`gpt-5.6-sol`, reasoning high, priority — `VERDICT: GO-WITH-FIXES (blockers=3)`.
+
+1. Accepted: scoping only the base/state selectors would break weaker coarse-pointer, reduced-motion, and forced-colors overrides. The plan now scopes every affected layer.
+2. Bounded rebuttal: the reviewer correctly found that the parallel-owned star rule does not currently reach 44px. Editing that untracked owner would cross the declared write boundary, so the inaccurate shared-44px claim is corrected while the `@` retains its own 44px coarse target.
+3. Accepted: the contract and browser proof now cover the actual cascade outcome, including visible chrome and unchanged active background semantics. The work is reclassified from C1 to bounded C2.
+
+Round 2 — same reviewer/model/tier — `VERDICT: PASS`. No blockers remained after the selector-layer, ownership, geometry, and proof amendments.
+
 ## D evidence
 
 - Implementation checkpoint: `04ebbe4 feat(assets): add independent Element @ toggle` (10 scoped files, 509 insertions, 18 deletions). `AssetsGrid.tsx` contributes only the planned import and render lines; no push was performed.
@@ -137,6 +156,6 @@ Dirty-file judgment accepted: `AssetsGrid.tsx` receives only one import and one 
 - Runtime add/independence: on the current source runtime (`IMA2_PORT=3334 ./node_modules/.bin/tsx server.ts`), clicking the `@` for source `a_01KXK936E0QXQH0HV0GK8N8388` returned `POST 201`; `aria-pressed` changed `false → true`, computed glyph color became `rgb(239, 68, 68)` with weight `850`, the star stayed `aria-pressed=false`, and the source record remained intact.
 - Runtime mention: Element Library showed the marker-linked record; Create search `@Renamed` returned `Renamed by QA 070 · character` with its source thumbnail. Selecting it inserted `@Renamed_by_QA_070` and produced `Reference tray, 1 of 5`.
 - Runtime remove/cleanup: clicking the active `@` returned `DELETE 200`; `aria-pressed` returned to `false`, the source image remained queryable, the marker query returned no Element records, and Create then showed `No matching elements` for `@Renamed`.
-- Responsive/a11y: desktop and 390px screenshots show star-then-`@` placement with the active glyph alone red and no overlap. DOM inspection covered stateful accessible labels, `aria-pressed`, and `aria-busy`; CSS contracts cover focus-visible, forced-colors, reduced motion, and a 44px coarse-pointer target.
+- Responsive/a11y: desktop and 390px screenshots show star-then-`@` placement with the active glyph alone red and no overlap. DOM inspection covered stateful accessible labels, `aria-pressed`, and `aria-busy`; CSS contracts cover focus-visible, forced-colors, reduced motion, and the `@` control's 44px coarse-pointer target. The parallel-owned star stylesheet currently resolves its own target to 36px and is outside this unit's write scope.
 - Evidence: [desktop active state](./assets/evidence-070-element-active-desktop.png), [390px active state](./assets/evidence-070-element-active-mobile.png).
 - Runtime note: the pre-existing app process on port 3333 was serving stale compiled server JS and correctly exercised the failure path without flipping state. Restarting it after a server build is required for that process to pick up the route implementation; the latest TS source runtime above is the authoritative end-to-end proof.

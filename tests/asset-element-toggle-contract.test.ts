@@ -54,8 +54,12 @@ describe("asset Element quick-register contract", () => {
     assert.match(control, /elementKind: "character"/);
     assert.match(control, /onPointerDown=\{stopPointer\}/);
     assert.match(grid, /<FavoriteStarButton[\s\S]*?<AssetElementToggle item=\{item\} \/>/);
-    assert.match(css, /\.asset-element-toggle\.is-active \{ color: var\(--red\); \}/);
-    assert.match(css, /\.asset-element-toggle \{ left: 55px; width: 44px; height: 44px/);
+    assert.match(css, /\.assets-tile \.asset-element-toggle \{[^}]*border: 1px solid[^}]*background: color-mix/);
+    assert.match(css, /\.assets-tile \.asset-element-toggle\.is-active \{ color: var\(--red\); \}/);
+    assert.doesNotMatch(css, /\.assets-tile \.asset-element-toggle\.is-active \{[^}]*background/);
+    assert.match(css, /\.assets-tile \.asset-element-toggle \{ left: 55px; width: 44px; height: 44px/);
+    assert.match(css, /prefers-reduced-motion:[\s\S]*?\.assets-tile \.asset-element-toggle \{ transition: none; \}/);
+    assert.match(css, /forced-colors:[\s\S]*?\.assets-tile \.asset-element-toggle \{ border-color: ButtonText; \}/);
   });
 
   it("hydrates Create from the Element-only loader and uses metadata refs for thumbnails", () => {
