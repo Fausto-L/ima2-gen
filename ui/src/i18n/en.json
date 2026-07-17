@@ -1567,6 +1567,7 @@
   },
   "nav": {
     "ariaLabel": "Main navigation",
+    "home": "Home",
     "create": "Create",
     "node": "Node graph",
     "agent": "Agent",
@@ -1718,6 +1719,10 @@
   },
   "assets": {
     "title": "Assets",
+    "clearAll": "Clear all",
+    "clearConfirm": "Delete all saved assets? This cannot be undone.",
+    "testSheetsUnavailable": "Element test sheets are not available yet.",
+    "detailAria": "{name} details",
     "searchPlaceholder": "Search assets…",
     "allAssets": "All assets",
     "elementLibrary": "Element library",

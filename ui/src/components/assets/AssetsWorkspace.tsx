@@ -67,7 +67,7 @@ export function AssetsWorkspace() {
     return renamed;
   };
   const deleteElement = async (id: string) => { if (await deleteAssetItem(id)) closeDetail(); else showToast(t("assets.actionFailed"), true); };
-  const runTestSheet = async () => showToast("Element test sheets are not available yet.", true);
+  const runTestSheet = async () => showToast(t("assets.testSheetsUnavailable"), true);
   return <section className={`assets-workspace${selectedAsset ? " assets-workspace--detail-open" : ""}`} aria-labelledby="assets-title">
     <AssetsFolderTree />
     <main className="assets-workspace__main">
@@ -94,7 +94,7 @@ export function AssetsWorkspace() {
         </div>
       ) : <AssetsGrid selectedId={selectedAssetId ?? undefined} onSelectAsset={setSelectedAssetId} onPreviewAsset={(asset) => setPreviewItem(assetToPreviewItem(asset))} />}
     </main>
-    {selectedAsset && <aside className="assets-workspace__detail" aria-label={`${selectedAsset.name} details`}><button type="button" className="assets-workspace__detail-close" onClick={closeDetail} aria-label={t("assets.detailClose")}>×</button>{selectedElement ? <ElementDetail element={selectedElement} saving={false} testing={false} onSave={saveElement} onDelete={deleteElement} onRunTestSheet={runTestSheet} /> : <AssetMetaDetail asset={selectedAsset} onRename={(name) => renameAsset(selectedAsset.id, name)} />}</aside>}
+    {selectedAsset && <aside className="assets-workspace__detail" aria-label={t("assets.detailAria", { name: selectedAsset.name })}><button type="button" className="assets-workspace__detail-close" onClick={closeDetail} aria-label={t("assets.detailClose")}>×</button>{selectedElement ? <ElementDetail element={selectedElement} saving={false} testing={false} onSave={saveElement} onDelete={deleteElement} onRunTestSheet={runTestSheet} /> : <AssetMetaDetail asset={selectedAsset} onRename={(name) => renameAsset(selectedAsset.id, name)} />}</aside>}
     <KeyingPanel />
     {previewItem ? <AssetMediaLightbox item={previewItem} onClose={closePreview} /> : null}
   </section>;
