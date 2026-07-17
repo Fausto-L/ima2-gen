@@ -159,3 +159,12 @@ Round 2 — same reviewer/model/tier — `VERDICT: PASS`. No blockers remained a
 - Responsive/a11y: desktop and 390px screenshots show star-then-`@` placement with the active glyph alone red and no overlap. DOM inspection covered stateful accessible labels, `aria-pressed`, and `aria-busy`; CSS contracts cover focus-visible, forced-colors, reduced motion, and the `@` control's 44px coarse-pointer target. The parallel-owned star stylesheet currently resolves its own target to 36px and is outside this unit's write scope.
 - Evidence: [desktop active state](./assets/evidence-070-element-active-desktop.png), [390px active state](./assets/evidence-070-element-active-mobile.png).
 - Runtime note: the pre-existing app process on port 3333 was serving stale compiled server JS and correctly exercised the failure path without flipping state. Restarting it after a server build is required for that process to pick up the route implementation; the latest TS source runtime above is the authoritative end-to-end proof.
+
+### Visible chrome follow-up evidence
+
+- Implementation checkpoint: `62d8a03 fix(assets): restore Element toggle button chrome`; only the owning CSS, focused contract, and this unit record were committed. No push was performed.
+- RED/GREEN: the strengthened contract first failed 3/4 because the scoped chrome selector was absent, then passed 4/4 after the CSS cascade repair.
+- Static/build gates: `node --import tsx --test tests/asset-element-toggle-contract.test.ts` passed 4/4; `npm run typecheck` and `npm run ui:build` exited 0. Vite emitted only the existing chunk-size/dynamic-import warnings.
+- Desktop render: before the repair, computed `@` chrome was transparent with a zero-width border. On the latest source runtime it resolved to the intended 82% dark scrim, `0.625px` rendered border, shadow, 36px geometry, and `left: 47px`.
+- Active render: after `POST 201`, the settled non-hover background was byte-identical to the inactive background while the glyph resolved to `rgb(239, 68, 68)` (`--red: #ef4444`) at weight 850. The test Element was removed with `DELETE 200`, returning `aria-pressed=false`.
+- Coarse-pointer activation: CDP touch emulation made both `(pointer: coarse)` and `(hover: none)` true; computed `@` geometry became 44×44px at `left: 55px`. Touch emulation and the temporary source server were both torn down afterward.
