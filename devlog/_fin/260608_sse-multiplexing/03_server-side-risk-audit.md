@@ -5,7 +5,7 @@
 - `lib/eventBus.ts`, `routes/events.ts`, `lib/inflight.ts`
 - `routes/nodes.ts`, `routes/generate.ts`, `routes/multimode.ts`, `routes/video.ts`
 - `lib/generationCancel.ts`, `server.ts`
-- 초기 멀티플렉싱 설계: `devlog/_plan/260608_sse-multiplexing-eventbus.md`
+- 초기 멀티플렉싱 설계: `devlog/_fin/260608_sse-multiplexing/04_eventbus-implementation.md`
 
 ## Execution Log
 

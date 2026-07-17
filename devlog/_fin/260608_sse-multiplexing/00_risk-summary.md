@@ -11,11 +11,11 @@ tags: [risk-summary, sse, multiplexing, eventbus, audit]
 
 | 감사 문서 | 범위 | ID 접두 |
 |-----------|------|---------|
-| `/Users/jun/Developer/new/700_projects/ima2-gen/devlog/_plan/260608_sse-server-side-risk-audit.md` | eventBus, routes, inflight | R-* |
-| `/Users/jun/Developer/new/700_projects/ima2-gen/devlog/_plan/260608_sse-frontend-risk-audit.md` | eventChannel, stores, API clients | F-* |
-| `/Users/jun/Developer/new/700_projects/ima2-gen/devlog/_plan/260608_sse-client-multiplexing-audit.md` | E2E 패치·회귀 | D* |
+| `devlog/_fin/260608_sse-multiplexing/03_server-side-risk-audit.md` | eventBus, routes, inflight | R-* |
+| `devlog/_fin/260608_sse-multiplexing/02_frontend-risk-audit.md` | eventChannel, stores, API clients | F-* |
+| `devlog/_fin/260608_sse-multiplexing/01_client-audit.md` | E2E 패치·회귀 | D* |
 
-아키텍처 개요: `/Users/jun/Developer/new/700_projects/ima2-gen/devlog/00_sse-multiplexing-architecture.md`
+아키텍처 개요: `devlog/_fin/260608_sse-multiplexing/00_architecture.md`
 
 ### 상태 정의
 
@@ -103,7 +103,7 @@ tags: [risk-summary, sse, multiplexing, eventbus, audit]
 
 ## 4. 초기 설계 vs 최종 구현 차이
 
-근거: `/Users/jun/Developer/new/700_projects/ima2-gen/devlog/_plan/260608_sse-multiplexing-eventbus.md` (v2 설계안)
+근거: `devlog/_fin/260608_sse-multiplexing/04_eventbus-implementation.md` (v2 설계안)
 
 | 설계 항목 | 초기 설계 (v2) | 최종 구현 | 차이 이유 |
 |-----------|----------------|-----------|-----------|
@@ -152,9 +152,9 @@ cd ui && npm run build
 
 | 역할 | 절대 경로 |
 |------|-----------|
-| 아키텍처 | `/Users/jun/Developer/new/700_projects/ima2-gen/devlog/00_sse-multiplexing-architecture.md` |
-| 서버 감사 | `/Users/jun/Developer/new/700_projects/ima2-gen/devlog/_plan/260608_sse-server-side-risk-audit.md` |
-| 프론트 감사 | `/Users/jun/Developer/new/700_projects/ima2-gen/devlog/_plan/260608_sse-frontend-risk-audit.md` |
-| E2E 감사 | `/Users/jun/Developer/new/700_projects/ima2-gen/devlog/_plan/260608_sse-client-multiplexing-audit.md` |
-| 초기 설계 | `/Users/jun/Developer/new/700_projects/ima2-gen/devlog/_plan/260608_sse-multiplexing-eventbus.md` |
+| 아키텍처 | `devlog/_fin/260608_sse-multiplexing/00_architecture.md` |
+| 서버 감사 | `devlog/_fin/260608_sse-multiplexing/03_server-side-risk-audit.md` |
+| 프론트 감사 | `devlog/_fin/260608_sse-multiplexing/02_frontend-risk-audit.md` |
+| E2E 감사 | `devlog/_fin/260608_sse-multiplexing/01_client-audit.md` |
+| 초기 설계 | `devlog/_fin/260608_sse-multiplexing/04_eventbus-implementation.md` |
 | Server API | `/Users/jun/Developer/new/700_projects/ima2-gen/structure/03-server-api.md` (§ Events Multiplexing) |

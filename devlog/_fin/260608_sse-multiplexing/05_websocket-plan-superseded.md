@@ -1,4 +1,4 @@
-> **SUPERSEDED** — This WebSocket plan was not implemented. The gallery-hang problem was solved via SSE EventBus multiplexing instead (`devlog/00_sse-multiplexing-architecture.md`). The `feat/websocket` branch is preserved as a reference but will not be merged.
+> **SUPERSEDED** — This WebSocket plan was not implemented. The gallery-hang problem was solved via SSE EventBus multiplexing instead (`devlog/_fin/260608_sse-multiplexing/00_architecture.md`). The `feat/websocket` branch is preserved as a reference but will not be merged.
 
 # SSE → WebSocket Migration Plan (v4 — post-audit-3)
 

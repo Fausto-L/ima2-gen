@@ -9,7 +9,7 @@
 - `ui/src/store/storeNodeGenImpl.ts` — node generation
 - `ui/src/lib/nodeApi.ts` — node async stream client
 - `ui/src/lib/api-generation.ts` — multimode / video async stream clients
-- 초기 멀티플렉싱 설계: `devlog/00_sse-multiplexing-architecture.md`
+- 초기 멀티플렉싱 설계: `devlog/_fin/260608_sse-multiplexing/00_architecture.md`
 
 ## Execution Log
 
@@ -138,7 +138,7 @@
 | | |
 |---|---|
 | **등급** | CRITICAL (패치 완료) |
-| **위치** | `devlog/00_sse-multiplexing-architecture.md:16-17` |
+| **위치** | `devlog/_fin/260608_sse-multiplexing/00_architecture.md:16-17` |
 | **현상** | 기존 POST SSE ×N + GET 이미지 → 브라우저 6-connection hang. |
 | **재현** | 동시 생성 7건 + 갤러리 썸네일 로드 → white screen / spinner. |
 | **패치** | 단일 `GET /api/events` + async POST 202. **아키텍처 전환 완료**. `tests/gallery-hang-regression-contract.test.ts` 별도 UI hang 가드. |

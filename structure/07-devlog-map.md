@@ -12,10 +12,9 @@ This document maps the `devlog/` folder structure and explains how to navigate p
 
 ```
 devlog/
-├── 00_sse-multiplexing-architecture.md   # SSE multiplexing design doc
-├── 01_sse-multiplexing-risk-summary.md   # Integrated risk matrix
 ├── _plan/                                # Active planning and research
 ├── _fin/                                 # Completed work (archived)
+│   └── 260608_sse-multiplexing/          # SSE architecture, audits, and risk summary
 └── _artifacts/                           # Supporting artifacts
 ```
 
@@ -30,7 +29,8 @@ Devlog entries use decade-range numbering within each initiative:
 | 20–29 | Phase 2 implementation |
 | 30–39 | Phase 3 implementation |
 
-Top-level entries (`00_*.md`, `01_*.md`) are cross-cutting architecture documents not scoped to a single issue.
+Initiative documents live together inside their `_plan/` or `_fin/` unit folder; completed
+architecture and audit records are not kept as loose top-level duplicates.
 
 ## Active Plans (`_plan/`)
 
@@ -69,6 +69,7 @@ When an initiative is fully shipped and merged, its plan folder moves to `_fin/`
 | `260516_agent-mode-codex-rs-workspace` | Agent Mode implementation |
 | `260602_gemini-vertex-api-provider` | Gemini/Vertex provider integration |
 | `260604_500-line-split` | Source file ≤500-line enforcement |
+| `260608_sse-multiplexing` | Single SSE EventBus architecture, implementation audits, and integrated risk summary |
 | `260621_issue95-generation-request-log` | Generation request log (#95) |
 | `260627_preview-deploy-pipeline` | npm preview OIDC publish pipeline |
 | `260629_grok-video-15-1080p` | Grok Video 1.5 1080p contract (v2.0.5) |
@@ -102,6 +103,11 @@ refinement to `_fin`. The byte-identical `_plan` duplicate of the already archiv
 PR/rebase review was removed. Eight units with concrete implementation, verification,
 or release work remain in `_plan`; `devlog/_plan/README.md` is the 1:1 active ledger.
 
+Snapshot note, 2026-07-17: the loose SSE architecture and risk-summary files at the
+`devlog/` root were byte-identical to the copies already preserved in
+`devlog/_fin/260608_sse-multiplexing/`. The root duplicates were removed and archive
+cross-references were normalized to the completed unit.
+
 ## Cross-References
 
 | Document | Relation |
@@ -114,4 +120,4 @@ or release work remain in `_plan`; `devlog/_plan/README.md` is the 1:1 active le
 
 1. Check `_plan/` for active work before starting a new initiative — there may be prior research.
 2. When finishing an initiative, move its `_plan/` entry to `_fin/` with a `README.md` summary.
-3. Top-level numbered docs (e.g., `00_*.md`) are persistent architecture references, not initiative-scoped.
+3. Keep related architecture, audit, and evidence documents inside the owning unit folder.

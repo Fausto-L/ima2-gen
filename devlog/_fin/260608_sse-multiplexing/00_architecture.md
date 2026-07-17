@@ -16,7 +16,8 @@ tags: [architecture, sse, multiplexing, eventbus, async-generation]
 | 동시 생성 4건 + 갤러리 이미지 로드 | POST SSE ×4 + GET 이미지 | 연결 포화 |
 | 동시 생성 7건 이상 | POST SSE ×7+ | **hang** — 새 GET(썸네일·갤러리) 대기 |
 
-근거: `devlog/_plan/260608_sse-multiplexing-eventbus.md` RCA, `devlog/_plan/260608_sse-client-multiplexing-audit.md` E2E 감사.
+근거: `devlog/_fin/260608_sse-multiplexing/04_eventbus-implementation.md` RCA,
+`devlog/_fin/260608_sse-multiplexing/01_client-audit.md` E2E 감사.
 
 ### 해결: 단일 SSE 채널 + async POST
 
@@ -224,7 +225,8 @@ publish(requestId, "error", {
 });
 ```
 
-route catch 대기 없이 클라이언트에 cancel 알림 (`devlog/_plan/260608_sse-client-multiplexing-audit.md` D6).
+route catch 대기 없이 클라이언트에 cancel 알림
+(`devlog/_fin/260608_sse-multiplexing/01_client-audit.md` D6).
 
 ---
 
@@ -320,8 +322,11 @@ Node mode 문서(`structure/05-node-mode.md`)의 `Accept: text/event-stream` 설
 
 ## 6. 제한사항 & 알려진 리스크
 
-> 상세 감사 ID(R-MEM-*, F-*, D*) 및 통합 우선순위는 `devlog/01_sse-multiplexing-risk-summary.md` 참조.
-> 패치 로그: `devlog/_plan/260608_sse-server-side-risk-audit.md`, `devlog/_plan/260608_sse-frontend-risk-audit.md`, `devlog/_plan/260608_sse-client-multiplexing-audit.md`.
+> 상세 감사 ID(R-MEM-*, F-*, D*) 및 통합 우선순위는
+> `devlog/_fin/260608_sse-multiplexing/00_risk-summary.md` 참조.
+> 패치 로그: `devlog/_fin/260608_sse-multiplexing/03_server-side-risk-audit.md`,
+> `devlog/_fin/260608_sse-multiplexing/02_frontend-risk-audit.md`,
+> `devlog/_fin/260608_sse-multiplexing/01_client-audit.md`.
 
 | ID | 리스크 | 설명 | 완화 | 상태 |
 |----|--------|------|------|------|
@@ -379,8 +384,8 @@ Node mode 문서(`structure/05-node-mode.md`)의 `Accept: text/event-stream` 설
 | Tests (risk contract) | `/Users/jun/Developer/new/700_projects/ima2-gen/tests/frontend-sse-risk-contract.test.js`, `tests/node-async-eventbus-contract.test.js`, `tests/async-stream-subscribe-order.test.js` |
 | Tests (inflight guard) | `/Users/jun/Developer/new/700_projects/ima2-gen/tests/inflight-guard-contract.test.ts` |
 | Tests (connection state) | `/Users/jun/Developer/new/700_projects/ima2-gen/tests/frontend-connection-state-contract.test.js` |
-| 통합 리스크 요약 | `/Users/jun/Developer/new/700_projects/ima2-gen/devlog/01_sse-multiplexing-risk-summary.md` |
-| 감사·패치 로그 | `/Users/jun/Developer/new/700_projects/ima2-gen/devlog/_plan/260608_sse-server-side-risk-audit.md`, `devlog/_plan/260608_sse-frontend-risk-audit.md`, `devlog/_plan/260608_sse-client-multiplexing-audit.md` |
+| 통합 리스크 요약 | `/Users/jun/Developer/new/700_projects/ima2-gen/devlog/_fin/260608_sse-multiplexing/00_risk-summary.md` |
+| 감사·패치 로그 | `devlog/_fin/260608_sse-multiplexing/03_server-side-risk-audit.md`, `devlog/_fin/260608_sse-multiplexing/02_frontend-risk-audit.md`, `devlog/_fin/260608_sse-multiplexing/01_client-audit.md` |
 
 ---
 
