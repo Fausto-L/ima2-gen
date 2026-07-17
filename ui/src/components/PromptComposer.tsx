@@ -1,9 +1,6 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { useAppStore } from "../store/useAppStore";
 import { useI18n } from "../i18n";
-import { SavePromptPopover } from "./SavePromptPopover";
-import { WebSearchToggle } from "./WebSearchToggle";
-import { continueFromItem } from "../lib/continueFromItem";
 import { isVideoItem, extractLastFrame } from "../lib/videoMedia";
 import type { VideoReferenceDragPayload } from "../lib/videoContinuity";
 import { getPresetById } from "../lib/presets";
@@ -13,6 +10,8 @@ import { ElementMentionMenu } from "./ElementMentionMenu";
 import type { ElementMentionKind } from "./ElementMentionChip";
 import { ReferenceTray } from "./composer/ReferenceTray";
 import { DeadTagMirror } from "./composer/DeadTagMirror";
+import { PromptComposerToolbar } from "./composer/PromptComposerToolbar";
+import { usePromptPaste } from "./composer/usePromptPaste";
 
 type PromptComposerProps = {
   variant?: "sidebar" | "bottom";
@@ -68,21 +67,12 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
   const addReferenceDataUrl = useAppStore((s) => s.addReferenceDataUrl);
   const useImageAsReference = useAppStore((s) => s.useImageAsReference);
   const readDroppedImageMetadata = useAppStore((s) => s.readDroppedImageMetadata);
-  const currentImage = useAppStore((s) => s.currentImage);
-  const videoModelSelected = useAppStore((s) => s.videoModelSelected);
-  const selectVideoModel = useAppStore((s) => s.selectVideoModel);
-  const setImageModel = useAppStore((s) => s.setImageModel);
-  const storyboardActive = useAppStore((s) => s.storyboardActive);
-  const toggleStoryboard = useAppStore((s) => s.toggleStoryboard);
-
   const fileInput = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const attachmentCaretRef = useRef<number | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [saveOpen, setSaveOpen] = useState(false);
   const [mentionQuery, setMentionQuery] = useState<MentionQuery | null>(null);
   const promptMode = useAppStore((s) => s.promptMode);
-  const setPromptMode = useAppStore((s) => s.setPromptMode);
   const multimode = useAppStore((s) => s.multimode);
   const multimodeMaxImages = useAppStore((s) => s.multimodeMaxImages);
   const isDirectMode = promptMode === "direct";
@@ -108,17 +98,18 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
     return textarea?.selectionStart ?? useAppStore.getState().prompt.length;
   };
 
-  const insertAttachmentTags = (knownTokenIds: ReadonlySet<string>, caret: number) => {
+  const insertAttachmentTags = (knownTokenIds: ReadonlySet<string>, caret: number): number => {
     const added = useAppStore.getState().trayItems.filter(
       (item) => item.kind === "attachment" && !knownTokenIds.has(item.tokenId),
     );
-    if (added.length === 0) return;
+    if (added.length === 0) return 0;
     const currentPrompt = useAppStore.getState().prompt;
     const insertionPoint = Math.max(0, Math.min(caret, currentPrompt.length));
     const mentionText = added.map((item) => `@${item.tag} `).join("");
     setPrompt(`${currentPrompt.slice(0, insertionPoint)}${mentionText}${currentPrompt.slice(insertionPoint)}`);
     const nextCaret = insertionPoint + mentionText.length;
     requestAnimationFrame(() => textareaRef.current?.setSelectionRange(nextCaret, nextCaret));
+    return added.length;
   };
 
   const insertTagAtMention = (tag: string, mention: MentionQuery) => {
@@ -130,17 +121,19 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
     requestAnimationFrame(() => textareaRef.current?.setSelectionRange(caret, caret));
   };
 
-  const addFilesAtCaret = async (files: File[], caret: number, inspectMetadata: boolean) => {
-    if (files.length === 0) return;
+  const addFilesAtCaret = async (files: File[], caret: number, inspectMetadata: boolean): Promise<number> => {
+    if (files.length === 0) return 0;
     const knownTokenIds = new Set(useAppStore.getState().trayItems.map((item) => item.tokenId));
     try {
       if (inspectMetadata && files.length === 1) {
         const handled = await readDroppedImageMetadata(files[0]);
-        if (handled) return;
+        if (handled) return 0;
       }
       await addReferences(files);
-      insertAttachmentTags(knownTokenIds, caret);
-    } catch { /* attachment errors surface through the existing store toasts */ }
+      return insertAttachmentTags(knownTokenIds, caret);
+    } catch {
+      return 0; // attachment errors surface through the existing store toasts
+    }
   };
 
   const handleImageFiles = async (files: File[]) => {
@@ -202,30 +195,12 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
     setDragOver(false);
   };
 
-  const extractClipboardImages = (items: DataTransferItemList | null): File[] => {
-    if (!items) return [];
-    const files: File[] = [];
-    for (const it of Array.from(items)) {
-      if (it.kind !== "file") continue;
-      if (!it.type.startsWith("image/")) continue;
-      const f = it.getAsFile();
-      if (f) files.push(f);
-    }
-    return files;
-  };
-
-  const onPaste = (e: ClipboardEvent<HTMLDivElement>) => {
-    const files = extractClipboardImages(e.clipboardData?.items ?? null);
-    if (files.length === 0) return;
-    if (!canAddMore) {
-      e.preventDefault();
-      useAppStore.getState().showToast(t("toast.refLimitTrayFull", { max: maxRefs }), true);
-      return;
-    }
-    e.preventDefault();
-    const room = maxRefs - trayItems.length;
-    void addFilesAtCaret(files.slice(0, room), captureAttachmentCaret(), false);
-  };
+  const onPaste = usePromptPaste({
+    maxRefs,
+    trayItemCount: trayItems.length,
+    captureAttachmentCaret,
+    addFilesAtCaret,
+  });
 
   const maxHeightRef = useRef<number | null>(null);
   const lastVariantRef = useRef(variant);
@@ -243,26 +218,6 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
     const nextHeight = maxHeight ? Math.min(el.scrollHeight, maxHeight) : el.scrollHeight;
     el.style.height = `${nextHeight}px`;
   }, [prompt, variant]);
-
-  useEffect(() => {
-    const handler = (e: globalThis.ClipboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      const tag = target?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) return;
-      const files = extractClipboardImages(e.clipboardData?.items ?? null);
-      if (files.length === 0) return;
-      if (trayItems.length >= maxRefs) {
-        e.preventDefault();
-        useAppStore.getState().showToast(t("toast.refLimitTrayFull", { max: maxRefs }), true);
-        return;
-      }
-      e.preventDefault();
-      const room = maxRefs - trayItems.length;
-      void addFilesAtCaret(files.slice(0, room), useAppStore.getState().prompt.length, false);
-    };
-    window.addEventListener("paste", handler);
-    return () => window.removeEventListener("paste", handler);
-  }, [trayItems.length, maxRefs, addReferences, t]);
 
   const canMovePromptBlock = (id: string, direction: "up" | "down"): boolean => {
     const index = visualPromptIds.indexOf(id);
@@ -459,93 +414,7 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
         </div>
       )}
 
-      <div className="composer__hint-row">
-        <span className="composer__hint">{t("prompt.hint")}</span>
-      </div>
-      <div className="composer__toolbar">
-        <button
-          type="button"
-          className="composer__tool"
-          onClick={openFilePicker}
-          disabled={!canAddMore}
-          title={t("prompt.attachTitle")}
-          aria-label={t("prompt.attachTitle")}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          className="composer__tool"
-          onClick={() => currentImage && void continueFromItem(currentImage).catch(() => {})}
-          disabled={!currentImage || !canAddMore}
-          title={t("prompt.continueTitle")}
-        >
-          {t("prompt.continue")}
-        </button>
-        <button
-          type="button"
-          className={`composer__tool${videoModelSelected ? " composer__tool--on" : ""}`}
-          onClick={() => {
-            if (videoModelSelected) {
-              setImageModel("gpt-5.5" as any);
-            } else {
-              selectVideoModel("grok-imagine-video-1.5");
-            }
-          }}
-          title={t("prompt.videoToggleTitle")}
-          aria-label={t("prompt.videoToggleTitle")}
-          aria-pressed={!!videoModelSelected}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <polygon points="23 7 16 12 23 17 23 7" />
-            <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-          </svg>
-          <span className="sr-only">Video</span>
-        </button>
-        <button
-          type="button"
-          className={`composer__tool${isDirectMode ? " composer__tool--on" : ""}`}
-          onClick={() => setPromptMode(isDirectMode ? "auto" : "direct")}
-          title={t("prompt.directModeTitle")}
-          aria-label={t("prompt.directModeTitle")}
-          aria-pressed={isDirectMode}
-        >
-          <span aria-hidden="true" style={{ fontWeight: 700, fontSize: 11 }}>1:1</span>
-        </button>
-        <WebSearchToggle variant="compact" />
-        <div className="composer__tool-wrap">
-          <button
-            type="button"
-            className="composer__tool composer__tool--full"
-            onClick={() => setSaveOpen((v) => !v)}
-            disabled={!prompt.trim()}
-            title={t("promptLibrary.saveTitle")}
-            aria-label={t("promptLibrary.saveTitle")}
-          >
-            {t("prompt.savePrompt")}
-          </button>
-          {saveOpen && (
-            <SavePromptPopover
-              text={prompt}
-              mode={promptMode}
-              onClose={() => setSaveOpen(false)}
-            />
-          )}
-        </div>
-      </div>
-      <div className="composer__storyboard-row">
-        <button
-          type="button"
-          className={`composer__tool composer__tool--storyboard${storyboardActive ? " composer__tool--on" : ""}`}
-          onClick={toggleStoryboard}
-          title={t("prompt.storyboardTitle")}
-          aria-pressed={storyboardActive}
-        >
-          {t("prompt.storyboard")}
-        </button>
-      </div>
+      <PromptComposerToolbar canAddMore={canAddMore} onAttach={openFilePicker} />
 
       {dragOver && (
         <div className="composer__dropzone" aria-hidden="true">

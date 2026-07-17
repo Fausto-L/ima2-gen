@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useI18n } from "../../i18n";
 import { findTrayTagTokens } from "../../lib/referenceTray";
 
 type DeadTagMirrorProps = {
@@ -25,6 +26,7 @@ type DeadTagRect = {
 };
 
 export function DeadTagMirror({ prompt, retiredTags, textareaRef }: DeadTagMirrorProps) {
+  const { t } = useI18n();
   const mirrorRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLSpanElement>(null);
   const [rects, setRects] = useState<DeadTagRect[]>([]);
@@ -32,6 +34,10 @@ export function DeadTagMirror({ prompt, retiredTags, textareaRef }: DeadTagMirro
     () => findTrayTagTokens(prompt).filter((token) =>
       Object.prototype.hasOwnProperty.call(retiredTags, token.tag)),
     [prompt, retiredTags],
+  );
+  const deadTagNames = useMemo(
+    () => [...new Set(deadTokens.map((token) => `@${token.tag}`))],
+    [deadTokens],
   );
 
   useLayoutEffect(() => {
@@ -78,11 +84,16 @@ export function DeadTagMirror({ prompt, retiredTags, textareaRef }: DeadTagMirro
   }, [textareaRef, prompt, deadTokens]);
 
   return (
-    <div ref={mirrorRef} className="composer__prompt-mirror" aria-hidden="true">
-      <span ref={textRef}>{prompt}</span>
-      {rects.map((rect) => (
-        <span key={rect.key} className="dead-tag" style={rect} />
-      ))}
-    </div>
+    <>
+      <div ref={mirrorRef} className="composer__prompt-mirror" aria-hidden="true">
+        <span ref={textRef}>{prompt}</span>
+        {rects.map((rect) => (
+          <span key={rect.key} className="dead-tag" style={rect} />
+        ))}
+      </div>
+      <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {deadTagNames.length > 0 ? t("prompt.deadTagStatus", { tags: deadTagNames.join(", ") }) : ""}
+      </span>
+    </>
   );
 }

@@ -33,9 +33,11 @@ describe("web search toggle contract", () => {
   it("surfaces the toggle in both settings and the prompt composer", () => {
     const settings = readSource("ui/src/components/SettingsWorkspace.tsx");
     const composer = readSource("ui/src/components/PromptComposer.tsx");
+    const composerToolbar = readSource("ui/src/components/composer/PromptComposerToolbar.tsx");
 
     assert.match(settings, /<WebSearchToggle \/>/);
-    assert.match(composer, /<WebSearchToggle variant="compact" \/>/);
+    assert.match(composer, /<PromptComposerToolbar/);
+    assert.match(composerToolbar, /<WebSearchToggle variant="compact" \/>/);
   });
 
   it("persists the toggle and sends it with all generation requests", () => {
@@ -67,4 +69,3 @@ describe("web search toggle contract", () => {
     assert.match(responsesTools, /\.\.\(webSearchEnabled \? \[\{ type: "web_search" \}\] : \[\]\)/);
   });
 });
-

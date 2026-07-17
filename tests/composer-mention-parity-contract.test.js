@@ -5,6 +5,7 @@ import test from "node:test";
 const read = (path) => readFileSync(path, "utf8");
 
 const composer = read("ui/src/components/PromptComposer.tsx");
+const paste = read("ui/src/components/composer/usePromptPaste.ts");
 const mentionChip = read("ui/src/components/ElementMentionChip.tsx");
 const en = JSON.parse(read("ui/src/i18n/en.json"));
 const ko = JSON.parse(read("ui/src/i18n/ko.json"));
@@ -36,23 +37,24 @@ test("selecting a tray mention only reinserts its tag before returning", () => {
   assert.doesNotMatch(branch, /addTrayElement|addElementId|removeTrayItem/);
 });
 
-test("both image paste paths toast when the tray is full", () => {
-  const composerPaste = composer.match(
-    /const onPaste = \(e: ClipboardEvent<HTMLDivElement>\) => \{([\s\S]*?)\n\s*\};\n\n\s*const maxHeightRef/,
+test("both image paste paths use the shared tray-full guard", () => {
+  const composerPaste = paste.match(
+    /const onPaste = \(e: ClipboardEvent<HTMLDivElement>\) => \{([\s\S]*?)\n\s*\};\n\n\s*useEffect/,
   )?.[1];
-  const windowPaste = composer.match(
+  const windowPaste = paste.match(
     /const handler = \(e: globalThis\.ClipboardEvent\) => \{([\s\S]*?)\n\s*\};\n\s*window\.addEventListener\("paste", handler\)/,
   )?.[1];
 
   for (const [name, pastePath] of [["composer", composerPaste], ["window", windowPaste]]) {
     assert.ok(pastePath, `${name} image paste path should exist`);
     assert.match(pastePath, /const files = extractClipboardImages/);
-    assert.match(
-      pastePath,
-      /showToast\(t\("toast\.refLimitTrayFull", \{ max: maxRefs \}\), true\)/,
-    );
-    assert.doesNotMatch(pastePath, /if \(!canAddMore\) return;/);
+    assert.match(pastePath, /void addPastedFiles\(files,/);
   }
+  assert.match(
+    paste,
+    /showToast\(t\("toast\.refLimitTrayFull", \{ max: maxRefs \}\), true\)/,
+  );
+  assert.doesNotMatch(paste, /if \(!canAddMore\) return;/);
 });
 
 test("tray-full toast copy keeps max interpolation in English and Korean", () => {
