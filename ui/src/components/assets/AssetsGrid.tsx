@@ -4,6 +4,9 @@ import { useI18n } from "../../i18n";
 import { useAppStore } from "../../store/useAppStore";
 import type { AssetItem } from "../../store/storeTypes";
 import { AssetElementToggle } from "./AssetElementToggle";
+import { FavoriteStarButton } from "../controls";
+import { toggleStarredTag } from "../../lib/favoriteState";
+import { elementPreviewPath } from "../../lib/elementMembership";
 
 const GAP = 12;
 const MIN_TILE = 180;
@@ -12,11 +15,13 @@ function mediaUrl(path: string) {
   return `/generated/${path.split("/").map(encodeURIComponent).join("/")}`;
 }
 
-function AssetTile({ item }: { item: AssetItem }) {
+function AssetTile({ item, selected, onSelect, onPreview }: { item: AssetItem; selected: boolean; onSelect?: (id: string) => void; onPreview?: (item: AssetItem) => void }) {
   const { t } = useI18n();
   const deleteItem = useAppStore((s) => s.deleteAssetItem);
+  const updateAssetItem = useAppStore((s) => s.updateAssetItem);
   const showToast = useAppStore((s) => s.showToast);
   const [armed, setArmed] = useState(false);
+  const [starPending, setStarPending] = useState(false);
   const [near, setNear] = useState(false);
   const tileRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
@@ -26,20 +31,50 @@ function AssetTile({ item }: { item: AssetItem }) {
     observer.observe(node);
     return () => observer.disconnect();
   }, [item.kind]);
-  const url = item.filePath ? mediaUrl(item.filePath) : null;
+  const thumbPath = item.kind === "element" && !item.filePath
+    ? elementPreviewPath(item as AssetItem)
+    : item.filePath;
+  const url = thumbPath ? mediaUrl(thumbPath) : null;
+  const isVideo = item.kind === "video";
+  const fallback = t(isVideo ? "assetGen.videoFallback" : "assetGen.imageFallback");
+  const previewLabel = t(isVideo ? "assetGen.previewVideo" : "assetGen.previewImage", { prompt: item.name.trim() || fallback });
   async function remove() {
     if (!armed) { setArmed(true); return; }
     if (!await deleteItem(item.id)) showToast(t("assets.actionFailed"), true);
     setArmed(false);
   }
-  return <article ref={tileRef} className="assets-tile" tabIndex={0}>
+  const starred = item.tags.includes("starred");
+  async function toggleStar() {
+    if (starPending) return;
+    setStarPending(true);
+    try {
+      const tags = toggleStarredTag(item.tags, starred);
+      if (!await updateAssetItem(item.id, { tags })) {
+        showToast(t("assets.actionFailed"), true);
+      }
+    } finally {
+      setStarPending(false);
+    }
+  }
+  return <article ref={tileRef} className={`assets-tile${selected ? " is-selected" : ""}`} tabIndex={0} aria-selected={selected} onClick={() => onSelect?.(item.id)} onKeyDown={(event) => { if ((event.key === "Enter" || event.key === " ") && onSelect) { event.preventDefault(); onSelect(item.id); } }}>
     <div className="assets-tile__media">
-      {url && item.kind === "video" ? (near ? <video src={url} preload="metadata" muted playsInline /> : null)
-        : url ? <img src={url} alt="" loading="lazy" decoding="async" />
-          : <span className="assets-tile__glyph" aria-hidden="true">{item.kind.slice(0, 1).toUpperCase()}</span>}
+      {url ? <button type="button" className="assets-tile__preview" aria-label={previewLabel}
+        onClick={(event) => { event.stopPropagation(); onSelect?.(item.id); onPreview?.(item); }}
+        onKeyDown={(event) => event.stopPropagation()}>
+        {isVideo ? (near ? <video src={url} preload="metadata" muted playsInline aria-hidden="true" /> : null)
+          : <img src={url} alt="" loading="lazy" decoding="async" />}
+        <span className="assets-tile__preview-hint" aria-hidden="true">{t(isVideo ? "assetGen.openHintVideo" : "assetGen.openHintImage")}</span>
+      </button> : <span className="assets-tile__glyph" aria-hidden="true">{item.kind.slice(0, 1).toUpperCase()}</span>}
+      <FavoriteStarButton
+        variant="asset"
+        active={starred}
+        busy={starPending}
+        label={starred ? t("assets.unstarAsset") : t("assets.starAsset")}
+        onToggle={toggleStar}
+      />
       <AssetElementToggle item={item} />
       <button type="button" className={`assets-tile__delete${armed ? " is-danger" : ""}`}
-        aria-label={armed ? t("assets.confirmDelete") : t("assets.deleteAsset")} onClick={() => void remove()}>
+        aria-label={armed ? t("assets.confirmDelete") : t("assets.deleteAsset")} onClick={(event) => { event.stopPropagation(); void remove(); }}>
         {armed ? t("assets.confirmDelete") : "×"}
       </button>
     </div>
@@ -49,7 +84,9 @@ function AssetTile({ item }: { item: AssetItem }) {
   </article>;
 }
 
-export function AssetsGrid() {
+type AssetsGridProps = { onSelectAsset?: (id: string) => void; onPreviewAsset?: (item: AssetItem) => void; selectedId?: string };
+
+export function AssetsGrid({ onSelectAsset, onPreviewAsset, selectedId }: AssetsGridProps) {
   const { t } = useI18n();
   const assets = useAppStore((s) => s.assets);
   const loading = useAppStore((s) => s.assetsLoading);
@@ -79,7 +116,7 @@ export function AssetsGrid() {
   return <div ref={rootRef} className="assets-grid-scroll">
     <div className="assets-grid-virtual" style={{ height: virtualizer.getTotalSize() }}>
       {virtualRows.map((row) => <div key={row.key} className="assets-grid-row" style={{ transform: `translateY(${row.start}px)`, gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-        {rows[row.index]?.map((item) => <AssetTile key={item.id} item={item} />)}
+        {rows[row.index]?.map((item) => <AssetTile key={item.id} item={item} selected={item.id === selectedId} onSelect={onSelectAsset} onPreview={onPreviewAsset} />)}
       </div>)}
     </div>
     {cursor && <button type="button" className="assets-load-more" disabled={loading} onClick={requestMore}>{t("assets.loadMore")}</button>}

@@ -85,13 +85,22 @@ function ElementToggleButton({ active, busy, label, onToggle }: {
 export function AssetElementToggle({ item }: { item: AssetItem }) {
   const { t } = useI18n();
   const showToast = useAppStore((state) => state.showToast);
-  const memberships = useSyncExternalStore(subscribeMemberships, () => membershipSnapshot, () => membershipSnapshot);
   const [pending, setPending] = useState(false);
-  const supported = (item.kind === "image" || item.kind === "video") && Boolean(item.filePath);
-  const linked = supported ? findElementForSource(memberships.elements, item.id) : null;
+  const isElement = item.kind === "element";
+  const supported = isElement || ((item.kind === "image" || item.kind === "video") && Boolean(item.filePath));
+  const label = t("assets.elementLibrary");
+  const memberships = useSyncExternalStore(subscribeMemberships, () => membershipSnapshot, () => membershipSnapshot);
+  const linked = !isElement && supported ? findElementForSource(memberships.elements, item.id) : null;
   const busy = pending || memberships.status === "loading" || memberships.status === "idle";
 
-  useEffect(() => { if (supported) void loadMemberships(); }, [supported]);
+  useEffect(() => { if (supported && !isElement) void loadMemberships(); }, [supported, isElement]);
+
+  // Element items get a read-only active badge — no membership loading or toggle needed.
+  if (isElement) {
+    return <span className="asset-element-toggle is-active is-readonly" aria-label={label}>
+      <span className="asset-element-toggle__glyph" aria-hidden="true">@</span>
+    </span>;
+  }
 
   if (!supported) return null;
 
@@ -113,6 +122,5 @@ export function AssetElementToggle({ item }: { item: AssetItem }) {
     }
   }
 
-  const label = t("assets.elementLibrary");
   return <ElementToggleButton active={Boolean(linked)} busy={busy} label={label} onToggle={() => void toggle()} />;
 }
