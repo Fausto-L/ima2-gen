@@ -1,5 +1,6 @@
 ---
 created: 2026-06-08
+updated: 2026-07-17
 tags: [ima2-gen, structure-docs, devlog, roadmap]
 ---
 
@@ -40,11 +41,14 @@ As of 2026-07-17, `_plan/` holds only genuinely-active units. The authoritative 
 
 | Unit | Focus |
 |------|-------|
-| 260515/260516/260517 | Prompt/agent-mode research + follow-up plans |
-| 260531/260601 | PR triage reference, video persistence investigations |
-| 260605_stabilize-split | 500-line split — Phase 3 backend remainder |
-| 260707_gpt56-oidc-devlog-hardening | Windows package-local Codex/OAuth corrective release after v2.0.14 |
-| 260715_subscription-mcp-providers | Active parent for subscription MCP integration; nested `120_restart_recovery` completed WP1 credential lifecycle → WP2 runtime recovery → WP3 verification without moving out of its active parent |
+| `260515_fork-prompting-modularization-research` | Prompt Builder/composer/workspace-profile implementation remains; `_plan` is canonical despite a stale same-name archive copy. |
+| `260712_higgsfield-ux-studio` | 070/080 tracked delivery, manual QA/performance evidence, 090 closeout and future split. |
+| `260715_assetgen_ux_overhaul` | Keying/click-erase delivery plus image-grounded acceptance and remaining UX scope. |
+| `260715_icon_pipeline` | Future `ima2 icon` CLI implementation handoff. |
+| `260715_spritegen-adoption` | Local implementation exists; contract/i18n/browser/closeout/release gates remain. |
+| `260715_subscription-mcp-providers` | Active parent for Tier2 verification, transport policy and expansion; nested restart recovery is complete. |
+| `260716_cli-entry-routing` | WP4 character persistence and WP5 derivative diversity remain after WP1~3. |
+| `260716_composer-tray` | 080 star-control delivery, browser evidence and parent closeout remain. |
 
 Deferred items live in `_plan/_future/` (canvas exports, masked edit, batch
 matrix, storyboard planner skill).
@@ -68,6 +72,11 @@ When an initiative is fully shipped and merged, its plan folder moves to `_fin/`
 | `260621_issue95-generation-request-log` | Generation request log (#95) |
 | `260627_preview-deploy-pipeline` | npm preview OIDC publish pipeline |
 | `260629_grok-video-15-1080p` | Grok Video 1.5 1080p contract (v2.0.5) |
+| `260711_production-hardening` | WP0~WP10 hardening and final closeout gates |
+| `260715_oauth_fallback_reference_retention` | OAuth retry reference preservation shipped in v2.0.19/v2.0.20 |
+| `260716_mcp-model-presets` | Capability-aware MCP preset projection and validation |
+| `260716_mcp-model-surface-ui` | Provider/model selectors, Settings MCP controls, Higgsfield browse surface and preset UI |
+| `260717_ux_refinement` | i18n, mobile focus, composer feedback, MCP states, inflight popup, Assets and Element `@` UX polish |
 
 Snapshot note, 2026-06-28: WP6 docs code-grounding complete — `devlog/_fin/260628_wp6_docs_code_grounding/`; automated line-count refresh + API/CLI contract tests landed on `dev` (`6383fc4`..`183a78a`).
 
@@ -86,6 +95,12 @@ closed the restart defect with bound 0600 credentials, post-listen restore, trut
 transport states, shutdown coordination, isolated test receipts, and independent Sol
 review. The nested unit remains in `_plan` because its parent MCP initiative is active;
 it moves to `_fin` only when that parent closes.
+
+Snapshot note, 2026-07-17: completed-unit sweep moved production hardening, OAuth
+fallback reference retention, MCP model presets, MCP model surface UI, and UX
+refinement to `_fin`. The byte-identical `_plan` duplicate of the already archived
+PR/rebase review was removed. Eight units with concrete implementation, verification,
+or release work remain in `_plan`; `devlog/_plan/README.md` is the 1:1 active ledger.
 
 ## Cross-References
 

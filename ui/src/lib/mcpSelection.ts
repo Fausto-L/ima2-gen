@@ -1,4 +1,4 @@
-// Pure MCP selection helpers (010, devlog/_plan/260716_mcp-model-surface-ui).
+// Pure MCP selection helpers (010, devlog/_fin/260716_mcp-model-surface-ui).
 // This module must stay free of browser globals so plain Node test harnesses
 // can import it directly (see tests/mcp-media-kind-behavior.test.ts).
 import type {

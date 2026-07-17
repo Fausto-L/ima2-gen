@@ -1,6 +1,6 @@
 ---
 created: 2026-04-23
-updated: 2026-07-12
+updated: 2026-07-17
 tags: [ima2-gen, devlog, roadmap]
 aliases: [ima2 active plan, image_gen current roadmap, ima2 개발계획]
 ---
@@ -24,13 +24,14 @@ Deferred / 미래 항목은 `_plan/` 직속이 아니라 `_plan/_future/`에 둔
 
 | 순서 | 경로 | 상태 | 역할 |
 |---:|---|---|---|
-| 1 | `260515_fork-prompting-modularization-research/` | research | Prompt Builder/composer modularization reference. |
-| 2 | `260531_pr-issue-review-rebase-plan/` | reference | PR #81/#3 통합 계획 + 이슈 triage 문서. |
-| 3 | `260711_production-hardening/` | closeout 단계 | 프로덕션 하드닝 멀티 WP: devlog closeout, Agent(비디오) 탭 전면 개선, persistence 검증, 500줄 분할, 캔버스 G1, 하드닝 스캔/수정, 최종 검증. 상세는 레인 내 000/010/011/012/020/021/030/090 문서. |
-| 4 | `260712_higgsfield-ux-studio/` | 구현 중 (010-060 완료, 070-090 진행 예정) | 힉스필드급 스튜디오 UX 개선. Phase 010~050 완료, 060은 XMP `presetIds` 전파 1건만 잔여. 070(요소)→080(노드/비디오)→090(closeout+미결정 원장)은 구현 대기. 디자인 선행, 기능 후행. SaaS/협업은 non-goal. |
-| 5 | `260715_icon_pipeline/` | handoff | `ima2 icon` CLI 파이프라인 핸드오프 (000/010/020). 구현 착수 시 P가 문서 재검증. `_fin/260715_asset_gen_mode/040_sheet_design.md`의 crop 소유권 문장(lib/sheetCrop.ts 단일 소유)을 반영할 것. |
-| 6 | `260715_spritegen-adoption/` | research (분석 완료) | [aldegad/sprite-gen](Apache-2.0) 차용 분석. 병렬 서브에이전트 3개 분석 결과를 000(허브)/010(soft-alpha unmix 키잉)/020(recipe SSoT+identity)/030(atlas manifest+큐레이터)으로 정리. 010은 assetgen 키잉 트랙의 자연스러운 다음 단계, 020/030은 스프라이트 모드 제품 결정 대기. |
-| 7 | `260715_subscription-mcp-providers/` | WP1~8 구현 완료 (090 검증·잔여 폴리시 대기) | 2026-07-16 야간 HOTL 2회로 010~080 구현 완료: OAuth 캡처(Runway 14·Higgsfield 73 tools), 020 contract catalog SoT, 030 MCP runtime, 040 snapshot 번들+drift, 050 adapter+`/api/mcp/generate`(Runway 실 이미지/비디오 실증), 060 workflow router+혼합 파이프라인(GPT이미지→Runway I2V 실증), 070 `ima2 tools` agent 계약 CLI(92 tools), 080 분리 셀렉터+연결 카드 UI(스크린샷 검증). 실증 기록: 011/051/061/071/081. 잔여: 090 Tier2 billing gate 공식화, transport 오류 정규화, video.ts capability guard, 100+ 확장. |
+| 1 | `260515_fork-prompting-modularization-research/` | 구현 대기 | 연구 문서는 완료됐지만 Prompt Builder backend/frontend/CLI, workspace profile, composer/history restore와 viewer polish가 남았다. 같은 이름의 `_fin` 사본은 과거 오분류로 유지되며 이 `_plan` 단위가 active canonical이다. |
+| 2 | `260712_higgsfield-ux-studio/` | 070/080 전달·QA 진행 중 | 010~060 구현은 완료됐다. 070/080 핵심 소스·테스트의 추적 가능한 전달, 수동 성능/브라우저 QA, 090 원장 갱신과 future 분리가 남았다. |
+| 3 | `260715_assetgen_ux_overhaul/` | 구현·검증 진행 중 | 010/020은 완료됐지만 keying/click-erase 핵심 파일의 전달, 실화상·픽셀 수용 기준, 폼 P1/P2 후속 처리가 남았다. |
+| 4 | `260715_icon_pipeline/` | handoff | `ima2 icon` CLI 파이프라인 핸드오프(000/010/020). 구현 착수 시 문서와 `_fin/260715_asset_gen_mode/040_sheet_design.md`의 crop 소유권을 재검증한다. |
+| 5 | `260715_spritegen-adoption/` | 구현 후 closeout 대기 | WP2~WP6 로컬 구현은 존재하지만 누락 계약 테스트, i18n, UI build/browser QA, closeout과 원격 통합·출하가 남았다. |
+| 6 | `260715_subscription-mcp-providers/` | parent active | WP1~8과 restart recovery는 완료됐다. 090 Tier2 billing/security/long-job/provider smoke, transport policy, provider expansion이 남아 parent를 유지한다. |
+| 7 | `260716_cli-entry-routing/` | WP1~3 완료, WP4~5 대기 | strict model routing과 reference-media UI는 구현됐다. character persistence와 derivative diversity가 남았다. |
+| 8 | `260716_composer-tray/` | 080 전달·QA 대기 | tray/mention/Element/rename 흐름은 구현됐다. result/assets star control 파일의 커밋, desktop/mobile 증거와 parent closeout이 남았다. |
 
 2026-07-15: `260715_asset_gen_mode/`(에셋 생성 모드 — asset-gen 탭, backgroundPreset,
 클라이언트 키잉, 알파 WebM 파생) WP1-WP11 완료로 `_fin/` 이동.
@@ -86,6 +87,14 @@ Detailed issue-to-evidence matrix:
 - 문서만 갱신한 pass라도 완료/미완료 판정 근거를 `_fin` closeout에 남긴다.
 
 ## 변경 기록
+
+- 2026-07-17: 완료 단위 전수 감사 후 `_fin` 이동:
+  `260711_production-hardening/`, `260715_oauth_fallback_reference_retention/`,
+  `260716_mcp-model-presets/`, `260716_mcp-model-surface-ui/`,
+  `260717_ux_refinement/`. `_fin`과 byte-identical이던
+  `260531_pr-issue-review-rebase-plan/`의 `_plan` 중복 사본도 제거했다.
+  이동 전후 파일 수와 합성 SHA-256을 대조했고, 잔여 조건이 있는 8개 단위는
+  위 Active Lane에 1:1로 유지했다.
 
 - 2026-07-15: 구독형 media MCP provider 조사 레인 추가
   (`260715_subscription-mcp-providers/`). Higgsfield/Runway/Magnific/Recraft를

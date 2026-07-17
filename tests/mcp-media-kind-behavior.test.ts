@@ -1,4 +1,4 @@
-// Behavior tests for the 010 MCP media-kind lane (devlog/_plan/260716_mcp-model-surface-ui).
+// Behavior tests for the 010 MCP media-kind lane (devlog/_fin/260716_mcp-model-surface-ui).
 // Runs the actual production code paths that are importable under Node:
 // - normalizeMcpSelection (used verbatim by storePersistence.loadMcpSelection)
 // - getMcpModelCatalog (fetch-only; the EventSource-backed generation

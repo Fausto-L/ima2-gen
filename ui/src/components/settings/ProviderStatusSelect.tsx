@@ -1,6 +1,6 @@
 // 060 — Variant D provider selector: one grouped dropdown (CORE + MCP)
 // replaces the 3-column provider grid and the 8-dot status strip
-// (devlog/_plan/260716_mcp-model-surface-ui/060). Status is information
+// (devlog/_fin/260716_mcp-model-surface-ui/060). Status is information
 // (dot + text), selection is the action; color is never the only signal.
 import { useState } from "react";
 import { useAppStore } from "../../store/useAppStore";

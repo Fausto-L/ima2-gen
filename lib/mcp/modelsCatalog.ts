@@ -1,4 +1,4 @@
-// Provider model catalog resolver (040, devlog/_plan/260716_mcp-model-surface-ui).
+// Provider model catalog resolver (040, devlog/_fin/260716_mcp-model-surface-ui).
 // Runway models come from the verified contract enums (static adapter data);
 // Higgsfield models come from the read-only `models_explore` tool — the ONLY
 // upstream tool this module may ever call (READONLY_CATALOG_TOOL). Nothing in

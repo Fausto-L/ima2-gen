@@ -1,6 +1,6 @@
 // 060 — provider availability hook, extracted verbatim from the retired
 // ProviderSelect grid so readiness surfaces share one source of truth
-// (devlog/_plan/260716_mcp-model-surface-ui/060).
+// (devlog/_fin/260716_mcp-model-surface-ui/060).
 import { useOAuthStatus } from "./useOAuthStatus";
 import { useBilling } from "./useBilling";
 import { useGrokStatus } from "./useGrokStatus";

@@ -1,6 +1,6 @@
 // 030 — MCP-lane generation controls for the right-panel Settings tab.
 // Rendered instead of the core provider controls while an MCP provider is
-// selected (devlog/_plan/260716_mcp-model-surface-ui/030).
+// selected (devlog/_fin/260716_mcp-model-surface-ui/030).
 import { useEffect, useState } from "react";
 import { useAppStore } from "../../store/useAppStore";
 import {
