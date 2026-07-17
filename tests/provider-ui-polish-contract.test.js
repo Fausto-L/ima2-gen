@@ -48,7 +48,8 @@ describe("provider UI contract", () => {
     assert.match(select, /ariaLabel=\{t\("provider\.authTitle"\)\}/);
     // Select-only combobox contract (060 audit A2).
     assert.match(primitive, /role="combobox"/);
-    assert.match(primitive, /aria-activedescendant=\{open \? optionId\(activeIndex\) : undefined\}/);
+    // wp4 (040_mcp_settings_states): activedescendant only references options that exist.
+    assert.match(primitive, /aria-activedescendant=\{open && flat\[activeIndex\] \? optionId\(activeIndex\) : undefined\}/);
     assert.match(primitive, /const typeahead = /);
     assert.match(css, /min-height:\s*44px/);
   });
