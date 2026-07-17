@@ -130,4 +130,13 @@ Dirty-file judgment accepted: `AssetsGrid.tsx` receives only one import and one 
 
 ## D evidence
 
-- Pending.
+- Implementation checkpoint: `04ebbe4 feat(assets): add independent Element @ toggle` (10 scoped files, 509 insertions, 18 deletions). `AssetsGrid.tsx` contributes only the planned import and render lines; no push was performed.
+- Focused contracts: `node --import tsx --test tests/assets-routes-contract.test.ts tests/asset-element-toggle-contract.test.ts` — 12/12 passed.
+- Static/build gates: `npm run typecheck` passed; `npm run ui:build` passed with only the existing Vite chunk-size warning.
+- Diff hygiene: `git show --check 04ebbe4` and the scoped work-phase diff check passed. A whole-worktree `git diff --check` remains noisy only because parallel skill-reference files have unrelated EOF whitespace; those files were not edited or staged by this work-phase.
+- Runtime add/independence: on the current source runtime (`IMA2_PORT=3334 ./node_modules/.bin/tsx server.ts`), clicking the `@` for source `a_01KXK936E0QXQH0HV0GK8N8388` returned `POST 201`; `aria-pressed` changed `false → true`, computed glyph color became `rgb(239, 68, 68)` with weight `850`, the star stayed `aria-pressed=false`, and the source record remained intact.
+- Runtime mention: Element Library showed the marker-linked record; Create search `@Renamed` returned `Renamed by QA 070 · character` with its source thumbnail. Selecting it inserted `@Renamed_by_QA_070` and produced `Reference tray, 1 of 5`.
+- Runtime remove/cleanup: clicking the active `@` returned `DELETE 200`; `aria-pressed` returned to `false`, the source image remained queryable, the marker query returned no Element records, and Create then showed `No matching elements` for `@Renamed`.
+- Responsive/a11y: desktop and 390px screenshots show star-then-`@` placement with the active glyph alone red and no overlap. DOM inspection covered stateful accessible labels, `aria-pressed`, and `aria-busy`; CSS contracts cover focus-visible, forced-colors, reduced motion, and a 44px coarse-pointer target.
+- Evidence: [desktop active state](./assets/evidence-070-element-active-desktop.png), [390px active state](./assets/evidence-070-element-active-mobile.png).
+- Runtime note: the pre-existing app process on port 3333 was serving stale compiled server JS and correctly exercised the failure path without flipping state. Restarting it after a server build is required for that process to pick up the route implementation; the latest TS source runtime above is the authoritative end-to-end proof.
