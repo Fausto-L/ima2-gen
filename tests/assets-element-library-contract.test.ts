@@ -58,10 +58,14 @@ async function waitForIdle(store: ReturnType<typeof makeStore>) {
 
 describe("assets element library contract", () => {
   it("renders the pinned Element Library button with glyph, filter, and exclusive active state", () => {
-    assert.match(folderTree, /className=\{`assets-folder-all assets-folder-elements\$\{activeId === null && activeKind === "element" \? " is-active" : ""\}`\}/);
+    assert.match(folderTree, /const allActive = activeId === null && activeKind !== "element";/);
+    assert.match(folderTree, /const elementActive = activeId === null && activeKind === "element";/);
+    assert.match(folderTree, /className=\{`assets-folder-all assets-folder-elements\$\{elementActive \? " is-active" : ""\}`\}/);
+    assert.match(folderTree, /aria-current=\{elementActive \? "page" : undefined\}/);
     assert.match(folderTree, /onClick=\{\(\) => setFilters\(\{ folderId: null, kind: "element" \}\)\}/);
     assert.match(folderTree, /<span className="assets-folder-elements__glyph" aria-hidden="true">@<\/span>[\s\S]*?\{t\("assets\.elementLibrary"\)\}/);
-    assert.match(folderTree, /className=\{`assets-folder-all\$\{activeId === null && activeKind !== "element" \? " is-active" : ""\}`\}/);
+    assert.match(folderTree, /className=\{`assets-folder-all\$\{allActive \? " is-active" : ""\}`\}/);
+    assert.match(folderTree, /aria-current=\{allActive \? "page" : undefined\}/);
   });
 
   it("resets the kind filter from both All assets and folder rows", () => {
@@ -69,11 +73,11 @@ describe("assets element library contract", () => {
     assert.match(folderTree, /className=\{`assets-folder-row__name\$\{[\s\S]*?onClick=\{\(\) => setFilters\(\{ folderId: folder\.id, kind: null \}\)\}/);
   });
 
-  it("prioritizes the element-root empty state and keeps its asset-gen CTA", () => {
+  it("prioritizes the element-root empty state and routes its CTA to Create", () => {
     assert.match(workspace, /const elementRootView = filters\.kind === "element" && !filters\.folderId && !filters\.q && !filters\.tag;/);
     assert.match(workspace, /const emptyTitle = elementRootView \? "assets\.emptyElementsTitle" : filters\.folderId \? "assets\.emptyFolderTitle" : filtered \? "assets\.emptySearchTitle"/);
     assert.match(workspace, /const emptyBody = elementRootView \? "assets\.emptyElementsBody" : filters\.folderId \? "assets\.emptyFolderBody" : filtered \? "assets\.emptySearchBody"/);
-    assert.match(workspace, /\{elementRootView \|\| \(!filtered && !filters\.folderId\) \? \([\s\S]*?className="assets-empty__cta"[\s\S]*?setUIMode\("asset-gen"\)/);
+    assert.match(workspace, /\{elementRootView \|\| \(!filtered && !filters\.folderId\) \? \([\s\S]*?className="assets-empty__cta"[\s\S]*?setUIMode\("classic"\)[\s\S]*?t\("nav\.create"\)/);
   });
 
   it("defines Element Library empty-state copy under assets in English and Korean", () => {

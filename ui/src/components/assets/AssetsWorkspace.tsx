@@ -5,6 +5,7 @@ import type { AssetItem } from "../../store/storeTypes";
 import type { GenerateItem } from "../../types";
 import { clearAllAssets as apiClearAll } from "../../lib/api-assets";
 import { assetToPreviewItem } from "../../lib/assetPreview";
+import { useIsMobile } from "../../hooks/useIsMobile";
 import { Select, type SelectItem } from "../controls/Select";
 import { AssetMediaLightbox } from "../assetgen/AssetMediaLightbox";
 import { KeyingPanel } from "../assetgen/KeyingPanel";
@@ -14,6 +15,49 @@ import { ElementDetail, type ElementDefinition, type ElementDraft } from "./Elem
 
 const kinds = ["image", "video", "element", "preset", "template"] as const;
 type KindValue = "" | typeof kinds[number];
+const ASSET_DETAIL_FOCUSABLE = 'button, [href], input, textarea, select, [tabindex]:not([tabindex="-1"])';
+
+function useMobileAssetDetailDialog(open: boolean, onClose: () => void) {
+  const panelRef = useRef<HTMLElement>(null);
+  const restoreRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    restoreRef.current = document.activeElement as HTMLElement | null;
+    const focusTimer = window.setTimeout(() => {
+      panelRef.current?.querySelector<HTMLElement>(ASSET_DETAIL_FOCUSABLE)?.focus();
+    }, 0);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const nodes = Array.from(
+        panelRef.current?.querySelectorAll<HTMLElement>(ASSET_DETAIL_FOCUSABLE) ?? [],
+      ).filter((node) => !node.hasAttribute("disabled") && node.getClientRects().length > 0);
+      if (nodes.length === 0) return;
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.removeEventListener("keydown", onKeyDown);
+      restoreRef.current?.focus();
+    };
+  }, [onClose, open]);
+
+  return panelRef;
+}
 
 export function AssetsWorkspace() {
   const { t } = useI18n();
@@ -31,6 +75,7 @@ export function AssetsWorkspace() {
   const [query, setQuery] = useState(filters.q);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [previewItem, setPreviewItem] = useState<GenerateItem | null>(null);
+  const isMobile = useIsMobile();
   const keyingTarget = useAppStore((s) => s.keyingTarget);
   const hadKeyingRef = useRef(false);
   useEffect(() => {
@@ -56,7 +101,8 @@ export function AssetsWorkspace() {
   const emptyBody = elementRootView ? "assets.emptyElementsBody" : filters.folderId ? "assets.emptyFolderBody" : filtered ? "assets.emptySearchBody" : "assets.emptyBody";
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId) ?? null;
   const selectedElement = selectedAsset?.kind === "element" ? toElementDefinition(selectedAsset) : null;
-  const closeDetail = () => setSelectedAssetId(null);
+  const closeDetail = useCallback(() => setSelectedAssetId(null), []);
+  const detailRef = useMobileAssetDetailDialog(Boolean(selectedAsset && isMobile), closeDetail);
   const closePreview = useCallback(() => setPreviewItem(null), []);
   const saveElement = async (draft: ElementDraft) => {
     if (!draft.id || !await updateAssetItem(draft.id, { name: draft.name, notes: draft.notes })) showToast(t("assets.actionFailed"), true);
@@ -89,12 +135,21 @@ export function AssetsWorkspace() {
           <h2>{t(emptyTitle)}</h2>
           <p>{t(emptyBody)}</p>
           {elementRootView || (!filtered && !filters.folderId) ? (
-            <button type="button" className="assets-empty__cta" onClick={() => setUIMode("asset-gen")}>{t("assets.emptyCta")}</button>
+            <button type="button" className="assets-empty__cta" onClick={() => setUIMode("classic")}>{t("nav.create")}</button>
           ) : null}
         </div>
       ) : <AssetsGrid selectedId={selectedAssetId ?? undefined} onSelectAsset={setSelectedAssetId} onPreviewAsset={(asset) => setPreviewItem(assetToPreviewItem(asset))} />}
     </main>
-    {selectedAsset && <aside className="assets-workspace__detail" aria-label={t("assets.detailAria", { name: selectedAsset.name })}><button type="button" className="assets-workspace__detail-close" onClick={closeDetail} aria-label={t("assets.detailClose")}>×</button>{selectedElement ? <ElementDetail element={selectedElement} saving={false} testing={false} onSave={saveElement} onDelete={deleteElement} onRunTestSheet={runTestSheet} /> : <AssetMetaDetail asset={selectedAsset} onRename={(name) => renameAsset(selectedAsset.id, name)} />}</aside>}
+    {selectedAsset && isMobile ? (
+      <button type="button" className="assets-workspace__detail-backdrop"
+        aria-label={t("assets.detailClose")} onClick={closeDetail} />
+    ) : null}
+    {selectedAsset && <aside ref={detailRef} className="assets-workspace__detail"
+      role={isMobile ? "dialog" : undefined} aria-modal={isMobile ? true : undefined}
+      aria-label={t("assets.detailAria", { name: selectedAsset.name })}>
+      <button type="button" className="assets-workspace__detail-close" onClick={closeDetail} aria-label={t("assets.detailClose")}>×</button>
+      {selectedElement ? <ElementDetail element={selectedElement} saving={false} testing={false} onSave={saveElement} onDelete={deleteElement} onRunTestSheet={runTestSheet} /> : <AssetMetaDetail asset={selectedAsset} onRename={(name) => renameAsset(selectedAsset.id, name)} />}
+    </aside>}
     <KeyingPanel />
     {previewItem ? <AssetMediaLightbox item={previewItem} onClose={closePreview} /> : null}
   </section>;
@@ -104,6 +159,7 @@ function AssetMetaDetail({ asset, onRename }: { asset: AssetItem; onRename: (nam
   const { t } = useI18n();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(asset.name);
+  const renamePendingRef = useRef(false);
   const prompt = typeof asset.metadata?.prompt === "string" ? asset.metadata.prompt : null;
   const provider = typeof asset.metadata?.provider === "string" ? asset.metadata.provider : null;
 
@@ -113,14 +169,20 @@ function AssetMetaDetail({ asset, onRename }: { asset: AssetItem; onRename: (nam
   }, [asset.id, asset.name]);
 
   async function commitRename() {
+    if (renamePendingRef.current) return;
     const next = name.trim();
     if (!next || next === asset.name) {
       setName(asset.name);
       setEditing(false);
       return;
     }
-    if (!await onRename(next)) setName(asset.name);
-    setEditing(false);
+    renamePendingRef.current = true;
+    try {
+      if (!await onRename(next)) setName(asset.name);
+    } finally {
+      renamePendingRef.current = false;
+      setEditing(false);
+    }
   }
 
   return (

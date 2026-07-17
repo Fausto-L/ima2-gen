@@ -15,6 +15,7 @@ function FolderRow({ folder, depth }: FolderRowProps) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(folder.name);
   const [deleteArmed, setDeleteArmed] = useState(false);
+  const isActive = activeId === folder.id;
 
   async function commitRename() {
     const next = name.trim();
@@ -39,7 +40,8 @@ function FolderRow({ folder, depth }: FolderRowProps) {
             if (event.key === "Escape") { setName(folder.name); setEditing(false); }
           }} />
       ) : (
-        <button type="button" className={`assets-folder-row__name${activeId === folder.id ? " is-active" : ""}`}
+        <button type="button" className={`assets-folder-row__name${isActive ? " is-active" : ""}`}
+          aria-current={isActive ? "page" : undefined}
           onClick={() => setFilters({ folderId: folder.id, kind: null })}>{folder.name}</button>
       )}
       {!editing && <span className="assets-folder-row__actions">
@@ -61,6 +63,8 @@ export function AssetsFolderTree() {
   const showToast = useAppStore((s) => s.showToast);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
+  const allActive = activeId === null && activeKind !== "element";
+  const elementActive = activeId === null && activeKind === "element";
   const rows = useMemo(() => {
     const result: Array<{ folder: AssetFolder; depth: number }> = [];
     const visit = (parentId: string | null, depth: number) => folders.filter((f) => f.parentId === parentId)
@@ -80,11 +84,13 @@ export function AssetsFolderTree() {
     <div className="assets-folders__heading"><span>{t("assets.rootFolder")}</span>
       <button type="button" aria-label={t("assets.newFolder")} onClick={() => setCreating(true)}>+</button></div>
     <div className="assets-folders__rows">
-      <button type="button" className={`assets-folder-all${activeId === null && activeKind !== "element" ? " is-active" : ""}`}
+      <button type="button" className={`assets-folder-all${allActive ? " is-active" : ""}`}
+        aria-current={allActive ? "page" : undefined}
         onClick={() => setFilters({ folderId: null, kind: null })}>{t("assets.allAssets")}</button>
       {/* Pinned entry for persistent @-mentionable elements (characters, products,
           styles, scenes). Not a folder — a kind-scoped view across all folders. */}
-      <button type="button" className={`assets-folder-all assets-folder-elements${activeId === null && activeKind === "element" ? " is-active" : ""}`}
+      <button type="button" className={`assets-folder-all assets-folder-elements${elementActive ? " is-active" : ""}`}
+        aria-current={elementActive ? "page" : undefined}
         onClick={() => setFilters({ folderId: null, kind: "element" })}>
         <span className="assets-folder-elements__glyph" aria-hidden="true">@</span>
         {t("assets.elementLibrary")}
