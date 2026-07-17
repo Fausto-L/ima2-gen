@@ -57,9 +57,13 @@ describe("asset Element quick-register contract", () => {
     assert.match(css, /\.assets-tile \.asset-element-toggle \{[^}]*border: 1px solid[^}]*background: color-mix/);
     assert.match(css, /\.assets-tile \.asset-element-toggle\.is-active \{ color: var\(--red\); \}/);
     assert.doesNotMatch(css, /\.assets-tile \.asset-element-toggle\.is-active \{[^}]*background/);
-    assert.match(css, /\.assets-tile \.asset-element-toggle \{ left: 55px; width: 44px; height: 44px/);
+    assert.doesNotMatch(css, /\.assets-tile \.asset-element-toggle\.is-active,[^{]*\{ opacity: 1; \}/);
+    assert.match(css, /\.assets-tile \.asset-element-toggle:hover[^}]*\.assets-tile \.asset-element-toggle:focus-visible[^}]*\{ opacity: 1; \}/);
+    assert.match(css, /\.assets-tile \.asset-element-toggle:disabled \{ cursor: wait; opacity: \.56; \}/);
+    assert.match(css, /@media \(hover: none\), \(pointer: coarse\) \{\s*\.assets-tile \.asset-element-toggle \{ left: 55px; width: 44px; height: 44px/);
     assert.match(css, /prefers-reduced-motion:[\s\S]*?\.assets-tile \.asset-element-toggle \{ transition: none; \}/);
     assert.match(css, /forced-colors:[\s\S]*?\.assets-tile \.asset-element-toggle \{ border-color: ButtonText; \}/);
+    assert.match(css, /forced-colors:[\s\S]*?\.assets-tile \.asset-element-toggle\.is-active \{ color: Highlight; \}/);
   });
 
   it("hydrates Create from the Element-only loader and uses metadata refs for thumbnails", () => {
