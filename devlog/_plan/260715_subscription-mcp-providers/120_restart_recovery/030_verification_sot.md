@@ -62,6 +62,17 @@ Apply docs in this order after the final code/test names are known: architecture
 
 ## Verification matrix
 
+## A-gate closeout corrections (authoritative)
+
+- WP3 “archive” means logical completion in the active parent folder. Do not move this nested unit to `_fin`; physical movement occurs only when parent `260715_subscription-mcp-providers` closes.
+- Goal metadata `sourcePlan` is the canonical path; the original objective's superseded 260717 sibling text is historical and the ledger steering event records the move.
+- After committing WP3 docs, create a detached clean verifier with `git worktree add --detach /tmp/ima2-mcp-recovery-verify HEAD`, link the already-locked dependency tree with `ln -s "$PWD/node_modules" /tmp/ima2-mcp-recovery-verify/node_modules`, run the matrix there, then remove it with `git worktree remove --force /tmp/ima2-mcp-recovery-verify`. Dirty-tree full-suite results are diagnostic only; do not run an unreviewed dependency update.
+- Explicit recovery manifest: `716fdbb^..HEAD -- devlog/_plan/260715_subscription-mcp-providers/120_restart_recovery structure/01-file-function-map.md structure/03-server-api.md structure/06-infra-operations.md structure/07-devlog-map.md docs/API.md devlog/_plan/260715_subscription-mcp-providers/030_mcp_runtime_auth.md devlog/_plan/260715_subscription-mcp-providers/090_verification_rollout.md lib/mcp routes/mcpConnections.ts server.ts tests/mcp-* tests/runtime-ports.test.ts`.
+- Secret scan command: `gitleaks git --log-opts='716fdbb^..HEAD' --redact --no-banner`; whitespace command is `git diff --check 716fdbb^..HEAD -- <explicit paths from the recovery manifest>`.
+- Post-listen activation harness is `MCP restore starts only after the actual server port is published`, followed by the isolated same-binding test `startup restore connects one same-binding stored grant without opening authorization` and shutdown coordinator test; no real token directory is used.
+- Final reviewer receives commit range `716fdbb^..HEAD`, the clean-worktree command receipts, and the known unrelated dirty-tree failures.
+- If verifier finds a production blocker, conditional write scope is limited to `lib/mcp/*.ts`, `routes/mcpConnections.ts`, `server.ts`, and existing `tests/mcp-*.test.ts`/`tests/runtime-ports.test.ts`; rerun the focused WP2 command plus both typechecks before restaging.
+
 ```bash
 npm run typecheck
 npm run typecheck:tests

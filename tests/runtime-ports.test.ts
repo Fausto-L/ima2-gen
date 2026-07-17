@@ -9,7 +9,7 @@ import {
   parseLocalhostPortFromUrl,
   parseOAuthReadyUrl,
 } from "../lib/runtimePorts.ts";
-import { shutdownServerAndMcp } from "../lib/mcp/shutdown.ts";
+import { shutdownServerAndMcp, startMcpRestoreAfterListen } from "../lib/mcp/shutdown.ts";
 
 function occupy(port) {
   return new Promise<import("node:net").Server>((resolve) => {
@@ -68,4 +68,14 @@ test("server accept-stop and MCP shutdown start together and both settle", async
   finishServer();
   await closing;
   assert.equal(settled, true);
+});
+
+test("MCP restore starts only after the actual server port is published", async () => {
+  let calls = 0;
+  const ctx = { serverActualPort: undefined as number | undefined, mcpConnectionManager: { async restoreStoredConnections() { calls += 1; } } };
+  await startMcpRestoreAfterListen(ctx);
+  assert.equal(calls, 0);
+  ctx.serverActualPort = 4545;
+  await startMcpRestoreAfterListen(ctx);
+  assert.equal(calls, 1);
 });

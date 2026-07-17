@@ -13,3 +13,11 @@ export async function shutdownServerAndMcp(options: {
     ]);
   } finally { if (timer) clearTimeout(timer); }
 }
+
+export function startMcpRestoreAfterListen(ctx: {
+  serverActualPort?: number;
+  mcpConnectionManager?: { restoreStoredConnections(): Promise<void> };
+}): Promise<void> {
+  if (!ctx.serverActualPort || !ctx.mcpConnectionManager) return Promise.resolve();
+  return ctx.mcpConnectionManager.restoreStoredConnections();
+}
