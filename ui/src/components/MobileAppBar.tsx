@@ -1,8 +1,10 @@
+import { useRef, type RefObject } from "react";
 import { useAppStore } from "../store/useAppStore";
 import { GenProviderModelSelect } from "./GenProviderModelSelect";
 import { useI18n } from "../i18n";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { ENABLE_AGENT_MODE, ENABLE_CARD_NEWS_MODE, ENABLE_NODE_MODE } from "../lib/devMode";
+import { rememberMobileComposeSheetOpener } from "../lib/mobileComposeSheetFocus";
 
 export function MobileAppBar() {
   const { t } = useI18n();
@@ -17,6 +19,18 @@ export function MobileAppBar() {
       uiModeRaw === "asset-gen" ? "asset-gen" :
         "classic";
   const isMobile = useIsMobile();
+  const libraryOpenerRef = useRef<HTMLButtonElement>(null);
+  const controlsOpenerRef = useRef<HTMLButtonElement>(null);
+  const composeFabRef = useRef<HTMLButtonElement>(null);
+  const openFrom = (
+    tab: "prompt" | "controls" | "library",
+    ref: RefObject<HTMLButtonElement | null>,
+  ) => {
+    if (ref.current) rememberMobileComposeSheetOpener(ref.current);
+    if (tab === "library") openComposeSheet("library");
+    else if (tab === "controls") openComposeSheet("controls");
+    else openComposeSheet("prompt");
+  };
 
   if (!isMobile || settingsOpen || uiMode !== "classic") return null;
 
@@ -32,9 +46,10 @@ export function MobileAppBar() {
       <div className="mobile-app-bar__actions">
         <GenProviderModelSelect compact />
         <button
+          ref={libraryOpenerRef}
           type="button"
           className="mobile-app-bar__icon-button"
-          onClick={() => openComposeSheet("library")}
+          onClick={() => openFrom("library", libraryOpenerRef)}
           aria-label={t("promptLibrary.title")}
           title={t("promptLibrary.title")}
         >
@@ -43,9 +58,10 @@ export function MobileAppBar() {
           </svg>
         </button>
         <button
+          ref={controlsOpenerRef}
           type="button"
           className="mobile-app-bar__icon-button"
-          onClick={() => openComposeSheet("controls")}
+          onClick={() => openFrom("controls", controlsOpenerRef)}
           aria-label={t("appBar.controls")}
           title={t("appBar.controls")}
         >
@@ -55,9 +71,10 @@ export function MobileAppBar() {
           </svg>
         </button>
         <button
+          ref={composeFabRef}
           type="button"
           className="mobile-app-bar__generate"
-          onClick={() => openComposeSheet("prompt")}
+          onClick={() => openFrom("prompt", composeFabRef)}
           aria-label={t("appBar.generateAria")}
           title={t("appBar.generate")}
           style={{ width: 44, padding: 0 }}

@@ -110,9 +110,12 @@
   .compose-sheet-backdrop {
     position: fixed;
     inset: 0;
+    padding: 0;
+    border: 0;
     z-index: 170;
     display: block;
     background: var(--scrim);
+    cursor: pointer;
   }
   .compose-sheet {
     position: fixed;
@@ -135,10 +138,18 @@
     box-shadow: 0 -22px 64px var(--shadow-strong);
     overflow: hidden;
     transform: translateY(calc(100% + 20px));
-    transition: transform 180ms ease;
+    visibility: hidden;
+    pointer-events: none;
+    transition: transform 180ms ease, visibility 0s linear 180ms;
   }
   .compose-sheet.compose-sheet--open {
     transform: translateY(0);
+    visibility: visible;
+    pointer-events: auto;
+    transition-delay: 0s;
+  }
+  .compose-sheet__panel[hidden] {
+    display: none;
   }
   .compose-sheet__handle {
     display: block;
@@ -318,6 +329,11 @@
   .compose-sheet__panel--library .prompt-library-panel__drawer {
     border: 0;
     background: transparent;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .compose-sheet {
+      transition: none;
+    }
   }
   .right-panel {
     display: none;

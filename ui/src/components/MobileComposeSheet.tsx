@@ -9,6 +9,10 @@ import { InFlightBadge } from "./composer/InFlightBadge";
 import { GenerationControlsPanel } from "./GenerationControlsPanel";
 import { ENABLE_AGENT_MODE, ENABLE_CARD_NEWS_MODE, ENABLE_NODE_MODE } from "../lib/devMode";
 import type { ComposeSheetTab } from "../store/useAppStore";
+import {
+  clearMobileComposeSheetOpener,
+  restoreMobileComposeSheetOpener,
+} from "../lib/mobileComposeSheetFocus";
 
 const LazyPromptLibraryPanel = lazy(() =>
   import("./PromptLibraryPanel").then((module) => ({ default: module.PromptLibraryPanel })),
@@ -16,6 +20,8 @@ const LazyPromptLibraryPanel = lazy(() =>
 
 const SHEET_TABS: ComposeSheetTab[] = ["prompt", "controls", "library"];
 const MOBILE_INFLIGHT_PANEL_ID = "mobile-inflight-panel";
+const tabId = (tab: ComposeSheetTab) => `mobile-sheet-tab-${tab}`;
+const panelId = (tab: ComposeSheetTab) => `mobile-sheet-panel-${tab}`;
 
 export function MobileComposeSheet() {
   const { t } = useI18n();
@@ -37,6 +43,24 @@ export function MobileComposeSheet() {
   const previousInFlightCountRef = useRef(inFlightCount);
   const inflightHadFocusRef = useRef(false);
   const actionsRef = useRef<HTMLDivElement>(null);
+  const tabRefs = useRef<Partial<Record<ComposeSheetTab, HTMLButtonElement | null>>>({});
+  const wasOpenRef = useRef(false);
+
+  const focusTab = (tab: ComposeSheetTab) => {
+    setActiveTab(tab);
+    requestAnimationFrame(() => tabRefs.current[tab]?.focus());
+  };
+  const onTabKeyDown = (event: React.KeyboardEvent, current: ComposeSheetTab) => {
+    const index = SHEET_TABS.indexOf(current);
+    const target =
+      event.key === "ArrowRight" ? SHEET_TABS[(index + 1) % SHEET_TABS.length] :
+        event.key === "ArrowLeft" ? SHEET_TABS[(index - 1 + SHEET_TABS.length) % SHEET_TABS.length] :
+          event.key === "Home" ? SHEET_TABS[0] :
+            event.key === "End" ? SHEET_TABS[SHEET_TABS.length - 1] : null;
+    if (!target) return;
+    event.preventDefault();
+    focusTab(target);
+  };
 
   useEffect(() => {
     if (!open || activeTab !== "prompt" || !isMobile || settingsOpen || uiMode !== "classic") {
@@ -61,20 +85,44 @@ export function MobileComposeSheet() {
     inflightHadFocusRef.current = false;
   }, [inFlightCount]);
 
-  if (!isMobile || settingsOpen || uiMode !== "classic") return null;
+  useLayoutEffect(() => {
+    if (open) {
+      wasOpenRef.current = true;
+      const frame = requestAnimationFrame(() => tabRefs.current[activeTab]?.focus());
+      return () => cancelAnimationFrame(frame);
+    }
+    if (wasOpenRef.current) {
+      wasOpenRef.current = false;
+      restoreMobileComposeSheetOpener();
+    }
+  }, [open, activeTab]);
+
+  const rendered = isMobile && !settingsOpen && uiMode === "classic";
+  useEffect(() => {
+    if (!rendered) {
+      wasOpenRef.current = false;
+      if (useAppStore.getState().composeSheetOpen) close();
+      clearMobileComposeSheetOpener();
+    }
+  }, [rendered]);
+
+  useEffect(() => () => clearMobileComposeSheetOpener(), []);
+
+  if (!rendered) return null;
 
   return (
     <>
       {open ? (
-        <div
+        <button
+          type="button"
           className="compose-sheet-backdrop"
-          role="button"
           aria-label={t("sheet.close")}
           onClick={close}
         />
       ) : null}
       <section
         id="mobile-generate-sheet"
+        inert={!open}
         className={`compose-sheet${open ? " compose-sheet--open" : ""}`}
         role="dialog"
         aria-modal={open ? "true" : "false"}
@@ -90,27 +138,35 @@ export function MobileComposeSheet() {
         <div className="mobile-sheet-tabs" role="tablist" aria-label={t("sheet.generate")}>
           {SHEET_TABS.map((tab) => (
             <button
+              ref={(node) => { tabRefs.current[tab] = node; }}
               key={tab}
+              id={tabId(tab)}
               type="button"
               role="tab"
               aria-selected={activeTab === tab}
+              aria-controls={panelId(tab)}
+              tabIndex={activeTab === tab ? 0 : -1}
               className={`mobile-sheet-tabs__button${activeTab === tab ? " active" : ""}`}
               onClick={() => setActiveTab(tab)}
+              onKeyDown={(event) => onTabKeyDown(event, tab)}
             >
               {t(`sheet.tabs.${tab}`)}
             </button>
           ))}
         </div>
         <div className="compose-sheet__body">
-          {activeTab === "prompt" ? (
-            <div
-              className="compose-sheet__panel compose-sheet__panel--prompt"
-              role="tabpanel"
-              onFocusCapture={(event) => {
-                const panel = document.getElementById(MOBILE_INFLIGHT_PANEL_ID);
-                inflightHadFocusRef.current = panel?.contains(event.target as Node) ?? false;
-              }}
-            >
+          <div
+            id={panelId("prompt")}
+            className="compose-sheet__panel compose-sheet__panel--prompt"
+            role="tabpanel"
+            aria-labelledby={tabId("prompt")}
+            hidden={activeTab !== "prompt"}
+            onFocusCapture={(event) => {
+              const panel = document.getElementById(MOBILE_INFLIGHT_PANEL_ID);
+              inflightHadFocusRef.current = panel?.contains(event.target as Node) ?? false;
+            }}
+          >
+            {activeTab === "prompt" ? <>
               <PromptComposer />
               {inFlightCount > 0 ? (
                 <section className="compose-sheet__inflight" hidden={!inflightExpanded}>
@@ -141,13 +197,25 @@ export function MobileComposeSheet() {
                   onToggle={setInflightExpanded}
                 />
               </div>
-            </div>
-          ) : activeTab === "controls" ? (
-            <div className="compose-sheet__panel compose-sheet__panel--controls" role="tabpanel">
-              <GenerationControlsPanel />
-            </div>
-          ) : (
-            <div className="compose-sheet__panel compose-sheet__panel--library" role="tabpanel">
+            </> : null}
+          </div>
+          <div
+            id={panelId("controls")}
+            className="compose-sheet__panel compose-sheet__panel--controls"
+            role="tabpanel"
+            aria-labelledby={tabId("controls")}
+            hidden={activeTab !== "controls"}
+          >
+            {activeTab === "controls" ? <GenerationControlsPanel /> : null}
+          </div>
+          <div
+            id={panelId("library")}
+            className="compose-sheet__panel compose-sheet__panel--library"
+            role="tabpanel"
+            aria-labelledby={tabId("library")}
+            hidden={activeTab !== "library"}
+          >
+            {activeTab === "library" ? (
               <Suspense fallback={<div className="prompt-library-panel__loading">{t("common.loading")}</div>}>
                 <LazyPromptLibraryPanel
                   variant="embedded"
@@ -155,8 +223,8 @@ export function MobileComposeSheet() {
                   onRequestClose={() => setActiveTab("prompt")}
                 />
               </Suspense>
-            </div>
-          )}
+            ) : null}
+          </div>
         </div>
       </section>
     </>
