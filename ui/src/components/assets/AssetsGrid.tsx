@@ -3,6 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useI18n } from "../../i18n";
 import { useAppStore } from "../../store/useAppStore";
 import type { AssetItem } from "../../store/storeTypes";
+import { AssetElementToggle } from "./AssetElementToggle";
 
 const GAP = 12;
 const MIN_TILE = 180;
@@ -36,6 +37,7 @@ function AssetTile({ item }: { item: AssetItem }) {
       {url && item.kind === "video" ? (near ? <video src={url} preload="metadata" muted playsInline /> : null)
         : url ? <img src={url} alt="" loading="lazy" decoding="async" />
           : <span className="assets-tile__glyph" aria-hidden="true">{item.kind.slice(0, 1).toUpperCase()}</span>}
+      <AssetElementToggle item={item} />
       <button type="button" className={`assets-tile__delete${armed ? " is-danger" : ""}`}
         aria-label={armed ? t("assets.confirmDelete") : t("assets.deleteAsset")} onClick={() => void remove()}>
         {armed ? t("assets.confirmDelete") : "×"}

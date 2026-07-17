@@ -12,6 +12,7 @@ export type AssetUpdatePatch = {
 
 export type PromoteToElementParams = {
   result: { path?: string; filePath?: string };
+  sourceAssetId: string;
   elementKind: string;
   name?: string;
   notes?: string;

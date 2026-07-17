@@ -44,6 +44,14 @@
 .assets-tile__preview:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
 .assets-tile__glyph { color: var(--text-faint); font-size: clamp(36px, 7vw, 72px); font-weight: 700; }
 .assets-tile__delete { position: absolute; top: 7px; right: 7px; min-width: 28px; height: 28px; padding: 0 8px; border-radius: 7px; background: color-mix(in srgb, var(--bg) 82%, transparent) !important; opacity: 0; }
+.asset-element-toggle { position: absolute; z-index: 5; top: 7px; left: 47px; display: grid; width: 36px; height: 36px; padding: 0; place-items: center; border: 1px solid color-mix(in srgb, var(--border-strong) 74%, transparent); border-radius: 9px; background: color-mix(in srgb, var(--bg) 82%, transparent); color: var(--on-scrim); cursor: pointer; opacity: .76; box-shadow: 0 4px 14px color-mix(in srgb, var(--shadow-strong) 70%, transparent); transition: opacity 120ms ease, background-color 120ms ease, color 120ms ease; }
+.asset-element-toggle__glyph { color: currentColor; font: 650 19px/1 var(--mono); }
+.asset-element-toggle:hover, .asset-element-toggle:focus-visible, .asset-element-toggle.is-active, .assets-tile:hover .asset-element-toggle, .assets-tile:focus-within .asset-element-toggle { opacity: 1; }
+.asset-element-toggle:hover { background: color-mix(in srgb, var(--bg) 94%, transparent); }
+.asset-element-toggle.is-active { color: var(--red); }
+.asset-element-toggle.is-active .asset-element-toggle__glyph { font-weight: 850; }
+.asset-element-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.asset-element-toggle:disabled { cursor: wait; opacity: .56; }
 .assets-tile:hover .assets-tile__delete, .assets-tile:focus-within .assets-tile__delete { opacity: 1; }
 .assets-tile__meta { padding: 8px 2px 0; }
 .assets-tile__title { display: flex; align-items: center; gap: 8px; }
@@ -96,6 +104,19 @@
   .assets-toolbar { padding: 14px 14px 10px; }
   .assets-toolbar__controls { grid-template-columns: minmax(0, 1fr) 120px; }
   .assets-grid-scroll { padding: 12px 14px 28px; }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .asset-element-toggle { left: 55px; width: 44px; height: 44px; opacity: .92; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .asset-element-toggle { transition: none; }
+}
+
+@media (forced-colors: active) {
+  .asset-element-toggle { border-color: ButtonText; }
+  .asset-element-toggle.is-active { color: Highlight; }
 }
 .assets-clear-btn { padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--text-muted); font: 500 11px/1 var(--mono); cursor: pointer; transition: color 160ms, border-color 160ms; }
 .assets-clear-btn:hover { color: #ff6b6b; border-color: #ff6b6b; }

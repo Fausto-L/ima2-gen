@@ -184,19 +184,52 @@ export function registerAssetsRoutes(app: Express, ctxRaw: RouteRuntimeContext) 
         notes?: unknown;
         folderId?: unknown;
         tags?: unknown;
+        sourceAssetId?: unknown;
       };
       const resultPath = body.result?.path ?? body.result?.filePath ?? body.path ?? body.filePath;
       const ref = await resolveValidatedFilePath("element", resultPath);
       if (!ref) throw httpError(400, "INVALID_ELEMENT_REFS", "gallery result path required");
-      const metadata = { elementKind: body.elementKind, refs: [ref] };
+      const sourceAssetId = typeof body.sourceAssetId === "string" && body.sourceAssetId.trim()
+        ? body.sourceAssetId.trim()
+        : null;
+      const source = sourceAssetId ? getAsset(sourceAssetId) : null;
+      if (sourceAssetId && !source) {
+        throw httpError(404, "SOURCE_ASSET_NOT_FOUND", "source asset not found");
+      }
+      const canonicalRef = canonicalizeStoredPath(ref);
+      if (source && ((source.kind !== "image" && source.kind !== "video") || source.filePath !== canonicalRef)) {
+        throw httpError(400, "INVALID_ELEMENT_SOURCE", "source asset does not own the promoted file");
+      }
+      const sourceTag = source ? `element-source:${source.id}` : null;
+      const existing = sourceTag
+        ? listAssets({ kind: "element", tag: sourceTag, limit: 1 }).assets[0]
+        : null;
+      if (existing) return res.status(200).json({ asset: existing });
+      const elementKind = typeof body.elementKind === "string" && body.elementKind.trim()
+        ? body.elementKind.trim()
+        : "character";
+      const fallbackName = source?.name || ref.split("/").at(-1) || "Element";
+      const name = (typeof body.name === "string" && body.name.trim() ? body.name.trim() : fallbackName).slice(0, 80);
+      const notes = typeof body.notes === "string" && body.notes.trim() ? body.notes.trim() : undefined;
+      const metadata = {
+        elementKind,
+        name,
+        refs: [ref],
+        ...(source ? { sourceAssetId: source.id } : {}),
+        ...(notes ? { notes } : {}),
+      };
       validateElementMetadata(metadata, body.notes);
+      const tags = [
+        ...(Array.isArray(body.tags) ? body.tags : []),
+        ...(sourceTag ? [sourceTag] : []),
+      ];
       const asset = createAsset({
         kind: "element",
-        name: body.name,
+        name,
         folderId: body.folderId,
         notes: body.notes,
         metadata,
-        tags: body.tags,
+        tags,
       });
       logEvent("assets", "promote-element", { assetId: asset.id });
       res.status(201).json({ asset });

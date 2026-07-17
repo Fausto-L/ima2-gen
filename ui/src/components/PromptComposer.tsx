@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type DragEvent } from "react";
 import { useAppStore } from "../store/useAppStore";
 import { useI18n } from "../i18n";
 import { isVideoItem, extractLastFrame } from "../lib/videoMedia";
@@ -12,6 +12,8 @@ import { ReferenceTray } from "./composer/ReferenceTray";
 import { DeadTagMirror } from "./composer/DeadTagMirror";
 import { PromptComposerToolbar } from "./composer/PromptComposerToolbar";
 import { usePromptPaste } from "./composer/usePromptPaste";
+import { elementPreviewPath, loadAllElementAssets } from "../lib/elementMembership";
+import type { AssetItem } from "../store/storeTypes";
 
 type PromptComposerProps = {
   variant?: "sidebar" | "bottom";
@@ -45,14 +47,15 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
   const removePreset = useAppStore((s) => s.removePreset);
   const elementSelection = useAppStore((s) => s as typeof s & ElementSelectionState);
   const addElementId = elementSelection.addElementId;
-  const allAssets = useAppStore((s) => s.assets);
-  const elements = useMemo(() => allAssets.filter((asset) => asset.kind === "element"), [allAssets]);
-  // The create surface never mounts the Assets workspace, so hydrate the
-  // asset list once here or the @mention menu would stay empty.
+  const [elements, setElements] = useState<AssetItem[]>([]);
+  // Assets and Create are exclusive workspaces. Always hydrate the complete
+  // Element list on Create mount instead of inheriting the last Assets filter.
   useEffect(() => {
-    const state = useAppStore.getState();
-    if (state.assets.length === 0 && !state.assetsLoading) void state.loadAssets(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let cancelled = false;
+    void loadAllElementAssets()
+      .then((items) => { if (!cancelled) setElements(items); })
+      .catch((error) => console.error("[ElementMention] load failed", error));
+    return () => { cancelled = true; };
   }, []);
   const { t } = useI18n();
 
@@ -375,13 +378,16 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
               kind: "reference" as ElementMentionKind,
               thumbnail: item.source.dataUrl,
             })),
-          ...elements.map((asset) => ({
-            id: asset.id,
-            name: asset.name,
-            kind: (typeof asset.metadata?.elementKind === "string" ? asset.metadata.elementKind : "character") as ElementMentionKind,
-            thumbnail: asset.filePath ? `/generated/${asset.filePath.split("/").map(encodeURIComponent).join("/")}` : undefined,
-            tags: asset.tags,
-          })),
+          ...elements.map((asset) => {
+            const previewPath = elementPreviewPath(asset);
+            return {
+              id: asset.id,
+              name: asset.name,
+              kind: (typeof asset.metadata?.elementKind === "string" ? asset.metadata.elementKind : "character") as ElementMentionKind,
+              thumbnail: previewPath ? `/generated/${previewPath.split("/").map(encodeURIComponent).join("/")}` : undefined,
+              tags: asset.tags,
+            };
+          }),
         ]}
         onSelect={(element) => {
           if (element.id.startsWith(TRAY_MENTION_PREFIX)) {

@@ -58,6 +58,53 @@ describe("assets routes contract", () => {
     assert.deepEqual(listed.body.assets.find((a: any) => a.id === video.body.asset.id).metadata, { seconds: 2 });
   }));
 
+  it("quick-registers one idempotent Element linked to its source asset", async () => withApp(async (base) => {
+    const source = await request(base, "/api/assets", "POST", { filePath: "a.png", kind: "image", name: "Hero source", tags: ["starred"] });
+    const payload = {
+      result: { filePath: "a.png" },
+      sourceAssetId: source.body.asset.id,
+      elementKind: "character",
+      name: "Hero element",
+      tags: ["portrait"],
+    };
+    const first = await request(base, "/api/assets/promote-element", "POST", payload);
+    const second = await request(base, "/api/assets/promote-element", "POST", payload);
+
+    assert.equal(first.response.status, 201);
+    assert.equal(second.response.status, 200);
+    assert.equal(second.body.asset.id, first.body.asset.id);
+    assert.equal(first.body.asset.kind, "element");
+    assert.deepEqual(first.body.asset.metadata, {
+      elementKind: "character",
+      name: "Hero element",
+      refs: ["a.png"],
+      sourceAssetId: source.body.asset.id,
+    });
+    assert.deepEqual(first.body.asset.tags, [`element-source:${source.body.asset.id}`, "portrait"]);
+
+    const listed = await request(base, `/api/assets?kind=element&tag=${encodeURIComponent(`element-source:${source.body.asset.id}`)}`);
+    assert.equal(listed.body.assets.length, 1);
+    await request(base, `/api/assets/${first.body.asset.id}`, "DELETE");
+    const sourceAfterDelete = await request(base, `/api/assets/${source.body.asset.id}`);
+    assert.equal(sourceAfterDelete.response.status, 200);
+    assert.equal(existsSync(join(GENERATED_DIR, "a.png")), true);
+  }));
+
+  it("rejects unknown and mismatched quick-register sources", async () => withApp(async (base) => {
+    const missing = await request(base, "/api/assets/promote-element", "POST", {
+      result: { filePath: "a.png" }, sourceAssetId: "a_missing", elementKind: "character",
+    });
+    assert.equal(missing.response.status, 404);
+    assert.equal(missing.body.error.code, "SOURCE_ASSET_NOT_FOUND");
+
+    const video = await request(base, "/api/assets", "POST", { filePath: "b.mp4", kind: "video" });
+    const mismatch = await request(base, "/api/assets/promote-element", "POST", {
+      result: { filePath: "a.png" }, sourceAssetId: video.body.asset.id, elementKind: "character",
+    });
+    assert.equal(mismatch.response.status, 400);
+    assert.equal(mismatch.body.error.code, "INVALID_ELEMENT_SOURCE");
+  }));
+
   it("returns validation envelopes for escaped, missing, and invalid-kind promotions", async () => withApp(async (base) => {
     for (const payload of [
       { filePath: "../x", kind: "image", code: "INVALID_FILENAME" },
