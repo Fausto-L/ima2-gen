@@ -76,7 +76,7 @@ Each work phase runs one full PABCD cycle. WP1 must land before WP2; WP2 consume
 - WP3 blocker correction `4b15ec7`: explicit post-listen activation helper and regression proving restore is inert until `serverActualPort` is published.
 - WP3 SOT `d4cc5bc`, `f7d24a7`: API, architecture, operations, parent roadmap, devlog map, and committed-tree line counts synchronized.
 - Final adversarial correction `a9b70e1`: malformed token bundles fail closed as corrupt; a post-connect Unauthorized/closed `tools/list` invalidates only the current epoch and produces truthful `offline`/503 instead of 200 connected.
-- Detached committed-tree evidence: MCP 138 passed, 0 failed; focused lifecycle/port matrix 55/55; API/structure contracts 3/3; scoped whitespace exit 0; final gitleaks scanned seven recovery commits with 0 leaks.
+- Detached committed-tree evidence: MCP 138 passed, 0 failed; focused lifecycle/port matrix 55/55; API/structure contracts 3/3; scoped whitespace exit 0; recovery-range gitleaks exit 0 with 0 leaks.
 - Integrated worktree evidence: server and test typechecks exit 0, inventory exit 0, full suite 1659 passed, 0 failed after a temporary mechanical line-count refresh for unrelated in-progress files; the committed-tree line-count SOT was restored immediately afterward.
 - Final `gpt-5.6-sol/high/priority` review first found two blockers, then re-audited `a9b70e1` and returned `VERDICT: PASS`; no High/Critical finding remains.
 - Provider generation calls: 0. No publish or push is part of this unit.
