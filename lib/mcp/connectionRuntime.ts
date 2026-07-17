@@ -1,5 +1,6 @@
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { legacyEndpointForProvider, type ServerOAuthProvider } from "./oauthProvider.js";
 import { inspectTokenRecord, type McpTokenInspection } from "./tokenStore.js";
 import type { McpConnectionStatus } from "./types.js";
@@ -86,6 +87,17 @@ export function sameConnection(
   right: McpConnectionIdentity | null | undefined,
 ): boolean {
   return Boolean(left && right && left.generation === right.generation && left.epoch === right.epoch);
+}
+
+export function markSessionInvalid(
+  session: ProviderSession | undefined,
+  identity: McpConnectionIdentity | null,
+  error: unknown,
+): void {
+  if (!(error instanceof UnauthorizedError) && !/unauthorized|connection closed/i.test(String((error as Error)?.message))) return;
+  if (!sameConnection(session?.identity, identity)) return;
+  session!.state = "offline";
+  session!.detail = "MCP_SESSION_INVALID";
 }
 
 /** Pinned @modelcontextprotocol/sdk 1.29 retry-exhaustion contract. */

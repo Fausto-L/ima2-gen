@@ -5,7 +5,7 @@ import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { listProviders, resolveProviderEndpoint } from "./providerRegistry.js";
 import { createServerOAuthProvider, type ServerOAuthProvider } from "./oauthProvider.js";
 import { tombstoneTokenRecord } from "./tokenStore.js";
-import { addCandidate, inspectRestore, isTerminalTransportError, publicStatus, removeCandidate, runBounded, sameConnection } from "./connectionRuntime.js";
+import { addCandidate, inspectRestore, isTerminalTransportError, markSessionInvalid, publicStatus, removeCandidate, runBounded, sameConnection } from "./connectionRuntime.js";
 import type { McpConnectionIdentity, McpConnectionManagerOptions, PendingAuth, ProviderSession } from "./connectionRuntime.js";
 import type { McpConnectionStatus, McpToolListing } from "./types.js";
 const DEFAULT_PENDING_AUTH_TTL_MS = 10 * 60 * 1000;
@@ -437,11 +437,13 @@ export class McpConnectionManager {
     const identity = this.connectionIdentity(provider);
     const tools: Array<Record<string, unknown>> = [];
     let cursor: string | undefined;
-    do {
-      const page = await session.client.listTools(cursor ? { cursor } : {});
-      tools.push(...(page.tools as Array<Record<string, unknown>>));
-      cursor = page.nextCursor;
-    } while (cursor);
+    try {
+      do {
+        const page = await session.client.listTools(cursor ? { cursor } : {});
+        tools.push(...(page.tools as Array<Record<string, unknown>>));
+        cursor = page.nextCursor;
+      } while (cursor);
+    } catch (error) { markSessionInvalid(this.sessions.get(provider), identity, error); throw error; }
     if (sameConnection(this.connectionIdentity(provider), identity)) session.toolCount = tools.length;
     const client = session.client as unknown as { getServerVersion?: () => Record<string, unknown> | undefined };
     const transport = session.transport as unknown as { protocolVersion?: string } | undefined;
@@ -486,13 +488,7 @@ export class McpConnectionManager {
       if ((raw as { isError?: boolean }).isError) throw new Error(`MCP_TOOL_ERROR:${name}`);
       return raw;
     } catch (error) {
-      if (error instanceof UnauthorizedError || /unauthorized|connection closed/i.test(String((error as Error)?.message))) {
-        const current = this.sessions.get(provider);
-        if (sameConnection(current?.identity, identity)) {
-          current!.state = "offline";
-          current!.detail = "MCP_SESSION_INVALID";
-        }
-      }
+      markSessionInvalid(this.sessions.get(provider), identity, error);
       throw error;
     }
   }

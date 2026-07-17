@@ -15,6 +15,7 @@ const fakeManager = {
   last: new Map<string, Record<string, unknown>>(),
   toolCalls: [] as Array<{ provider: string; name: string; args: Record<string, unknown> }>,
   toolBehavior: "pages" as "pages" | "not-connected" | "boom",
+  probeBehavior: "ok" as "ok" | "unauthorized",
   status(id: string) { return this.last.get(id) ?? { provider: id, state: "disconnected" }; },
   async callTool(provider: string, name: string, args: Record<string, unknown>) {
     this.toolCalls.push({ provider, name, args });
@@ -28,6 +29,13 @@ const fakeManager = {
         has_more: false,
       },
     };
+  },
+  async listTools(id: string) {
+    if (this.probeBehavior === "unauthorized") {
+      this.last.set(id, { provider: id, state: "offline", detail: "MCP_SESSION_INVALID" });
+      throw new Error("Unauthorized");
+    }
+    return { provider: id, fetchedAt: new Date(0).toISOString(), tools: [], serverInfo: null };
   },
   async connect(id: string) {
     const status = { provider: id, state: "auth_required", authorizationUrl: "https://provider.example/authorize" };
@@ -80,6 +88,16 @@ test("connect returns 202 with authorizationUrl when auth is required", async ()
   const body = await response.json() as { ok: boolean; status: { authorizationUrl: string } };
   assert.equal(body.ok, false);
   assert.match(body.status.authorizationUrl, /provider\.example/);
+}));
+
+test("refresh returns offline when the post-connect tool probe invalidates the session", async () => withApp(async (base) => {
+  fakeManager.probeBehavior = "unauthorized";
+  const response = await fetch(`${base}/api/mcp/providers/runway/refresh`, { method: "POST" });
+  assert.equal(response.status, 503);
+  const body = await response.json() as { ok: boolean; status: { state: string; detail: string } };
+  assert.equal(body.ok, false);
+  assert.deepEqual(body.status, { provider: "runway", state: "offline", detail: "MCP_SESSION_INVALID" });
+  fakeManager.probeBehavior = "ok";
 }));
 
 test("unknown status returns canonical 404", async () => withApp(async (base) => {

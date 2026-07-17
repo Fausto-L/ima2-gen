@@ -82,13 +82,19 @@ function isBinding(value: unknown): value is McpTokenBinding {
     && typeof value.updatedAt === "string";
 }
 
+function isTokenBundle(value: unknown): value is Record<string, unknown> {
+  return isObject(value)
+    && typeof value.access_token === "string"
+    && value.access_token.trim().length > 0;
+}
+
 function isRecord(value: unknown): value is McpTokenRecord {
   if (!isObject(value)) return false;
   if (value.schemaVersion !== undefined && value.schemaVersion !== 1) return false;
   if (value.schemaVersion === 1 && (!Number.isSafeInteger(value.revision) || Number(value.revision) < 0)) return false;
   if (value.binding !== undefined && !isBinding(value.binding)) return false;
   if (value.clientInformation !== undefined && !isObject(value.clientInformation)) return false;
-  if (value.tokens !== undefined && !isObject(value.tokens)) return false;
+  if (value.tokens !== undefined && !isTokenBundle(value.tokens)) return false;
   if (value.codeVerifier !== undefined && typeof value.codeVerifier !== "string") return false;
   if (value.origin !== undefined && typeof value.origin !== "string") return false;
   return value.tombstone === undefined || value.tombstone === true;

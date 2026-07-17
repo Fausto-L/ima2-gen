@@ -66,6 +66,19 @@ test("inspection classifies missing, corrupt, pending, usable, legacy, and misma
   assertCleanSecure(dir);
 });
 
+test("malformed token bundles are corrupt and never reusable", (t) => {
+  const dir = tempDir(t);
+  for (const tokens of [{}, { access_token: 7 }, { access_token: "   " }]) {
+    writeTokenRecord(dir, "runway", {
+      schemaVersion: 1,
+      revision: 1,
+      binding: { ...current, updatedAt: "2026-07-17T00:00:00.000Z" },
+      tokens: tokens as Record<string, unknown>,
+    });
+    assert.equal(inspectTokenRecord(dir, "runway", current).state, "corrupt");
+  }
+});
+
 test("field invalidation follows every SDK scope without over-clearing", (t) => {
   const dir = tempDir(t);
   writeTokenRecord(dir, "runway", {

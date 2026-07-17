@@ -40,6 +40,7 @@ function makeHarness(t: TestContext, options: {
   restoreTimeoutMs?: number;
   reconnectDelayMs?: number;
   callTool?: () => Promise<Record<string, unknown>>;
+  listTools?: (params: { cursor?: string }) => Promise<{ tools: Array<{ name: string }>; nextCursor?: string }>;
 } = {}) {
   const dir = tempDir(t);
   const transports: FakeTransport[] = [];
@@ -85,6 +86,7 @@ function makeHarness(t: TestContext, options: {
           if (behavior) await behavior(transport, requestOptions);
         },
         async listTools(params: { cursor?: string }) {
+          if (options.listTools) return options.listTools(params);
           if (!params.cursor) return { tools: [{ name: "a" }, { name: "b" }], nextCursor: "p2" };
           return { tools: [{ name: "c" }] };
         },
@@ -356,6 +358,16 @@ test("listTools still paginates after lifecycle hardening", async (t) => {
   await h.manager.connect("runway");
   const listing = await h.manager.listTools("runway");
   assert.deepEqual(listing.tools.map((tool) => tool.name), ["a", "b", "c"]);
+});
+
+test("listTools auth or closed-session failures invalidate only the current epoch", async (t) => {
+  for (const error of [new UnauthorizedError("Unauthorized"), new Error("connection closed")]) {
+    const h = makeHarness(t, { listTools: async () => { throw error; } });
+    await h.manager.connect("runway");
+    await assert.rejects(() => h.manager.listTools("runway"));
+    assert.equal(h.manager.status("runway").state, "offline");
+    assert.equal(h.manager.status("runway").detail, "MCP_SESSION_INVALID");
+  }
 });
 
 test("startup restore connects one same-binding stored grant without opening authorization", async (t) => {

@@ -161,10 +161,10 @@ routes/
 | `lib/localImportStore.ts` | 115 | Validates raw PNG/JPEG/WebP body, writes timestamped `imported-*` to generated/, embeds XMP metadata, returns GenerateItem-shaped row |
 | `lib/storageMigration.ts` | 311 | Legacy generated-folder scan and migration support |
 | `lib/runtimePorts.ts` | 106 | Port probing, fallback binding, and OAuth ready URL parsing |
-| `lib/mcp/tokenStore.ts` | 319 | Versioned 0600 MCP token records, endpoint/origin binding inspection, revision/tombstone CAS, and PID+nonce recovery lock |
+| `lib/mcp/tokenStore.ts` | 325 | Versioned 0600 MCP token records, endpoint/origin binding inspection, revision/tombstone CAS, and PID+nonce recovery lock |
 | `lib/mcp/oauthProvider.ts` | 150 | SDK OAuth provider, memory-only PKCE/state, bound credential persistence, scoped invalidation, and legacy binding migration |
-| `lib/mcp/connectionRuntime.ts` | 111 | MCP session/connection identity helpers, restore inspection, terminal SDK error classification, and bounded concurrency |
-| `lib/mcp/connectionManager.ts` | 500 | Generation/epoch-safe connect, callback, refresh, disconnect, post-listen restore, one terminal reconnect, tool calls, and shutdown |
+| `lib/mcp/connectionRuntime.ts` | 123 | MCP session/connection identity helpers, restore inspection, terminal/session-invalid error classification, and bounded concurrency |
+| `lib/mcp/connectionManager.ts` | 496 | Generation/epoch-safe connect, callback, refresh, disconnect, post-listen restore, one terminal reconnect, tool calls, and shutdown |
 | `lib/mcp/shutdown.ts` | 24 | Post-listen restore activation plus concurrent HTTP/MCP shutdown coordination and grace bound |
 | `lib/mcp/snapshotPipeline.ts` | 113 | Generation/epoch-safe live tool snapshot ingest and stale-result suppression |
 | `lib/oauthLauncher.ts` | 119 | OAuth proxy child process startup and actual ready-port capture |
@@ -405,9 +405,9 @@ The `tests/` directory now contains roughly 125 `*.test.js` / `*.test.mjs` / `*.
 | `tests/server-fallback-contract.test.js` | 55 | Server static/SPA fallback contract |
 | `tests/runtime-ports.test.js` | 51 | Server/OAuth port fallback contract |
 | `tests/runtime-ports.test.ts` | 81 | Runtime port fallback, concurrent shutdown, and post-listen-only MCP restore activation |
-| `tests/mcp-token-store.test.ts` | 223 | Credential binding, 0600 atomic persistence, revision/tombstone races, invalidation, and recovery-lock contracts |
-| `tests/mcp-connection-manager.test.ts` | 477 | Startup restore, generation/epoch races, transport error/close transitions, bounded reconnect, refresh, and shutdown |
-| `tests/mcp-connection-routes.test.ts` | 160 | MCP callback/connect/refresh state-to-HTTP mapping and secret-free route responses |
+| `tests/mcp-token-store.test.ts` | 236 | Credential binding, malformed-token rejection, 0600 atomic persistence, revision/tombstone races, invalidation, and recovery-lock contracts |
+| `tests/mcp-connection-manager.test.ts` | 489 | Startup restore, generation/epoch races, transport and post-connect probe failures, bounded reconnect, refresh, and shutdown |
+| `tests/mcp-connection-routes.test.ts` | 178 | MCP callback/connect/refresh state-to-HTTP mapping, post-connect auth failure, and secret-free route responses |
 | `tests/mcp-snapshot-pipeline.test.ts` | 117 | Stale snapshot suppression across connection generations and epochs |
 | `tests/vite-dev-port-contract.test.js` | 39 | Vite dev proxy discovery contract |
 | `tests/size-presets.test.js` | 57 | Size preset validation |
