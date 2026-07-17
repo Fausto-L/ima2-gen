@@ -2,7 +2,7 @@
 
 Date: 2026-07-17
 Class: C4 auth and credential lifecycle
-Status: WP1 implementation active after WP0 docs-only roadmap completion
+Status: WP3 verification closeout active; WP0-WP2 implemented
 
 ## Objective
 
@@ -68,3 +68,11 @@ Each work phase runs one full PABCD cycle. WP1 must land before WP2; WP2 consume
 - Baseline focused suite: 10 tests passed, 0 failed on 2026-07-17 (`mcp-token-store` 5 + `mcp-connection-manager` 5).
 - Read-only explorer: restart activation, lifecycle races, stale status, origin deletion, SDK invalidation, and shutdown gaps confirmed.
 - Three `gpt-5.6-sol/high/priority` audits independently confirmed credential persistence, missing startup restore, generation races, `onerror`/`onclose` separation, missing security tests, and unsynchronized source-of-truth docs.
+
+## Implementation receipts
+
+- WP1 `716fdbb`: versioned endpoint/origin binding, revision/tombstone CAS, PID+nonce recovery lock, memory-only PKCE, scoped SDK invalidation, and generation-safe single-flight lifecycle.
+- WP2 `53656b5`: post-listen restore, generation+epoch transport ownership, truthful state transitions and route status, one bounded terminal reconnect, stale snapshot/tool suppression, and coordinated shutdown.
+- WP3 blocker correction `4b15ec7`: explicit post-listen activation helper and regression proving restore is inert until `serverActualPort` is published.
+- Focused MCP suite before WP3 closeout: 135 passed, 0 failed; typechecks, inventory, scoped whitespace, and secret scan passed. Final clean-worktree full-suite and independent review are recorded only after fresh execution.
+- Provider generation calls: 0. No publish or push is part of this unit.

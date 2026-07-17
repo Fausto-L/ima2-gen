@@ -72,7 +72,7 @@ routes/
 
 | File | Lines | Responsibility |
 |---|---:|---|
-| `server.ts` | 516 | Express bootstrap, middleware wiring, OAuth startup, runtime advertisement, port fallback, route registration, static serving |
+| `server.ts` | 523 | Express bootstrap, middleware wiring, OAuth startup, runtime advertisement, port fallback, post-listen MCP restore, coordinated shutdown, route registration, static serving |
 | `config.ts` | 376 | Centralized runtime config (env > `~/.ima2/config.json` > defaults), prompt import/index caps, web-search/reasoning-effort defaults, API-provider defaults, and backward-compatible flat re-exports |
 | `routes/index.ts` | 85 | Route registration hub: health, capabilities, events, storage, metadata, history, imageImport, sessions, edit, nodes, multimode, generate, agent, prompt builder, generationRequestLog, annotations, canvasVersions, comfy, prompts, prompt import, keys, auth, quota, grok, agy, video, videoExtended, and (when `features.cardNews`) cardNews |
 | `routes/capabilities.ts` | 35 | `GET /api/capabilities` — agent-facing runtime defaults; `GET/PATCH /api/config/grok-planner` — Grok planner model query/update |
@@ -86,6 +86,7 @@ routes/
 | `routes/history.ts` | 234 | History list, cursor pagination, favorites-only filtering, grouped gallery, soft delete (OS trash), restore, gallery favorite toggle, permanent delete |
 | `routes/imageImport.ts` | 38 | `POST /api/history/import-local` raw image upload (PNG/JPEG/WebP) — Phase 10 drop-import for Canvas |
 | `routes/health.ts` | 125 | Providers, health, OAuth status, inflight list/cancel for classic/node/multimode jobs, billing |
+| `routes/mcpConnections.ts` | 164 | MCP provider list/status/connect/callback/refresh/disconnect/model routes; truthful state-to-HTTP mapping and secret-free responses |
 | `routes/storage.ts` | 48 | Gallery storage status and generated-folder open action |
 | `routes/metadata.ts` | 78 | `/api/metadata/read` for embedded XMP image metadata extraction |
 | `routes/annotations.ts` | 119 | `GET/PUT/DELETE /api/annotations/:filename` for canvas annotation overlays |
@@ -160,6 +161,12 @@ routes/
 | `lib/localImportStore.ts` | 115 | Validates raw PNG/JPEG/WebP body, writes timestamped `imported-*` to generated/, embeds XMP metadata, returns GenerateItem-shaped row |
 | `lib/storageMigration.ts` | 311 | Legacy generated-folder scan and migration support |
 | `lib/runtimePorts.ts` | 106 | Port probing, fallback binding, and OAuth ready URL parsing |
+| `lib/mcp/tokenStore.ts` | 319 | Versioned 0600 MCP token records, endpoint/origin binding inspection, revision/tombstone CAS, and PID+nonce recovery lock |
+| `lib/mcp/oauthProvider.ts` | 150 | SDK OAuth provider, memory-only PKCE/state, bound credential persistence, scoped invalidation, and legacy binding migration |
+| `lib/mcp/connectionRuntime.ts` | 111 | MCP session/connection identity helpers, restore inspection, terminal SDK error classification, and bounded concurrency |
+| `lib/mcp/connectionManager.ts` | 500 | Generation/epoch-safe connect, callback, refresh, disconnect, post-listen restore, one terminal reconnect, tool calls, and shutdown |
+| `lib/mcp/shutdown.ts` | 24 | Post-listen restore activation plus concurrent HTTP/MCP shutdown coordination and grace bound |
+| `lib/mcp/snapshotPipeline.ts` | 113 | Generation/epoch-safe live tool snapshot ingest and stale-result suppression |
 | `lib/oauthLauncher.ts` | 119 | OAuth proxy child process startup and actual ready-port capture |
 | `lib/oauthProxy.ts` | 4 | Re-export shim for the `lib/oauthProxy/` subtree (kept for callers that imported the original module path) |
 | `lib/oauthProxy/index.ts` | 29 | Public surface — re-exports generators, streams, prompts, references, runtime, and shared types |
@@ -204,7 +211,7 @@ routes/
 | `lib/agyCli.ts` | 44 | Antigravity CLI discovery and process execution helpers |
 | `lib/agyImageAdapter.ts` | 397 | Antigravity CLI image-generation provider adapter |
 | `lib/apiCachePolicy.ts` | 12 | API response cache-control policy helpers |
-| `lib/assetsStore.ts` | 507 | Generated asset indexing, lookup, and persistence helpers |
+| `lib/assetsStore.ts` | 512 | Generated asset indexing, lookup, and persistence helpers |
 | `lib/atomicWrite.ts` | 16 | Atomic file-write helper |
 | `lib/capabilities.ts` | 138 | Runtime provider and feature capability resolution |
 | `lib/composerSnapshot.ts` | 34 | Composer state snapshot normalization |
@@ -278,7 +285,7 @@ Backed by `routes/agent.ts`; no CLI wrapper. Session/turn/queue persistence and 
 | Area | File | Lines | Responsibility |
 |---|---|---:|---|
 | App shell | `ui/src/App.tsx` | 185 | Initial hydration, polling, classic/node/card-news canvas switch, Canvas Mode workspace mount, prompt library overlay, mobile shell (dark-only since Phase 010) |
-| Entry | `ui/src/main.tsx` | 44 | React mount |
+| Entry | `ui/src/main.tsx` | 43 | React mount |
 | Types | `ui/src/types.ts` | 256 | Provider, quality, size, image model, embedded metadata, response types, web-search, reasoning effort, multimode |
 | Canvas types | `ui/src/types/canvas.ts` | 98 | Canvas Mode shared types (annotations, versions, masks, brushes) |
 | Store | `ui/src/store/useAppStore.ts` | 598 | Zustand facade; classic/node/video/multimode/inflight/history/asset-gen logic split into `ui/src/store/store*Impl.ts` modules |
@@ -397,6 +404,11 @@ The `tests/` directory now contains roughly 125 `*.test.js` / `*.test.mjs` / `*.
 | `tests/server.test.js` | 94 | Basic server API contracts |
 | `tests/server-fallback-contract.test.js` | 55 | Server static/SPA fallback contract |
 | `tests/runtime-ports.test.js` | 51 | Server/OAuth port fallback contract |
+| `tests/runtime-ports.test.ts` | 81 | Runtime port fallback, concurrent shutdown, and post-listen-only MCP restore activation |
+| `tests/mcp-token-store.test.ts` | 223 | Credential binding, 0600 atomic persistence, revision/tombstone races, invalidation, and recovery-lock contracts |
+| `tests/mcp-connection-manager.test.ts` | 477 | Startup restore, generation/epoch races, transport error/close transitions, bounded reconnect, refresh, and shutdown |
+| `tests/mcp-connection-routes.test.ts` | 160 | MCP callback/connect/refresh state-to-HTTP mapping and secret-free route responses |
+| `tests/mcp-snapshot-pipeline.test.ts` | 117 | Stale snapshot suppression across connection generations and epochs |
 | `tests/vite-dev-port-contract.test.js` | 39 | Vite dev proxy discovery contract |
 | `tests/size-presets.test.js` | 57 | Size preset validation |
 | `tests/size-custom-input-contract.test.js` | 232 | Custom size keyboard and confirmation contract |

@@ -889,7 +889,15 @@ Generate sprite rows for approved recipes. Body: `{ states?, async, requestId }`
 
 Remote subscription MCP providers (Runway, Higgsfield) connect through a compiled
 registry — arbitrary endpoints are rejected. All responses are secret-free: tokens
-live only in `${configDir}/mcp/<provider>.json` (0600).
+live only in versioned `${configDir}/mcp/<provider>.json` records (0600), bound to
+the provider endpoint and live callback origin.
+
+After the server has selected and published its actual port, it automatically restores
+each enabled provider with a completed same-binding token bundle. This path does not
+open a browser. Missing, corrupt, pending-only, disabled, or binding-mismatched records
+do not send a Bearer request and are not silently deleted. A mismatch is reported as
+`auth_required`; start Connect again to authorize the new endpoint/origin. OAuth state
+and PKCE are memory-only, so a browser flow interrupted by restart must be restarted.
 
 ### `GET /api/mcp/providers`
 
@@ -918,24 +926,38 @@ CLI model resolver.
 ### `GET /api/mcp/providers/:id/status`
 
 Connection status: `disconnected | connecting | auth_required | connected | offline | error`.
+The optional `detail` is a stable secret-free diagnostic code. `connected` means the
+current generation/transport is usable; `offline` means a terminal transport failure
+was observed and at most one reconnect is scheduled; `error` is an unrecovered failure.
 
 ### `POST /api/mcp/providers/:id/connect`
 
 Start or resume a connection. Returns `202 { status: { state: "auth_required", authorizationUrl } }`
-when the user must approve OAuth in a browser; `200` once connected.
+when the user must approve OAuth in a browser; `202` while connecting; `200` once
+connected. Terminal responses preserve state: `409 disconnected`, `503 offline`, or
+`502 error`. `ok` is true only for `connected`.
 
 ### `GET /api/mcp/oauth/callback`
 
 OAuth redirect target (`?state=&code=`). Exempt from the LAN token guard; protected by
 the single-use OAuth `state` + PKCE. Invalid state → `400` with no token exchange.
+Completion HTML is returned only after the manager reaches `connected`; otherwise the
+callback returns the state's mapped 202/409/503/502 response and a failure page.
 
 ### `POST /api/mcp/providers/:id/refresh`
 
-Close and re-establish the session reusing stored tokens (refresh-token path).
+Close and re-establish the session reusing stored tokens (refresh-token path). It uses
+the same state-to-HTTP mapping as Connect and cannot overwrite a newer disconnect or
+connection generation.
 
 ### `DELETE /api/mcp/providers/:id/connection`
 
-Clear local tokens and close the session. Does not revoke the provider-side grant.
+Clear local tokens and close the session. The response note explicitly says this is
+local-only; it does not revoke the provider-side grant. The tombstone prevents older
+connect, callback, restore, or refresh work from recreating the credential.
+
+Transport recovery never replays a host `callTool` request. In particular, mutating or
+billed media operations are not automatically retried by the connection manager.
 
 ### `POST /api/mcp/generate`
 

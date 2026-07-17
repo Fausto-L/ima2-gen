@@ -34,6 +34,7 @@ graph TD
     API --> AGENT["agent mode<br/>sessions turns queue"]
     API --> BUILDER["prompt builder<br/>chat assist"]
     API --> GENLOG["generation request log<br/>GET /api/generation-requests"]
+    API --> MCP["MCP providers<br/>OAuth connection lifecycle"]
     API --> CARD["cardnews dev-only<br/>templates jobs sets"]
     IMG --> FILES["~/.ima2/generated<br/>sidecar metadata + embedded XMP"]
     NODE --> FILES
@@ -75,6 +76,25 @@ The live generation/edit provider can be OAuth, API-key, or Grok based. OAuth an
 Storage endpoints are local-support helpers. `/api/storage/open-generated-dir` never accepts a browser-supplied path; it opens `ctx.config.storage.generatedDir` only.
 
 Runtime responses expose configured and actual ports separately. The backend can bind `3334+` when `3333` is occupied, and the OAuth proxy can report an actual fallback port when `10531` is occupied. Clients should follow the URL in `~/.ima2/server.json` or the `runtime.*.url` fields rather than rebuilding URLs from configured defaults.
+
+## MCP Connection Lifecycle
+
+| Method | Path | Success/state response | Description |
+|---|---|---|---|
+| `GET` | `/api/mcp/providers` | `{ ok, providers[] }` | Compiled provider registry plus secret-free status |
+| `GET` | `/api/mcp/providers/:id/status` | `{ ok, status }` | Current public state; unknown is 404 and disabled is 409 |
+| `POST` | `/api/mcp/providers/:id/connect` | `{ ok, status }` | Coalesced connect; may return an authorization URL |
+| `GET` | `/api/mcp/oauth/callback` | HTML only when connected | Single-use state + PKCE callback; non-connected terminal states keep their mapped HTTP status |
+| `POST` | `/api/mcp/providers/:id/refresh` | `{ ok, status }` | Generation-safe close and reconnect using stored credentials |
+| `DELETE` | `/api/mcp/providers/:id/connection` | `{ ok, status, note }` | Clears the local credential and client only; it does not revoke the provider grant |
+
+The connection states map to HTTP as follows: `connected` → 200 with `ok: true`; `auth_required` and `connecting` → 202; `disconnected` → 409; `offline` → 503; `error` → 502. Non-connected responses use `ok: false`. Public diagnostics are stable codes rather than raw upstream OAuth or transport errors.
+
+After the HTTP listener publishes `serverActualPort`, startup inspects each enabled provider record. Only a completed token bundle whose provider endpoint and redirect origin match the live binding is restored, with at most two providers in parallel and a 15-second per-provider bound. Missing, corrupt, pending-only, and disabled records are not connected. A binding mismatch is preserved on disk and reported as `auth_required`; user-initiated Connect may register the new binding, but startup never silently migrates it. Pending OAuth state and PKCE verifiers are memory-only, so an interrupted browser flow must be started again after restart.
+
+Each live client is identified internally by `{ generation, epoch }`. Expected closes during refresh, disconnect, replacement, or shutdown do not degrade newer state. For the pinned MCP SDK 1.29 terminal retry-exhaustion signal, an unexpected current connection becomes `offline` and receives at most one bounded reconnect; ordinary transient `onerror` does not end a usable POST session. Host code does not replay `callTool`, so mutating or billed operations are never automatically duplicated by this recovery layer.
+
+Shutdown starts HTTP accept-stop and MCP shutdown together. MCP aborts restores, cancels reconnect timers, advances generations, and closes clients with a 2-second internal bound; the coordinator has a 2.9-second grace.
 
 `/api/capabilities` exists for agents and CLI discovery. It reports provider-specific defaults, supported versus unsupported image model ids, valid reasoning efforts, valid quality values, reference/image limits, and advisory parallel queue metadata. The endpoint must never serialize the full runtime config. It uses an allowlist projection and converts `Set` values to arrays so JSON clients receive stable arrays instead of `{}`.
 
@@ -405,6 +425,8 @@ Implementation lives in `lib/cardNews*.ts`: `cardNewsTemplateStore`, `cardNewsRo
 | Missing node metadata | 404 | `NODE_NOT_FOUND` |
 | Image without embedded metadata | 200 | `{ ok: false, code: "NO_METADATA" }` from `/api/metadata/read` |
 | Card-news routes when feature flag is off | 404 | Routes are not mounted unless `config.features.cardNews` |
+| MCP provider unknown or disabled | 404 / 409 | `MCP_PROVIDER_UNKNOWN` / `MCP_PROVIDER_DISABLED` |
+| MCP connection not ready | 409 / 503 / 502 | `disconnected` / `offline` / `error` state response |
 
 ## Observability Contract
 
@@ -425,6 +447,8 @@ Node retry diagnostics include safe context such as `operation`, `clientNodeId`,
 - [ ] If `server.ts` is split into route files, update line counts in `[[01-file-function-map]]`.
 
 ## Change Log
+
+- 2026-07-17: Documented bound MCP credential restore after the actual server port, truthful state/HTTP mapping, generation/epoch recovery, and coordinated shutdown.
 
 - 2026-04-23: Documented the current `server.ts` endpoint surface and response shapes.
 - 2026-04-23: Translated this document from Korean to English.

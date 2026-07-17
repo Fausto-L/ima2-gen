@@ -35,7 +35,7 @@ Top-level entries (`00_*.md`, `01_*.md`) are cross-cutting architecture document
 
 Files in `_plan/` are work-in-progress. They use the format `YYMMDD_<topic>` to aid chronological sorting. Each plan typically maps to a GitHub issue or a standalone initiative.
 
-As of 2026-07-10, `_plan/` holds only genuinely-active units. The authoritative table is
+As of 2026-07-17, `_plan/` holds only genuinely-active units. The authoritative table is
 `devlog/_plan/README.md` §현재 Active Lane:
 
 | Unit | Focus |
@@ -44,6 +44,7 @@ As of 2026-07-10, `_plan/` holds only genuinely-active units. The authoritative 
 | 260531/260601 | PR triage reference, video persistence investigations |
 | 260605_stabilize-split | 500-line split — Phase 3 backend remainder |
 | 260707_gpt56-oidc-devlog-hardening | Windows package-local Codex/OAuth corrective release after v2.0.14 |
+| 260715_subscription-mcp-providers | Active parent for subscription MCP integration; nested `120_restart_recovery` completed WP1 credential lifecycle → WP2 runtime recovery → WP3 verification without moving out of its active parent |
 
 Deferred items live in `_plan/_future/` (canvas exports, masked edit, batch
 matrix, storyboard planner skill).
@@ -79,6 +80,12 @@ Snapshot note, 2026-07-10: GPT-5.6/OIDC hardening shipped at `v2.0.14`, with
 signed preview/stable publications and live Luna/Terra `medium` generation.
 Archive is deferred because a Windows global update exposed package-local
 Codex PATH and `.cmd` execution defects; the corrective release remains active.
+
+Snapshot note, 2026-07-17: `260715_subscription-mcp-providers/120_restart_recovery`
+closed the restart defect with bound 0600 credentials, post-listen restore, truthful
+transport states, shutdown coordination, isolated test receipts, and independent Sol
+review. The nested unit remains in `_plan` because its parent MCP initiative is active;
+it moves to `_fin` only when that parent closes.
 
 ## Cross-References
 

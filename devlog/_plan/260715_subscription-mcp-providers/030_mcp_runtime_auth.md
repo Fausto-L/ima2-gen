@@ -2,6 +2,8 @@
 
 > **Post-interview canonical (2026-07-16).** WP3. ima2-owned execution은 인터뷰 Round 2에서 확정됐다. tool 계약의 정의·availability는 020 catalog가 소유하고, 이 phase는 transport/OAuth/token/connection lifecycle만 소유한다. `toolCatalog.ts`의 sanitize/hash/drift 책임은 040으로 이관됐다 — 여기서는 live tools/list의 획득과 connection 상태 전달까지만 담당한다.
 
+> **Restart recovery receipt (2026-07-17).** `120_restart_recovery/`의 WP1/WP2가 이 phase의 credential/runtime lifecycle을 구현했다. `716fdbb`는 versioned binding, revision/tombstone CAS, memory-only PKCE, SDK invalidation, generation/single-flight를 고정했고, `53656b5`는 actual-port 이후 startup restore, generation+epoch transport 상태, one-shot terminal reconnect, truthful route status, shutdown을 고정했다. 후속 `4b15ec7`은 actual port 게시 전에는 restore가 시작되지 않는 activation harness를 추가했다.
+
 ## WP3 감사 round 1 반영 (2026-07-16, FAIL → 수정)
 
 1. **Redirect URI는 live origin에서 파생한다.** 서버가 port fallback으로 다른 포트에 bind될 수 있으므로(`server.ts:430-438`), OAuth redirect URI는 정적 config가 아니라 listen 완료 후의 실제 포트(`http://localhost:<actualPort>/api/mcp/oauth/callback`)로 구성한다. dynamic client registration은 origin별로 저장하고, origin이 바뀌면 재등록·재인증이 필요함을 상태로 노출한다(silent 재사용 금지).
@@ -100,3 +102,5 @@ npm run typecheck:tests
 node --test --import tsx tests/mcp-token-store.test.ts tests/mcp-oauth-flow.test.ts tests/mcp-tool-catalog.test.ts tests/mcp-connection-routes.test.ts
 npm run test:inventory
 ```
+
+Recovery 범위의 현재 자동 증거는 기존 `tests/mcp-token-store.test.ts`, `tests/mcp-connection-manager.test.ts`, `tests/mcp-connection-routes.test.ts`, `tests/mcp-snapshot-pipeline.test.ts`, `tests/mcp-sanitizer.test.ts`, `tests/runtime-ports.test.ts`, `tests/runtime-context-normalize.test.ts`에 있다. 동일 binding restart는 브라우저 redirect 없이 연결되고, mismatch/disabled/corrupt/pending record는 passive하며, close/error/generation race와 shutdown을 함께 검증한다. 아래 090의 clean-install golden task, 장시간 job recovery, 인증된 provider smoke는 이 recovery unit이 완료했다고 주장하지 않는다.

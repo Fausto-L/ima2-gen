@@ -83,6 +83,8 @@ README may still mention a different Node baseline. The operational baseline is 
 |---|---|---|
 | `~/.ima2/config.json` | Provider config and possible API key location | May contain secrets; never paste values into docs |
 | `~/.ima2/server.json` | Running server runtime advertisement | Used by CLI/Vite discovery; includes top-level backend URL plus nested backend/OAuth configured and actual ports |
+| `${configDir}/mcp/<provider>.json` | Versioned MCP OAuth credential record | Atomic mode 0600; includes endpoint/redirect-origin binding metadata and must never enter diagnostics or support bundles |
+| `${configDir}/mcp/snapshots/` | Sanitized MCP tool snapshots | Contains schemas/metadata, not OAuth credentials |
 | `image_gen/.ima2/config.json` | Legacy config location | New CLI prefers the home config |
 | `~/.ima2/generated/` | Image files and sidecar metadata | Runtime output; survives npm global updates. Startup migration scans legacy package `generated/` folders across npm, npx, pnpm, Yarn, Bun, nvm/fnm, asdf/mise, Volta, and common macOS/Linux/Windows global layouts |
 | `~/.ima2/generated/.trash/` | Legacy in-package soft-deleted assets folder | Soft-delete now uses the OS trash via the `trash` dep (`lib/systemTrash.ts`); this folder remains for legacy rows pending purge |
@@ -101,6 +103,9 @@ README may still mention a different Node baseline. The operational baseline is 
 | `IMA2_OAUTH_PROXY_PORT` / `OAUTH_PORT` | OAuth proxy preferred port, default `10531`; the actual ready URL is captured when the proxy falls back |
 | `IMA2_SERVER` | CLI target server URL override |
 | `IMA2_CONFIG_DIR` | Used by tests to isolate config directory |
+| `IMA2_MCP_PROVIDERS` | Comma-separated compiled MCP provider allowlist; defaults to `runway,higgsfield` |
+| `IMA2_MCP_TOKEN_DIR` | MCP credential directory override; one running ima2 process must own a token directory |
+| `IMA2_MCP_SNAPSHOT_DIR` | Sanitized MCP tool snapshot directory override |
 | `IMA2_ADVERTISE_FILE` | Overrides runtime discovery file path |
 | `VITE_IMA2_API_TARGET` / `IMA2_DEV_API_TARGET` | Split Vite dev API proxy target override |
 | `IMA2_IMAGE_MODEL_DEFAULT` | Server fallback image model, default `gpt-5.4-mini` |
@@ -154,6 +159,12 @@ README may still mention a different Node baseline. The operational baseline is 
 Generation and edit endpoints support OAuth, API-key, and Grok providers. `provider: "api"` calls the OpenAI Responses API with the hosted `image_generation` tool and requires `OPENAI_API_KEY` or the configured API key path. `provider: "grok"` uses bundled progrok; classic, Node, and Agent generation perform mandatory xAI Web Search and then a `grok-4.3` custom-tool planner call before executing xAI Images API. If Grok generation includes references, a Node parent image, or an Agent current image, those images are sent into the planner and the final image call uses xAI `/v1/images/edits` with the same references instead of the text-only generation endpoint. Grok Node requests are capped at three total input images, and Agent Grok turns force web search on because the planner depends on it.
 
 Runtime port fallback is intentional. If a preferred backend or OAuth proxy port is occupied, the server records the actual bound URL in `~/.ima2/server.json` and health/status responses. CLI clients and split Vite dev proxy resolution should consume that actual URL instead of reconstructing `localhost:${configuredPort}`.
+
+MCP restore begins only after that actual backend port is published, because the callback origin is part of the credential binding. A usable same-binding record restores automatically without opening a browser. Endpoint/origin mismatches remain on disk and surface as `auth_required`; only a new user-initiated Connect flow may replace the registration after token exchange succeeds. Missing, corrupt, pending-only, and disabled records remain passive. OAuth state and PKCE verifiers intentionally live only in memory, so a browser flow interrupted by process restart cannot resume.
+
+Startup restore is limited to two providers concurrently and 15 seconds per provider. A terminal current-transport failure gets one delayed reconnect; ordinary transient errors do not force a false disconnect. Local Disconnect writes a tombstone and clears the local client/token state but does not claim provider-side revocation. On shutdown, restore controllers and reconnect timers are canceled before clients close; HTTP and MCP shutdown start concurrently under a 2.9-second coordinator grace.
+
+Do not run two ima2 processes against the same MCP token directory. The store uses revision checks, tombstones, and a PID+nonce recovery lock to fail closed around stale writes, but shared multi-process ownership is not a supported operating mode. Safe status may include state, timestamps, tool counts, snapshot drift, and stable diagnostic codes; it must never include access/refresh tokens, authorization codes, PKCE values, cookies, account identifiers, Authorization headers, or raw upstream errors.
 
 ## Observability
 

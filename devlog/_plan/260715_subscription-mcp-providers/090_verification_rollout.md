@@ -28,6 +28,12 @@ mock green만으로 완료하지 않고 OAuth/token/과금/장시간 job/결과 
 
 ## File/SoT change map
 
+### 2026-07-17 recovery coverage boundary
+
+`120_restart_recovery/`는 별도 미래 test 파일을 만들지 않고 현재 inventory의 `tests/mcp-token-store.test.ts`, `tests/mcp-connection-manager.test.ts`, `tests/mcp-connection-routes.test.ts`, `tests/mcp-snapshot-pipeline.test.ts`, `tests/mcp-sanitizer.test.ts`, `tests/runtime-ports.test.ts`, `tests/runtime-context-normalize.test.ts`를 확장했다. 이 묶음은 0600/binding/CAS, same-binding startup restore, mismatch fail-closed, refresh/disconnect/callback race, transport close/error, stale snapshot, actual-port activation, concurrent shutdown을 소유한다.
+
+아래 `tests/golden/mcp-clean-install.test.ts`, `tests/mcp-security-regression.test.ts`, `tests/mcp-long-job-recovery.test.ts`, `tests/mcp-provider-smoke.test.ts`는 여전히 WP9의 계획/미구현 범위다. 특히 authenticated provider smoke와 비용 발생 작업은 사용자 승인 전 실행하지 않으며, 이번 recovery closeout은 paid call 0건이다.
+
 | Op | Path | 변경 |
 |---|---|---|
 | NEW | `tests/mcp-security-regression.test.ts` | SSRF, redirect, token leak, callback state, corrupt cache, schema poisoning. |
