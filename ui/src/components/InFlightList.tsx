@@ -122,7 +122,7 @@ function RichRow({ f, determinateVideoId, validVideoProgress, phaseLabels, cance
         <span className="in-flight-rich-prompt" title={promptLabel}>{truncate(f.prompt, 54)}</span>
         <span className="in-flight-rich-status">
           <span className="in-flight-phase">{progressPercent == null ? phaseLabel : `${phaseLabel} · ${progressPercent}%`}</span>
-          <ProgressTrack progressPercent={progressPercent} t={t} />
+          <ProgressTrack progressPercent={progressPercent} phaseLabel={phaseLabel} t={t} />
         </span>
       </span>
       <button type="button" className="in-flight-cancel" onClick={() => void cancelInFlightJob(f.id)} disabled={f.phase === "canceling"} aria-label={t("inflight.cancelAria", { prompt: promptLabel })} title={t("common.cancel")}>
@@ -132,12 +132,16 @@ function RichRow({ f, determinateVideoId, validVideoProgress, phaseLabels, cance
   );
 }
 
-function ProgressTrack({ progressPercent, t }: { progressPercent: number | null; t: Translator }) {
+function ProgressTrack({ progressPercent, phaseLabel, t }: {
+  progressPercent: number | null;
+  phaseLabel: string;
+  t: Translator;
+}) {
   return (
     <span
       className={`in-flight-progress${progressPercent == null ? " in-flight-progress--indeterminate" : ""}`}
-      role={progressPercent == null ? undefined : "progressbar"}
-      aria-label={progressPercent == null ? undefined : t("inflight.progressAria", { n: progressPercent })}
+      role="progressbar"
+      aria-label={progressPercent == null ? phaseLabel : t("inflight.progressAria", { n: progressPercent })}
       aria-valuemin={progressPercent == null ? undefined : 0}
       aria-valuemax={progressPercent == null ? undefined : 100}
       aria-valuenow={progressPercent ?? undefined}

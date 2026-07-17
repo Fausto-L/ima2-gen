@@ -54,7 +54,7 @@
 
 .inflight-badge__bridge {
   position: absolute;
-  z-index: 221;
+  z-index: 211;
   top: -8px;
   right: -12px;
   bottom: -8px;
@@ -63,7 +63,7 @@
 
 .inflight-popup {
   position: fixed;
-  z-index: 220;
+  z-index: 210;
   width: min(420px, calc(100vw - 24px));
   max-height: min(70dvh, 560px);
   display: flex;
@@ -105,8 +105,35 @@
 }
 
 .inflight-popup__header {
-  padding: 14px 16px 10px;
+  min-height: 52px;
+  padding: 4px 4px 4px 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: center;
   border-bottom: 1px solid var(--border);
+}
+
+.inflight-popup__close {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.inflight-popup__close:hover {
+  background: var(--control-hover);
+  color: var(--text);
+}
+
+.inflight-popup__close:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
 }
 
 .inflight-popup__header h2 {
@@ -291,7 +318,8 @@
   .inflight-badge,
   .inflight-popup,
   .in-flight-placeholder,
-  .in-flight-rich-item .in-flight-cancel {
+  .in-flight-rich-item .in-flight-cancel,
+  .inflight-popup__close {
     border-color: ButtonText;
   }
 

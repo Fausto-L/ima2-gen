@@ -116,6 +116,15 @@ export function InFlightPopup({
     >
       <header className="inflight-popup__header">
         <h2 ref={headingRef} id={titleId} tabIndex={-1}>{t("inflight.title")}</h2>
+        <button
+          type="button"
+          className="inflight-popup__close"
+          aria-label={t("common.close")}
+          title={t("common.close")}
+          onClick={() => onRequestClose(true)}
+        >
+          <span aria-hidden="true">×</span>
+        </button>
       </header>
       <InFlightList variant="popup" panelId={panelId} />
       <footer className="inflight-popup__footer">{t("inflight.footerHint")}</footer>

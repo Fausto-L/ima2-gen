@@ -53,7 +53,7 @@ test("popup portals above the canvas and follows the audited anchor rule", () =>
   assert.match(popup, /event\.key !== "Escape"/);
   assert.match(popup, /<InFlightList variant="popup" panelId=\{panelId\} \/>/);
   assert.match(css, /\.inflight-popup\s*\{[\s\S]*?position:\s*fixed/);
-  assert.match(css, /\.inflight-popup\s*\{[\s\S]*?z-index:\s*220/);
+  assert.match(css, /\.inflight-popup\s*\{[\s\S]*?z-index:\s*210/);
   assert.match(css, /@media \(max-width:\s*800px\)[\s\S]*?\.inflight-popup/);
   assert.match(progressCss, /@import "\.\/inflight-tray\.css"/);
 });
@@ -66,7 +66,7 @@ test("rich list owns panel ids and only one video job gets determinate progress"
   assert.match(list, /id=\{props\.panelId\}/);
   assert.match(list, /const videoJobs = props\.jobs\.filter/);
   assert.match(list, /videoJobs\.length === 1/);
-  assert.match(list, /role=\{progressPercent == null \? undefined : "progressbar"\}/);
+  assert.match(list, /role="progressbar"/);
   assert.match(list, /aria-valuenow=\{progressPercent \?\? undefined\}/);
   assert.match(list, /className="in-flight-cancel"/);
   assert.match(list, /cancelInFlightJob\(f\.id\)/);
