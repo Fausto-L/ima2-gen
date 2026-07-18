@@ -268,7 +268,12 @@ test("EM-09b missing elements block generation at the button and the entry gate"
   // Custom-size approval and animate also recheck (post-modal state can change).
   const confirmBody = generateEntry.slice(generateEntry.indexOf("export async function confirmCustomSizeAdjustmentImpl"));
   assert.ok(confirmBody.indexOf("missingElementsBlock(get)") > -1 && confirmBody.indexOf("missingElementsBlock(get)") < confirmBody.indexOf("runGenerate(adjustedSize)"), "custom-size approval must recheck before dispatch");
-  assert.match(confirmBody, /kind !== "node-in-place" && missingElementsBlock/, "node continuations stay out of the missing gate");
+  // The guard whitelists classic/multimode explicitly — all three node
+  // continuation kinds (node, node-in-place, node-variation) stay outside.
+  assert.match(confirmBody, /kind === "classic" \|\| pending\.continuation\.kind === "multimode"\) && missingElementsBlock/, "guard must whitelist classic/multimode only");
+  for (const nodeKind of ['"node"', '"node-in-place"', '"node-variation"']) {
+    assert.ok(confirmBody.includes(nodeKind), `continuation kind ${nodeKind} must exist in the dispatch matrix`);
+  }
   const videoImpl = read("ui/src/store/storeVideoImpl.ts");
   assert.match(videoImpl, /missingElementsBlock } from "\.\/storeGenerateEntryImpl"/);
   const animateBody = videoImpl.slice(videoImpl.indexOf("export async function animateImageImpl"));
