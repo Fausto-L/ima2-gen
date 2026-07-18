@@ -25,7 +25,7 @@ Deferred / 미래 항목은 `_plan/` 직속이 아니라 `_plan/_future/`에 둔
 | 순서 | 경로 | 상태 | 역할 |
 |---:|---|---|---|
 | 1 | `260712_higgsfield-ux-studio/` | 070/080 WIP 커밋 완료, 잔여 구현·QA — 재개 가이드 `095_current_status.md` | 010~050 done, 060 partial. 070/080은 체크포인트 `ddf2686`/`f312cab`로 전달됐지만 last-frame→I2V `parentId` orchestration 미구현, UI 계약 테스트 2종(`element-mention-ui-contract`, `node-studio-ui-contract`) 부재, 수동 3-provider QA와 100+ 노드 성능 프로파일이 남았다. 090 원장 갱신됨(2026-07-18). |
-| 2 | `260715_assetgen_ux_overhaul/` | 구현 커밋 완료, 시각 수용 NEEDS_HUMAN — 재개 가이드 `000_current_status.md` | keying/click-erase 전달(`730e61c`). 030 실화상·픽셀 수용 기준은 사용자 시각 판단이 필요하고, P1-1(폼 2단계)/P2 범위는 아직 문서화되지 않았다. 수용 절차는 000 문서에 step-by-step으로 있다. |
+| 2 | `260715_assetgen_ux_overhaul/` | 020/030 ACCEPTED (2026-07-18 사용자 시각 수용) — P1-1/P2 범위 정의만 남음 | keying/click-erase 전달(`730e61c`), 수용 증거 패키지 `033_acceptance_evidence.md` + element 미리보기 폴백 수정(`9777af2`). P1-1(폼 2단계)/P2는 인터뷰로 범위 확정 후 구현. verify-chroma 배경 균일성 FAIL 3/4는 후속 주제(033 §2). |
 | 3 | `260715_subscription-mcp-providers/` | parent active — 재개 가이드 `130_current_status.md` | WP1~8과 restart recovery는 완료됐고 capabilities 계약 요약은 `0cc560d`로 추가됐다. 090 Tier1 golden harness(`mcp-clean-install`/`security-regression`/`long-job-recovery`/`provider-smoke`)와 Tier2 authenticated smoke(비용 승인 게이트), 100 provider expansion이 남아 parent를 유지한다. |
 | 4 | `260716_cli-entry-routing/` | WP1~3 완료·정리, WP4~5 대기 — 재개 가이드 `060_current_status.md` | WP1 models/tools dispatch와 WP3 reference-media 잔여는 `4505642`로 정리됐다. WP4 character persistence(미착수), WP5 derivative diversity가 남았다. |
 | 5 | `260718_closeout-sweep/` | 감사 완료, sweep 진행 중 | 2026-07-18 전 lane 감사 매트릭스(`000_audit.md`). sweep 자체의 closeout은 최종 게이트 후 정리. |
