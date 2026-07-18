@@ -2,7 +2,7 @@
 
 When to apply text wrapping control, how to evaluate line break quality, and what to check during visual verification.
 
-Read `dev-frontend/references/core/typography-wrapping.md` for the CSS implementation.
+Read `ima2-front/references/typography-wrapping.md` for the CSS implementation.
 
 ---
 
@@ -110,9 +110,9 @@ crossings). Judgment layer on top of the criteria above:
   with `keep-all`, opportunities are 어절 boundaries — verify long 어절 and
   mixed ko/Latin strings don't overflow narrow chips/buttons.
 - Mechanics + verification checklist (container-width sweep, dvh/zoom,
-  overflow asserts): `dev-frontend/references/core/typography-wrapping.md`
+  overflow asserts): `ima2-front/references/typography-wrapping.md`
   § Dynamic-Viewport Verification and
-  `dev-frontend/references/core/responsive-viewport.md` (container queries,
+  `ima2-front/references/responsive-viewport.md` (container queries,
   split-screen band).
 
 ## Visual Verification Additions

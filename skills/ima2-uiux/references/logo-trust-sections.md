@@ -2,8 +2,8 @@
 
 Design guidance for integration/partner/client logo sections. These are trust signals, not UI components.
 
-Read `dev-frontend/references/core/logo-sections.md` for the CSS implementation.
-Read `dev-frontend/references/core/brand-asset-sourcing.md` for SVG sourcing.
+Read `ima2-front/references/logo-sections.md` for the CSS implementation.
+Read `ima2-front/references/brand-asset-sourcing.md` for SVG sourcing.
 
 ---
 
@@ -43,7 +43,7 @@ Users hover, expect a click target, find nothing. Trust signals should never fee
 One logo alone on the last row looks broken. Use flexbox or marquee instead.
 
 ### 3. Generic stroke icons instead of brand marks
-Use actual brand SVGs from Simple Icons, SVGL, or press kits. See `brand-asset-sourcing.md`.
+Use actual brand SVGs from Simple Icons, SVGL, or press kits. See `ima2-front/references/brand-asset-sourcing.md`.
 
 ### 4. Colorful logos clashing with each other
 Multiple full-color logos fight for attention. Apply uniform grayscale treatment.

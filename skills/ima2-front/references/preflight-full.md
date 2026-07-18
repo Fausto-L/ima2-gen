@@ -1,7 +1,7 @@
 # Full Pre-Flight Checklist (launch/audit depth)
 
-Companion to `dev-frontend/SKILL.md` §14. The router keeps the minimum blocking gates;
-this file is the full launch/audit list. Production surfaces only (the work classifier).
+Companion to `ima2-front/SKILL.md` §14. The router keeps the minimum blocking gates;
+this file is the full launch/audit list. Production surfaces only (`dev` §0.4).
 
 ## Design & composition
 - [ ] Domain-correct direction chosen and committed
@@ -51,7 +51,7 @@ this file is the full launch/audit list. Production surfaces only (the work clas
 ## Performance & verification
 - [ ] Core Web Vitals field gate: LCP <= 2.5s, INP <= 200ms, CLS <= 0.1 - performance-budget.md
 - [ ] Lighthouse Performance score is advisory smoke only; CWV field metrics are the gate; no JS bundle > 150KB compressed
-- [ ] Hero image preloaded, below-fold images lazy-loaded; landing motion media exempt from byte caps only when FE-MEDIA-BUDGET-01 poster-first/loading mechanics hold
+- [ ] Hero image preloaded, below-fold images lazy-loaded; LANDING/EXPERIENCE motion media exempt from byte caps only when FE-MEDIA-BUDGET-01 poster-first/loading mechanics hold
 - [ ] Desktop/mobile/narrow screenshots checked for overlap, clipping, asset rendering
 - [ ] No captured third-party asset (reference-capture.md) in the shipped build; capture manifest present for any reference captures
 - [ ] Accessibility deep pass: modals trap focus, live regions — a11y-patterns.md

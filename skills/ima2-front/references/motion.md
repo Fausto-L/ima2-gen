@@ -9,13 +9,15 @@ Classify the surface before choosing scroll choreography:
 
 | Surface | Motion guidance |
 | --- | --- |
-| Landing, campaign, editorial, portfolio | One signature scroll moment plus at least one supporting reveal; keep the total near 2-4 |
+| Landing, campaign, editorial, portfolio | LANDING: one signature scroll moment plus at least one supporting reveal; keep the total near 2-4 |
+| Experiential microsite, award entry, interactive story | EXPERIENCE: continuous authored choreography only when every scene advances narrative or state, reduced-motion fallback exists, and core information remains reachable without precision scrolling |
 | Consumer apps, education, community | Feedback and state-transition motion only |
 | Dashboards, admin, ops, finance, government, B2B tools | No scroll-driven motion; preserve restrained feedback and state transitions |
 | Games and interactive art | Follow the domain |
 
-The floor applies only to the base experience. Reduced-motion users and
-unsupported browsers may receive a static final state.
+The LANDING floor applies only to the base experience. EXPERIENCE is carved out
+of LANDING and has no ~4 ceiling, but every scene must advance narrative or state.
+Reduced-motion users and unsupported browsers may receive a static final state.
 
 ## Implementation Rules
 
@@ -46,3 +48,36 @@ that playback does not cause layout shift.
 - Test reduced motion and the static fallback.
 - Check mobile touch behavior and desktop pointer behavior separately.
 - Confirm animation does not obscure text, controls, or state changes.
+
+---
+
+## Motion Honesty (FE-MOTION-HONESTY-01, DEFAULT)
+
+Source: taste-skill v2 (62k stars), adapted for ima2.
+
+The declared MOTION_INTENSITY dial must match the shipped page's actual motion.
+A dial value above 4 that ships a static page is a lie — the motion was claimed
+but never delivered.
+
+| Dial | Required motion evidence |
+|------|------------------------|
+| 1-3 | Hover and active state transitions only. No scroll-driven motion required. |
+| 4-5 | At least one entrance animation or staggered load-in visible on first scroll. |
+| 6-7 | Scroll-driven reveals on multiple sections + at least one signature moment. |
+| 8-10 | Choreographed scroll timeline or parallax + signature moment + supporting reveals. |
+
+Verification: scroll the built page top-to-bottom and count distinct motion events.
+If the count does not match the dial band, either lower the dial or add the motion.
+
+Honesty has a second dimension: motion must carry a semantic verb, not merely
+raise the event count. A repeated verb is communicative when the same action
+explains brand or product state across loader, navigation, and content—for
+example Cobloc assembling identity, SSTR translating telemetry into loader
+grammar, or Interfere demonstrating issue resolution. Generic decorative
+entrances remain disallowed as a governing system. This does not remove the
+level 4-5 requirement for at least one entrance animation or staggered load-in;
+that required entrance must be restrained, while the repeated system earns its
+place by communicating state.
+
+Any MOTION_INTENSITY > 3 MUST honor `prefers-reduced-motion`: reduce to hover/active
+only. This is not optional at any dial level.

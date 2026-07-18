@@ -87,7 +87,7 @@ Step Indicator (1/3, 2/3, 3/3)
 ## Search / Filter
 
 Filter dropdowns, sort menus, and search comboboxes use the project's unified
-dropdown design layer (`ima2-front` `dropdown-layer.md`
+dropdown design layer (`ima2-front/references/dropdown-layer.md`
 FE-DROPDOWN-LAYER-01): one skin, behavior-correct primitive per pattern.
 
 ```
@@ -113,6 +113,6 @@ FE-DROPDOWN-LAYER-01): one skin, behavior-correct primitive per pattern.
 
 ## Cross-references
 
-- Mobile form rules: `dev-frontend/references/core/mobile-ux.md`
+- Mobile form rules: `ima2-front/references/mobile-ux.md`
 - Validation UX states: `ux-states.md` §9
-- Schema validation: `dev-frontend/SKILL.md` §10 (Zod + react-hook-form)
+- Schema validation: `ima2-front/SKILL.md` §10 (Zod + react-hook-form)

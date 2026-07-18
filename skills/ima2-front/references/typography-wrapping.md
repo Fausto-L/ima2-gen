@@ -262,7 +262,7 @@ DevRel, Naver SmartStudio):
   sizes (zoom/user-font-size must keep working).
 
 Judgment layer (when a break is "natural", review criteria):
-`dev-uiux-design/references/typography-line-breaks.md § Dynamic Rewrap Judgment`.
+`ima2-uiux/references/typography-line-breaks.md § Dynamic Rewrap Judgment`.
 
 ## Sources
 

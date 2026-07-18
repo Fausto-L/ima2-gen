@@ -3,9 +3,9 @@
 Last reviewed: 2026-06-16
 Applies to: Astro 5.x
 When to read: Building or modifying Astro projects
-Canonical owner: dev-frontend
+Canonical owner: ima2-front
 
-Read `core/aesthetics.md` + `core/anti-slop.md` first.
+Read `../aesthetics.md` + `../anti-slop.md` first.
 
 ## 1. Islands Architecture
 

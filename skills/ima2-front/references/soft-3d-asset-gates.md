@@ -67,4 +67,3 @@ Soft 3D can work in Korean fintech when it behaves like Toss:
 - no obstruction of key information
 
 Do not copy Toss assets. Extract the rule: premium, semantic, restrained, and brand-consistent.
-

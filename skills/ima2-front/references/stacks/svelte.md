@@ -3,9 +3,9 @@
 Last reviewed: 2026-06-16
 Applies to: Svelte 5.x (Runes), SvelteKit 2.x
 When to read: Building or modifying Svelte/SvelteKit projects
-Canonical owner: dev-frontend
+Canonical owner: ima2-front
 
-Read `core/aesthetics.md` + `core/anti-slop.md` first.
+Read `../aesthetics.md` + `../anti-slop.md` first.
 
 ## 1. Runes (Svelte 5)
 

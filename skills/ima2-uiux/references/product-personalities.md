@@ -80,7 +80,7 @@ Liquid Glass judgment (HIG, verified 2026-07-07): glass is a functional-layer
 material for floating controls/navigation only — never content-layer cards;
 `regular` variant for text-bearing chrome, `clear` only over rich media; the
 system adapts it to reduced-transparency/contrast settings. Vocabulary:
-`design-isms.md` §1.12; implementation: `dev-frontend/references/core/liquid-glass.md`.
+`design-isms.md` §1.12; implementation: `ima2-front/references/liquid-glass.md`.
 
 ### Aside (2026 AI-product pastel)
 **Essence:** Apple-circular warmth for AI products — pill chips as content, pastel photography washes, glass feel without blur. (Tokens measured from the live site 2026-07-07; STYLE_SAMPLE.)

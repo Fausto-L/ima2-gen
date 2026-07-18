@@ -1,6 +1,6 @@
 # React Stack — Development Rules
 
-Rules specific to React projects. Read `core/aesthetics.md`, `core/anti-slop.md`, and `core/visual-verification.md` first.
+Rules specific to React projects. Read `../aesthetics.md`, `../anti-slop.md`, and `../visual-verification.md` first.
 
 ---
 
@@ -8,18 +8,18 @@ Rules specific to React projects. Read `core/aesthetics.md`, `core/anti-slop.md`
 
 Before choosing component libraries, read the core references that match the surface:
 
-- Korean-first UI → `korea-2026.md`, `ux-writing-ko.md`
-- Tool/dashboard → `product-density.md`
-- Visual/product surface → `asset-requirements.md`
-- Soft 3D/mascot/miniature visuals → `soft-3d-asset-gates.md`
-- Substantial UI change → `visual-verification.md`
+- Korean-first UI → `../korea-2026.md`, `../ux-writing-ko.md`
+- Tool/dashboard → `../product-density.md`
+- Visual/product surface → `../asset-requirements.md`
+- Soft 3D/mascot/miniature visuals → `../soft-3d-asset-gates.md`
+- Substantial UI change → `../visual-verification.md`
 
 ## Behavior-First Components
 
 Prefer proven behavior primitives for complex interactive components:
 
 - Radix / Headless UI for dialog, popover, menu, tabs, combobox-like behavior
-- The project dropdown design layer (`references/core/dropdown-layer.md`
+- The project dropdown design layer (`../dropdown-layer.md`
   FE-DROPDOWN-LAYER-01) supplies the SKIN over these primitives; the skin never
   replaces the primitive
 - shadcn/ui as source code scaffolding, not as a final visual design
@@ -198,7 +198,7 @@ Before importing ANY 3rd party library:
 
 Use EXACTLY `@phosphor-icons/react` or `@radix-ui/react-icons` as import paths.
 Standardize `strokeWidth` globally (e.g., exclusively `1.5` or `2.0`).
-**NEVER** use emoji — see `anti-slop.md`.
+**NEVER** use emoji — see `../anti-slop.md`.
 
 ---
 

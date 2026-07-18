@@ -4,7 +4,7 @@
 **Applies to**: iOS 18+, Android 15+, cross-platform (RN/Flutter/KMP)
 **When to read**: Native mobile app UX decisions, platform conventions, deep linking, app store submission, native mobile product work
 **Canonical owner**: `ima2-uiux` — platform UX judgment (when/why)
-**Non-goals**: Framework selection and code patterns (→ `dev-frontend/references/stacks/mobile-native.md`), push/offline API (→ `dev-backend/references/core/mobile-api.md`), mobile web UX (→ `dev-frontend/references/core/mobile-ux.md`)
+**Non-goals**: Framework selection and code patterns (→ `ima2-front/references/stacks/mobile-native.md`), push/offline API (→ the active backend skill's mobile API guidance), mobile web UX (→ `ima2-front/references/mobile-ux.md`)
 
 ---
 

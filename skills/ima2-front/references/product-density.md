@@ -50,4 +50,3 @@ Avoid:
 - chart decoration with no decision value
 - one-note color palettes
 - motion that slows repeated workflows
-

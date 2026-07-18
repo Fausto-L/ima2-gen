@@ -59,4 +59,3 @@ Examples:
 - Avoid vague verbs: `처리`, `진행`, `수행`.
 - Keep button text short, but do not clip long Korean text. Wrap or resize responsibly.
 - Do not use all-caps English as a visual crutch in Korean UI.
-
