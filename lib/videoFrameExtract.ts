@@ -13,6 +13,20 @@ function routeError(message: string, status = 400): Error & { status: number } {
   return Object.assign(new Error(message), { status });
 }
 
+function ffmpegError(err: unknown): Error & { status: number; code: string } {
+  const e = err as NodeJS.ErrnoException & { killed?: boolean; signal?: string };
+  if (e?.code === "ENOENT") {
+    return Object.assign(new Error("ffmpeg is not installed or not on PATH"), { status: 503, code: "FFMPEG_UNAVAILABLE" });
+  }
+  if (e?.name === "AbortError" || e?.code === "ABORT_ERR") {
+    return Object.assign(new Error("frame extraction aborted"), { status: 499, code: "VIDEO_FRAME_EXTRACT_ABORTED" });
+  }
+  if (e?.killed || e?.signal === "SIGTERM" || (typeof e?.message === "string" && e.message.includes("ETIMEDOUT"))) {
+    return Object.assign(new Error("frame extraction timed out"), { status: 504, code: "VIDEO_FRAME_EXTRACT_TIMEOUT" });
+  }
+  return Object.assign(new Error("frame extraction failed"), { status: 500, code: "VIDEO_FRAME_EXTRACT_FAILED" });
+}
+
 export async function safeGeneratedFilePath(generatedDir: string, file: string, options: { requireMp4?: boolean } = {}): Promise<string> {
   const base = resolve(generatedDir);
   const target = isAbsolute(file) ? resolve(file) : resolve(base, file);
@@ -53,24 +67,31 @@ export async function assertLocalMp4(path: string): Promise<void> {
   }
 }
 
-export async function extractVideoFrame(input: string, output: string, position: string): Promise<void> {
-  const options = { timeout: FFMPEG_TIMEOUT_MS, killSignal: (process.platform === "win32" ? "SIGTERM" : "SIGKILL") as NodeJS.Signals, maxBuffer: 1024 * 1024 };
+export async function extractVideoFrame(input: string, output: string, position: string, options: { signal?: AbortSignal } = {}): Promise<void> {
+  const execOptions = { timeout: FFMPEG_TIMEOUT_MS, killSignal: (process.platform === "win32" ? "SIGTERM" : "SIGKILL") as NodeJS.Signals, maxBuffer: 1024 * 1024, ...(options.signal ? { signal: options.signal } : {}) };
+  const run = async (args: string[]) => {
+    try {
+      await execFileAsync("ffmpeg", args, execOptions);
+    } catch (err) {
+      throw ffmpegError(err);
+    }
+  };
   if (position === "last") {
-    await execFileAsync("ffmpeg", ["-y", "-sseof", "-3", "-i", input, "-update", "1", "-q:v", "1", output], options);
+    await run(["-y", "-sseof", "-3", "-i", input, "-update", "1", "-q:v", "1", output]);
     return;
   }
   const sec = Number(position);
   if (!Number.isFinite(sec) || sec < 0) throw new Error("position must be a non-negative number or 'last'");
   if (sec > MAX_FRAME_POSITION_SECONDS) throw new Error("position exceeds the maximum supported seek time");
-  await execFileAsync("ffmpeg", ["-y", "-ss", String(sec), "-i", input, "-vframes", "1", output], options);
+  await run(["-y", "-ss", String(sec), "-i", input, "-vframes", "1", output]);
 }
 
-export async function extractGeneratedVideoFrameB64(generatedDir: string, filename: string, position = "last"): Promise<string> {
+export async function extractGeneratedVideoFrameB64(generatedDir: string, filename: string, position = "last", options: { signal?: AbortSignal } = {}): Promise<string> {
   const inputPath = await safeGeneratedFilePath(generatedDir, filename, { requireMp4: true });
   await assertLocalMp4(inputPath);
   const tmpOut = join(generatedDir, `frame_tmp_${randomBytes(4).toString("hex")}.png`);
   try {
-    await extractVideoFrame(inputPath, tmpOut, position);
+    await extractVideoFrame(inputPath, tmpOut, position, options);
     return (await readFile(tmpOut)).toString("base64");
   } finally {
     await unlink(tmpOut).catch(() => {});

@@ -77,6 +77,9 @@ function extractError(error: unknown, signal: AbortSignal): Error {
   if (signal.aborted) return makeGenerationCanceledError();
   const info = errInfo(error);
   if (info.code === "ENOENT") return codedError("ffmpeg is unavailable", 503, "VIDEO_FRAME_EXTRACT_UNAVAILABLE");
+  if (info.code === "FFMPEG_UNAVAILABLE") return codedError("ffmpeg is unavailable", 503, "VIDEO_FRAME_EXTRACT_UNAVAILABLE");
+  if (info.code === "VIDEO_FRAME_EXTRACT_TIMEOUT") return codedError("ffmpeg frame extraction timed out", 504, "VIDEO_FRAME_EXTRACT_TIMEOUT", { retryable: true });
+  if (info.code === "VIDEO_FRAME_EXTRACT_ABORTED") return makeGenerationCanceledError();
   const raw = info.raw as { killed?: unknown; signal?: unknown };
   if (info.code === "ETIMEDOUT" || raw?.killed === true || raw?.signal === "SIGKILL") {
     return codedError("ffmpeg frame extraction timed out", 504, "VIDEO_FRAME_EXTRACT_TIMEOUT", { retryable: true });
@@ -233,7 +236,7 @@ function extractOutputText(data: Record<string, unknown>): string {
 
 export function registerVideoExtendedRoutes(app: Express, ctxRaw: RouteRuntimeContext, dependencies: VideoExtendedDependencies = {}) {
   const ctx = requireRuntimeContext(ctxRaw);
-  const extractFrame = dependencies.extractFrame ?? ((dir, filename, position) => extractGeneratedVideoFrameB64(dir, filename, position));
+  const extractFrame = dependencies.extractFrame ?? ((dir, filename, position, options) => extractGeneratedVideoFrameB64(dir, filename, position, options));
   const generateVideo = dependencies.generateVideo ?? generateVideoViaGrok;
   const persistArtifact = dependencies.persistArtifact ?? persistVideoArtifact;
   const createFilename = dependencies.createFilename ?? ((runtime) => `${Date.now()}_${randomBytes(runtime.config.ids.generatedHexBytes).toString("hex")}.mp4`);
