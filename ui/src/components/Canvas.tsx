@@ -14,12 +14,14 @@ import { ResultActions } from "./ResultActions";
 import { ResultPromptSummary } from "./ResultPromptSummary";
 import { MultimodeSequencePreview } from "./MultimodeSequencePreview";
 import { ViewerControls } from "./viewer/ViewerControls";
+import { FavoriteStarButton } from "./controls";
 import { useI18n } from "../i18n";
 import { isEditableTarget } from "../lib/domEvents";
 import { getImageModelShortLabel } from "../lib/imageModels";
 import { isVideoItem } from "../lib/videoMedia";
 import { buildVideoDragPayload, continuitySummary } from "../lib/videoContinuity";
 import { formatReasoningLabel } from "../lib/reasoning";
+import { resolveResultFavorite } from "../lib/favoriteState";
 import type { GenerateItem } from "../types";
 import {
   useViewerTransform,
@@ -71,8 +73,12 @@ export function Canvas() {
   const canvasOpen = useAppStore((s) => s.canvasOpen);
   const openCanvas = useAppStore((s) => s.openCanvas);
   const showToast = useAppStore((s) => s.showToast);
+  const history = useAppStore((s) => s.history);
+  const galleryFavorites = useAppStore((s) => s.galleryFavorites);
+  const toggleGalleryFavorite = useAppStore((s) => s.toggleGalleryFavorite);
   const { t } = useI18n();
   const [dropActive, setDropActive] = useState(false);
+  const [favoritePendingFilename, setFavoritePendingFilename] = useState<string | null>(null);
   const { creatingBlankCanvas, createBlankCanvas } = useCreateBlankCanvas();
   const resultContainerRef = useRef<HTMLDivElement>(null);
   const imageKey = currentImage
@@ -126,6 +132,17 @@ export function Canvas() {
     window.requestAnimationFrame(() => resultContainerRef.current?.focus());
   }, []);
 
+  const toggleCurrentFavorite = async (): Promise<void> => {
+    const filename = currentImage?.filename;
+    if (!currentImage || !filename || favoritePendingFilename === filename) return;
+    setFavoritePendingFilename(filename);
+    try {
+      await toggleGalleryFavorite(currentImage);
+    } finally {
+      setFavoritePendingFilename((pending) => (pending === filename ? null : pending));
+    }
+  };
+
   const handleCenterDragOver = useCallback((event: ReactDragEvent<HTMLElement>): void => {
     if (!Array.from(event.dataTransfer.types).includes("Files")) return;
     event.preventDefault();
@@ -163,6 +180,12 @@ export function Canvas() {
   const displaySize = formatSizeAlias(currentImage?.size);
   const displayModel = getImageModelShortLabel(currentImage?.model, currentImage?.provider);
   const imageSrc = currentImage ? getClassicImageSrc(currentImage) : null;
+  const resultFavorite = resolveResultFavorite(
+    currentImage?.filename,
+    history,
+    galleryFavorites,
+    currentImage?.isFavorite,
+  );
 
   return (
     <main
@@ -197,6 +220,15 @@ export function Canvas() {
             onPointerUp={viewer.handlePointerUp}
             onPointerCancel={viewer.handlePointerUp}
           >
+            {currentImage.filename ? (
+              <FavoriteStarButton
+                variant="result"
+                active={resultFavorite}
+                busy={favoritePendingFilename === currentImage.filename}
+                label={resultFavorite ? t("gallery.unfavoriteAria") : t("gallery.favoriteAria")}
+                onToggle={toggleCurrentFavorite}
+              />
+            ) : null}
             {isVideoItem(currentImage) ? (
               <>
                 <video

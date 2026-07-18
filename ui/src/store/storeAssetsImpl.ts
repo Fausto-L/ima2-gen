@@ -10,16 +10,18 @@ const logError = (error: unknown) => console.error("[assets]", error instanceof 
  *  in-flight response so stale results never overwrite current filters. */
 let assetsRequestGeneration = 0;
 
-async function refreshFolders(set: StoreSet): Promise<void> {
+export async function refreshFoldersImpl(set: StoreSet): Promise<void> {
   const { folders } = await getAssetFolders();
   set({ assetsFolders: folders });
 }
+
+const refreshFolders = refreshFoldersImpl;
 
 export async function loadAssetsImpl(reset: boolean | undefined, set: StoreSet, get: StoreGet): Promise<void> {
   const replace = reset !== false;
   if (!replace && get().assetsLoading) return;
   const generation = ++assetsRequestGeneration;
-  set({ assetsLoading: true });
+  set({ assetsLoading: true, ...(replace ? { assetsLoadError: false } : {}) });
   try {
     const filters = get().assetsFilters;
     const page = await getAssets({ ...filters, cursor: replace ? null : get().assetsCursor });
@@ -33,7 +35,9 @@ export async function loadAssetsImpl(reset: boolean | undefined, set: StoreSet, 
     }));
   } catch (error) {
     logError(error);
-    if (generation === assetsRequestGeneration) set({ assetsLoading: false });
+    if (generation === assetsRequestGeneration) {
+      set({ assetsLoading: false, ...(replace ? { assetsLoadError: true } : {}) });
+    }
   }
 }
 
@@ -51,7 +55,8 @@ export async function saveToAssetsImpl(item: GenerateItem, set: StoreSet, get: S
   if (!item.filename) return false;
   const metadata = Object.fromEntries(Object.entries({ prompt: item.prompt, provider: item.provider, model: item.model, mediaType: item.mediaType, requestId: item.requestId, sessionId: item.sessionId, createdAt: item.createdAt }).filter(([, value]) => value !== undefined));
   try {
-    const { asset } = await createAsset({ filePath: item.filename, kind: isVideoItem(item) ? "video" : "image", name: (item.prompt || "").trim().slice(0, 80) || item.filename, tags: [], metadata });
+    const folderId = get().selectedProjectId ?? undefined;
+    const { asset } = await createAsset({ filePath: item.filename, kind: isVideoItem(item) ? "video" : "image", name: (item.prompt || "").trim().slice(0, 80) || item.filename, folderId, tags: [], metadata });
     const filters = get().assetsFilters;
     const admitted =
       (!filters.kind || filters.kind === asset.kind) && !filters.tag && !(filters.q || "").trim() && !filters.folderId;
@@ -61,8 +66,20 @@ export async function saveToAssetsImpl(item: GenerateItem, set: StoreSet, get: S
 }
 
 export async function updateAssetItemImpl(id: string, patch: AssetUpdatePatch, set: StoreSet): Promise<boolean> {
-  try { const { asset } = await updateAsset(id, patch); set((state) => ({ assets: state.assets.map((item) => item.id === id ? asset : item) })); return true; }
-  catch (error) { logError(error); return false; }
+  try {
+    const { asset } = await updateAsset(id, patch);
+    let assetsTags: string[] | null = null;
+    try { assetsTags = (await getAssetTags()).tags; }
+    catch (error) { logError(error); }
+    set((state) => {
+      const activeTag = state.assetsFilters.tag;
+      const assets = activeTag && !asset.tags.includes(activeTag)
+        ? state.assets.filter((item) => item.id !== id)
+        : state.assets.map((item) => item.id === id ? asset : item);
+      return { assets, ...(assetsTags ? { assetsTags } : {}) };
+    });
+    return true;
+  } catch (error) { logError(error); return false; }
 }
 
 export async function deleteAssetItemImpl(id: string, set: StoreSet): Promise<boolean> {

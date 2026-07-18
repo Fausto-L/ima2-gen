@@ -6,6 +6,7 @@ import { buildVideoDragPayload } from "../lib/videoContinuity";
 import { VideoThumbPlaceholder } from "./VideoThumbPlaceholder";
 import { CHAINING_ACTIONS, executeChaining, type ChainingActionId } from "../lib/resultChaining";
 import { useAppStore } from "../store/useAppStore";
+import { FavoriteStarButton } from "./controls";
 
 type TranslateFn = (key: string, vars?: Record<string, string | number>) => string;
 
@@ -15,7 +16,8 @@ type GalleryImageTileProps = {
   itemRef: (node: HTMLElement | null) => void;
   onSelect: (item: GenerateItem) => void;
   onDelete: (item: GenerateItem, event: MouseEvent<HTMLButtonElement>) => void;
-  onToggleFavorite?: (item: GenerateItem) => void;
+  onToggleFavorite?: (item: GenerateItem) => void | Promise<void>;
+  favoriteBusy?: boolean;
   t: TranslateFn;
 };
 
@@ -61,7 +63,7 @@ function ChainIcon({ id }: { id: ChainingActionId }) {
   }
 }
 
-export function GalleryImageTile({ item, active, itemRef, onSelect, onDelete, onToggleFavorite, t }: GalleryImageTileProps) {
+export function GalleryImageTile({ item, active, itemRef, onSelect, onDelete, onToggleFavorite, favoriteBusy = false, t }: GalleryImageTileProps) {
   const availableActions = useMemo(
     () => CHAINING_ACTIONS.filter((a) => a.available(item)),
     [item],
@@ -152,18 +154,13 @@ export function GalleryImageTile({ item, active, itemRef, onSelect, onDelete, on
         </div>
       ) : null}
       {item.filename && onToggleFavorite && (
-        <button
-          type="button"
-          className={`gallery__favorite${item.isFavorite ? " gallery__favorite--on" : ""}`}
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggleFavorite(item);
-          }}
-          title={item.isFavorite ? t("gallery.unfavoriteTitle") : t("gallery.favoriteTitle")}
-          aria-label={item.isFavorite ? t("gallery.unfavoriteAria") : t("gallery.favoriteAria")}
-        >
-          {item.isFavorite ? "★" : "☆"}
-        </button>
+        <FavoriteStarButton
+          variant="gallery"
+          active={Boolean(item.isFavorite)}
+          busy={favoriteBusy}
+          label={item.isFavorite ? t("gallery.unfavoriteAria") : t("gallery.favoriteAria")}
+          onToggle={() => onToggleFavorite(item)}
+        />
       )}
       {item.filename && (
         <button

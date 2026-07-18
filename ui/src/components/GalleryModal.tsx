@@ -85,6 +85,8 @@ export function GalleryModal() {
   const [query, setQuery] = useState("");
   const [groupBy, setGroupBy] = useState<"date" | "session">("date");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [favoritePending, setFavoritePending] = useState<Set<string>>(() => new Set());
+  const favoritePendingRef = useRef(new Set<string>());
   const [sessionGroups, setSessionGroups] = useState<GallerySessionGroup[]>([]);
   const [loose, setLoose] = useState<GenerateItem[]>([]);
   const [sessionGroupsLoading, setSessionGroupsLoading] = useState(false);
@@ -316,6 +318,29 @@ export function GalleryModal() {
     window.requestAnimationFrame(() => scrollRef.current?.focus());
   }
 
+  async function handleToggleFavorite(item: GenerateItem): Promise<void> {
+    const filename = item.filename;
+    if (!filename || favoritePendingRef.current.has(filename)) return;
+    favoritePendingRef.current.add(filename);
+    setFavoritePending(new Set(favoritePendingRef.current));
+    try {
+      const isFavorite = await toggleGalleryFavorite(item);
+      if (isFavorite === null) return;
+      setSessionGroups((groups) => groups.map((group) => ({
+        ...group,
+        items: group.items.map((entry) => entry.filename === filename
+          ? { ...entry, isFavorite }
+          : entry),
+      })));
+      setLoose((items) => items.map((entry) => entry.filename === filename
+        ? { ...entry, isFavorite }
+        : entry));
+    } finally {
+      favoritePendingRef.current.delete(filename);
+      setFavoritePending(new Set(favoritePendingRef.current));
+    }
+  }
+
   async function handleOpenGeneratedDir() {
     try {
       await openGeneratedDir();
@@ -391,7 +416,8 @@ export function GalleryModal() {
           close();
         }}
         onDelete={handleDelete}
-        onToggleFavorite={(next) => void toggleGalleryFavorite(next)}
+        onToggleFavorite={handleToggleFavorite}
+        favoriteBusy={Boolean(item.filename && favoritePending.has(item.filename))}
         t={t}
       />
     );

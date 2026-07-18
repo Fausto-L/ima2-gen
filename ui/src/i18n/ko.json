@@ -552,6 +552,7 @@
     "unfavoriteTitle": "즐겨찾기 해제",
     "favoriteAria": "즐겨찾기 추가",
     "unfavoriteAria": "즐겨찾기 해제",
+    "favoriteFailed": "즐겨찾기를 변경하지 못했습니다",
     "scopeAria": "갤러리 범위",
     "scope": {
       "current": "현재 세션",
@@ -1752,6 +1753,8 @@
     "rootFolder": "최상위",
     "renameFolder": "폴더 이름 변경",
     "renameAsset": "에셋 이름 변경",
+    "starAsset": "에셋에 별표 추가",
+    "unstarAsset": "에셋 별표 해제",
     "deleteFolder": "폴더 삭제",
     "actionFailed": "작업 실패",
     "starSaved": "에셋에 추가했어요",

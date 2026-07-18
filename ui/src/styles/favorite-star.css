@@ -1,0 +1,93 @@
+.favorite-star.favorite-star {
+  position: absolute;
+  z-index: 5;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 74%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  color: var(--on-scrim);
+  cursor: pointer;
+  opacity: 0.76;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--shadow-strong) 70%, transparent);
+  transition: opacity 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+
+.favorite-star svg {
+  width: 19px;
+  height: 19px;
+  fill: transparent;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linejoin: round;
+}
+
+.favorite-star:hover,
+.favorite-star:focus-visible,
+.favorite-star.is-active {
+  opacity: 1;
+}
+
+.favorite-star:hover {
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+}
+
+.favorite-star.is-active {
+  color: var(--amber);
+}
+
+.favorite-star.is-active svg {
+  fill: currentColor;
+}
+
+.favorite-star:disabled {
+  cursor: wait;
+  opacity: 0.56;
+}
+
+.favorite-star--gallery {
+  top: 6px;
+  left: 6px;
+}
+
+.favorite-star--result {
+  top: 8px;
+  right: 8px;
+}
+
+.favorite-star--asset {
+  top: 7px;
+  left: 7px;
+}
+
+.gallery__tile-wrap:hover .favorite-star--gallery,
+.assets-tile:hover .favorite-star--asset,
+.assets-tile:focus-within .favorite-star--asset,
+.result-preview-frame:hover .favorite-star--result {
+  opacity: 1;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .favorite-star {
+    width: 44px;
+    height: 44px;
+    opacity: 0.92;
+  }
+
+  .assets-tile__delete,
+  .gallery__delete {
+    min-width: 44px;
+    width: 44px;
+    height: 44px;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .favorite-star {
+    transition: none;
+  }
+}

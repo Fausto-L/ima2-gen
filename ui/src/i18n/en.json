@@ -552,6 +552,7 @@
     "unfavoriteTitle": "Remove from favorites",
     "favoriteAria": "Add to favorites",
     "unfavoriteAria": "Remove from favorites",
+    "favoriteFailed": "Could not update favorite",
     "scopeAria": "Gallery scope",
     "scope": {
       "current": "Current session",
@@ -1752,6 +1753,8 @@
     "rootFolder": "Top level",
     "renameFolder": "Rename folder",
     "renameAsset": "Rename asset",
+    "starAsset": "Star asset",
+    "unstarAsset": "Remove asset star",
     "deleteFolder": "Delete folder",
     "actionFailed": "Action failed",
     "starSaved": "Added to Assets",

@@ -146,9 +146,9 @@ export async function importPromptsToLibraryImpl(files: File[], _set: StoreSet, 
   }
 }
 
-export async function toggleGalleryFavoriteImpl(item: GenerateItem, set: StoreSet, get: StoreGet): Promise<void> {
+export async function toggleGalleryFavoriteImpl(item: GenerateItem, set: StoreSet, get: StoreGet): Promise<boolean | null> {
   const filename = item.filename;
-  if (!filename) return;
+  if (!filename) return null;
   let isFavorite: boolean;
   try {
     const result = await toggleGalleryFavorite(filename);
@@ -163,13 +163,17 @@ export async function toggleGalleryFavoriteImpl(item: GenerateItem, set: StoreSe
       history: s.history.map((h) =>
         h.filename === filename ? { ...h, isFavorite } : h,
       ),
+      currentImage: s.currentImage?.filename === filename
+        ? { ...s.currentImage, isFavorite }
+        : s.currentImage,
     }));
   } catch (err) {
     console.error("[GalleryFavorite] toggle failed", err);
-    return;
+    get().showToast(t("gallery.favoriteFailed"), true);
+    return null;
   }
 
-  if (!isFavorite) return;
+  if (!isFavorite) return isFavorite;
   try {
     const syncResult = await syncStarredAsset(
       { ...item, filename },
@@ -180,4 +184,5 @@ export async function toggleGalleryFavoriteImpl(item: GenerateItem, set: StoreSe
     console.error("[GalleryFavorite] asset sync failed", err);
     get().showToast(t("assets.starSaveFailed"), true);
   }
+  return isFavorite;
 }

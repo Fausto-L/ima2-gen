@@ -545,7 +545,7 @@ export type AppState = PresetState & ReferenceTraySlice & {
   togglePromptFavorite: (id: string) => Promise<void>;
   importPromptsToLibrary: (files: File[]) => Promise<void>;
   galleryFavorites: Set<string>;
-  toggleGalleryFavorite: (item: GenerateItem) => Promise<void>;
+  toggleGalleryFavorite: (item: GenerateItem) => Promise<boolean | null>;
   browserId: string;
 
   canvasOpen: boolean;

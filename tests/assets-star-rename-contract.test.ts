@@ -112,7 +112,7 @@ describe("star-to-assets and asset rename contract", () => {
   it("returns after an OFF transition before asset sync", () => {
     assert.match(
       promptStore,
-      /if \(!isFavorite\) return;\s*try \{\s*const syncResult = await syncStarredAsset/,
+      /if \(!isFavorite\) return isFavorite;\s*try \{\s*const syncResult = await syncStarredAsset/,
     );
   });
 
