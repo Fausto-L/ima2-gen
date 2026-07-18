@@ -2,7 +2,7 @@
 created: 2026-07-18
 updated: 2026-07-18
 tags: [ima2-gen, assetgen, keying, closeout, needs-human]
-status: ACCEPTED (020/030, 2026-07-18) — P1-1/P2 범위 정의만 남음
+status: CLOSED (2026-07-18) — P1-1/P2 사용자 결정으로 폐기, 040_lane_closeout.md 참조
 ---
 
 # Asset-gen UX overhaul — 현재 상태 + 재개 가이드
