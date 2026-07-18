@@ -52,6 +52,8 @@ export interface DownloadedMedia {
  *  permanent client errors are not. */
 function isRetryableDownloadError(error: unknown): boolean {
   const message = String((error as Error)?.message ?? error);
+  // v4-fallback timeout is the same ETIMEDOUT class as the RCA — keep retrying.
+  if (message.startsWith("MCP_DOWNLOAD_TIMEOUT")) return true;
   if (message.startsWith("MCP_DOWNLOAD_FAILED:")) {
     const status = Number(message.split(":")[1]);
     return status === 403 || status >= 500;

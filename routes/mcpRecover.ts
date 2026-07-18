@@ -102,10 +102,10 @@ export function registerMcpRecoverRoutes(app: Express, ctxRaw: RouteRuntimeConte
     if (started && isStartJobFailure(started)) {
       return res.status(started.code === "TOO_MANY_JOBS" ? 429 : 409).json({ error: { code: started.code, message: "cannot start job" } });
     }
-    res.status(202).json({ ok: true, requestId, provider, taskId, kind });
-
     const abort = new AbortController();
     registerJobAbortController(requestId, abort);
+    res.status(202).json({ ok: true, requestId, provider, taskId, kind });
+
     void runRecoverJob({ ctx, deps, adapter, requestId, taskId, kind, signal: abort.signal });
   });
 }

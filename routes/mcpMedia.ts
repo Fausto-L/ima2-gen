@@ -397,6 +397,7 @@ async function runMcpMediaJob(input: {
 }): Promise<void> {
   const { ctx, deps, adapter, requestId, kind, prompt, signal } = input;
   const manager = ctx.mcpConnectionManager!;
+  let taskId: string | null = null;
   try {
     publishJobEvent(requestId, "submitted", { provider: adapter.provider, kind });
     const uploadTotal = Number(Boolean(input.localStartFramePath))
@@ -450,6 +451,11 @@ async function runMcpMediaJob(input: {
       signal,
       onPhase: (phase) => { setJobPhase(requestId, phase); publishJobEvent(requestId, "progress", { phase }); },
     });
+    taskId = result.taskId;
+    void appendMcpJobLog(ctx.config.storage.generatedDir, {
+      event: "taskId", requestId, provider: adapter.provider, taskId,
+      sanitizedUrl: stripQuery(result.outputUrls[0]) ?? undefined,
+    });
 
     setJobPhase(requestId, "downloading");
     publishJobEvent(requestId, "progress", { phase: "downloading" });
@@ -486,7 +492,9 @@ async function runMcpMediaJob(input: {
     });
   } catch (error) {
     const code = errorCode(error);
-    void logMcpJobError(ctx.config.storage.generatedDir, { requestId, provider: adapter.provider }, error);
+    void logMcpJobError(ctx.config.storage.generatedDir, {
+      requestId, provider: adapter.provider, ...(taskId ? { taskId } : {}),
+    }, error);
     finishJob(requestId, { status: "error", errorCode: code });
     publishJobEvent(requestId, "error", { code, message: "MCP media generation failed" });
   }
