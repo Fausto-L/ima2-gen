@@ -1,6 +1,6 @@
 ---
 created: 2026-04-23
-updated: 2026-07-17
+updated: 2026-07-18
 tags: [ima2-gen, devlog, roadmap]
 aliases: [ima2 active plan, image_gen current roadmap, ima2 개발계획]
 ---
@@ -24,19 +24,23 @@ Deferred / 미래 항목은 `_plan/` 직속이 아니라 `_plan/_future/`에 둔
 
 | 순서 | 경로 | 상태 | 역할 |
 |---:|---|---|---|
-| 1 | `260515_fork-prompting-modularization-research/` | 구현 대기 | 연구 문서는 완료됐지만 Prompt Builder backend/frontend/CLI, workspace profile, composer/history restore와 viewer polish가 남았다. 같은 이름의 `_fin` 사본은 과거 오분류로 유지되며 이 `_plan` 단위가 active canonical이다. |
-| 2 | `260712_higgsfield-ux-studio/` | 070/080 전달·QA 진행 중 | 010~060 구현은 완료됐다. 070/080 핵심 소스·테스트의 추적 가능한 전달, 수동 성능/브라우저 QA, 090 원장 갱신과 future 분리가 남았다. |
-| 3 | `260715_assetgen_ux_overhaul/` | 구현·검증 진행 중 | 010/020은 완료됐지만 keying/click-erase 핵심 파일의 전달, 실화상·픽셀 수용 기준, 폼 P1/P2 후속 처리가 남았다. |
-| 4 | `260715_icon_pipeline/` | handoff | `ima2 icon` CLI 파이프라인 핸드오프(000/010/020). 구현 착수 시 문서와 `_fin/260715_asset_gen_mode/040_sheet_design.md`의 crop 소유권을 재검증한다. |
-| 5 | `260715_spritegen-adoption/` | 구현 후 closeout 대기 | WP2~WP6 로컬 구현은 존재하지만 누락 계약 테스트, i18n, UI build/browser QA, closeout과 원격 통합·출하가 남았다. |
-| 6 | `260715_subscription-mcp-providers/` | parent active | WP1~8과 restart recovery는 완료됐다. 090 Tier2 billing/security/long-job/provider smoke, transport policy, provider expansion이 남아 parent를 유지한다. |
-| 7 | `260716_cli-entry-routing/` | WP1~3 완료, WP4~5 대기 | strict model routing과 reference-media UI는 구현됐다. character persistence와 derivative diversity가 남았다. |
-| 8 | `260716_composer-tray/` | 080 전달·QA 대기 | tray/mention/Element/rename 흐름은 구현됐다. result/assets star control 파일의 커밋, desktop/mobile 증거와 parent closeout이 남았다. |
+| 1 | `260712_higgsfield-ux-studio/` | 070/080 WIP 커밋 완료, 잔여 구현·QA | 010~050 done, 060 partial. 070/080은 체크포인트 `ddf2686`/`f312cab`로 전달됐지만 last-frame→I2V `parentId` orchestration 미구현, UI 계약 테스트 2종(`element-mention-ui-contract`, `node-studio-ui-contract`) 부재, 수동 3-provider QA와 100+ 노드 성능 프로파일이 남았다. 090 원장 갱신됨(2026-07-18). |
+| 2 | `260715_assetgen_ux_overhaul/` | 구현 커밋 완료, 시각 수용 NEEDS_HUMAN | keying/click-erase 전달(`730e61c`). 030 실화상·픽셀 수용 기준은 사용자 시각 판단이 필요하고, P1-1(폼 2단계)/P2 범위는 아직 문서화되지 않았다. |
+| 3 | `260715_subscription-mcp-providers/` | parent active | WP1~8과 restart recovery는 완료됐고 capabilities 계약 요약은 `0cc560d`로 추가됐다. 090 Tier1 golden harness(`mcp-clean-install`/`security-regression`/`long-job-recovery`/`provider-smoke`)와 Tier2 authenticated smoke, 100 provider expansion이 남아 parent를 유지한다. |
+| 4 | `260716_cli-entry-routing/` | WP1~3 완료·정리, WP4~5 대기 | WP1 models/tools dispatch와 WP3 reference-media 잔여는 `4505642`로 정리됐다. WP4 character persistence, WP5 derivative diversity가 남았다. |
+| 5 | `260718_closeout-sweep/` | 감사 완료, sweep 진행 중 | 2026-07-18 전 lane 감사 매트릭스(`000_audit.md`). sweep 자체의 closeout은 최종 게이트 후 정리. |
+
+2026-07-18 closeout-sweep으로 `_fin` 이동: `260515_fork-prompting-modularization-research/`
+(구현 커밋 확인 + 수용 기준 supersede 기록), `260717_element-library-fixes/`
+(build·시각 증거), `260716_composer-tray/` (080 전달 + 1440/500 QA),
+`260715_spritegen-adoption/` (문서 정정 + 증거). `_future` 이동:
+`260715_icon_pipeline/` (구현 0건 handoff).
 
 2026-07-15: `260715_asset_gen_mode/`(에셋 생성 모드 — asset-gen 탭, backgroundPreset,
 클라이언트 키잉, 알파 WebM 파생) WP1-WP11 완료로 `_fin/` 이동.
 
-Deferred (`_plan/_future/`): `260430_issue27-canvas-svg-export/`,
+Deferred (`_plan/_future/`): `260715_icon_pipeline/`,
+`260430_issue27-canvas-svg-export/`,
 `260430_issue28-canvas-pptx-export/`, `260430_issue31-provider-masked-edit/`,
 `260529_issue80-batch-comparison-matrix/`, `260602_storyboard-planner-skill/`.
 
