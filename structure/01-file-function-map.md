@@ -172,9 +172,9 @@ routes/
 | `lib/oauthProxy/index.ts` | 29 | Public surface — re-exports generators, streams, prompts, references, runtime, and shared types |
 | `lib/oauthProxy/generators.ts` | 229 | OAuth Responses single-image generation and stable generator exports |
 | `lib/oauthProxy/multimodeGenerators.ts` | 304 | OAuth Responses multimode and edit generators, masked-edit guard |
-| `lib/generatePipeline.ts` | 507 | Classic generation pipeline, provider retry, persistence, background-preset prompt shaping, and event publication |
+| `lib/generatePipeline.ts` | 580 | Classic generation pipeline, provider retry, persistence, background-preset prompt shaping, and event publication |
 | `lib/backgroundPresets.ts` | 47 | Background preset contract for asset generation: enum parse, prompt suffixes, planner constraint |
-| `lib/multimodePipeline.ts` | 486 | Multimode streaming pipeline, persistence, cancellation, and partial timeout |
+| `lib/multimodePipeline.ts` | 535 | Multimode streaming pipeline, persistence, cancellation, and partial timeout |
 | `lib/nodeGeneration.ts` | 477 | Node provider routing, retry, persistence, and SSE publication |
 | `lib/nodeValidation.ts` | 44 | Node prompt, references, and moderation validation |
 | `lib/oauthProxy/streams.ts` | 233 | SSE/event-stream helpers and safe stream diagnostics |
@@ -193,7 +193,7 @@ routes/
 | `lib/refs.ts` | 134 | Reference image validation, count/size limits |
 | `lib/referenceImageCompress.ts` | 85 | Sharp-based reference image compression below the configured byte cap |
 | `lib/imageModels.ts` | 216 | Image model allowlist and `normalizeImageModel(ctx, raw)` helper |
-| `lib/imageMetadata.ts` | 123 | `ima2.generation.v1` payload schema, XMP build/parse, embed limits |
+| `lib/imageMetadata.ts` | 124 | `ima2.generation.v1` payload schema, XMP build/parse, embed limits |
 | `lib/imageMetadataStore.ts` | 68 | Sharp-based embed/read of XMP metadata into PNG/JPEG/WebP |
 | `lib/canvasVersionStore.ts` | 331 | Canvas version snapshot storage, list, restore, and pruning |
 | `lib/comfyBridge.ts` | 236 | ComfyUI bridge: workflow export, image staging, integration helper handoff |
@@ -284,9 +284,9 @@ Backed by `routes/agent.ts`; no CLI wrapper. Session/turn/queue persistence and 
 
 | Area | File | Lines | Responsibility |
 |---|---|---:|---|
-| App shell | `ui/src/App.tsx` | 178 | Initial hydration, polling, classic/node/card-news canvas switch, Canvas Mode workspace mount, prompt library overlay, mobile shell (dark-only since Phase 010) |
-| Entry | `ui/src/main.tsx` | 43 | React mount |
-| Types | `ui/src/types.ts` | 254 | Provider, quality, size, image model, embedded metadata, response types, web-search, reasoning effort, multimode |
+| App shell | `ui/src/App.tsx` | 185 | Initial hydration, polling, classic/node/card-news canvas switch, Canvas Mode workspace mount, prompt library overlay, mobile shell (dark-only since Phase 010) |
+| Entry | `ui/src/main.tsx` | 45 | React mount |
+| Types | `ui/src/types.ts` | 256 | Provider, quality, size, image model, embedded metadata, response types, web-search, reasoning effort, multimode |
 | Canvas types | `ui/src/types/canvas.ts` | 98 | Canvas Mode shared types (annotations, versions, masks, brushes) |
 | Store | `ui/src/store/useAppStore.ts` | 598 | Zustand facade; classic/node/video/multimode/inflight/history/asset-gen logic split into `ui/src/store/store*Impl.ts` modules |
 | Persistence registry | `ui/src/store/persistenceRegistry.ts` | 83 | Single source of truth for `ima2.*` localStorage key names — covers gallery scope, gallery default scope, and settings keys (theme keys removed in Phase 010); prevents drift between hydration helpers and setters (#43) |
