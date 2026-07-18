@@ -272,8 +272,13 @@ describe("EN — element node lifecycle", () => {
     const nodeServer = read("lib/nodeGeneration.ts");
     assert.match(nodeServer, /const generationPrompt = elementNotes\.length/);
     assert.match(nodeServer, /\.\.\.\(elementIds\.length \? \{ elementIds, elementRevisions \} : \{\}\)/);
+    // Every provider branch consumes generationPrompt, never the raw prompt.
+    assert.doesNotMatch(nodeServer, /generateViaResponses\(\s*activeProvider,\s*prompt,/);
+    assert.doesNotMatch(nodeServer, /generateViaGrok\(prompt,/);
+    assert.doesNotMatch(nodeServer, /generateViaGeminiApi\(parentB64 \? `Edit this image: \$\{prompt\}`/);
     // Merge dedupes across classic+element refs and caps at the active limit.
-    assert.match(nodeRun, /mergeRunReferences\(node\.data\.referenceImages \?\? \[\], elementResolution\.referenceDataUrls, get\(\)\.activeReferenceLimit\(\)\)/);
+    assert.match(nodeRun, /mergeRunReferences\(node\.data\.referenceImages \?\? \[\], elementResolution\.referenceDataUrls, variantRefLimit\)/);
+    assert.match(nodeRun, /effectiveReferenceLimit\(\{\s*provider: nodeProvider/);
     assert.match(nodeRun, /if \(!merged\.includes\(ref\)\) merged\.push\(ref\)/);
     assert.match(nodeRun, /if \(merged\.length >= activeLimit\) break/);
     // Ref fetches fail closed on non-200 instead of embedding error HTML.
@@ -284,8 +289,10 @@ describe("EN — element node lifecycle", () => {
   it("assets detail opens even under active filters or a missing page", () => {
     const workspace = read("ui/src/components/assets/AssetsWorkspace.tsx");
     assert.match(workspace, /setFilters\(\{ kind: null, folderId: null, tag: null, q: "" \}\)/);
+    assert.match(workspace, /setQuery\(""\)/);
     assert.match(workspace, /getAssetById\(id\)/);
     assert.match(workspace, /assets: \[asset, \.\.\.state\.assets\.filter\(\(entry\) => entry\.id !== asset\.id\)\]/);
+    assert.match(workspace, /detailAssetOverride\?\.id === selectedAssetId \? detailAssetOverride : null/);
   });
 
   it("open-assets-detail listener wires canvas double-click to the assets detail", () => {

@@ -13,6 +13,7 @@ import {
   type NodeBatchMode,
 } from "../lib/nodeBatch";
 import { handleError } from "../lib/errorHandler";
+import { effectiveReferenceLimit } from "../lib/referenceLimits";
 import { t } from "../i18n";
 import {
   type PersistedInFlight,
@@ -128,11 +129,20 @@ export async function runGenerateNodeInPlaceImpl(
     nodeGenerationLocks.delete(clientId);
     return null;
   }
-  const nodeRefs = mergeRunReferences(node.data.referenceImages ?? [], elementResolution.referenceDataUrls, get().activeReferenceLimit());
   const s = get();
   // Branch variants carry per-node provider/model/size (settingsPatch) —
   // prefer them over global settings (higgsfield 120 NB).
   const nodeProvider = (typeof node.data.provider === "string" && node.data.provider ? node.data.provider : s.provider) as AppState["provider"];
+  // Reference capacity follows the VARIANT's provider, not the global one
+  // (Socrates round 3): a grok variant must not hit oauth's smaller limit
+  // (or vice versa).
+  const variantRefLimit = effectiveReferenceLimit({
+    provider: nodeProvider,
+    serverLimit: s.referenceLimit,
+    videoModelSelected: Boolean(s.videoModelSelected),
+    mcpProvider: s.mcpProvider ?? null,
+  });
+  const nodeRefs = mergeRunReferences(node.data.referenceImages ?? [], elementResolution.referenceDataUrls, variantRefLimit);
   const nodeModel = (typeof node.data.model === "string" && node.data.model ? node.data.model : s.imageModel) as AppState["imageModel"];
   const size = options.sizeOverride ?? (typeof node.data.size === "string" && node.data.size ? node.data.size : s.getResolvedSize());
   const effectiveParentServerNodeId =

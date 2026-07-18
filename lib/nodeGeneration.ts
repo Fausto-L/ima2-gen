@@ -276,7 +276,7 @@ export async function runNodeGeneration(req: Request, res: Response, ctx: Runtim
                 })
               : await generateViaResponses(
                   activeProvider,
-                  prompt,
+                  generationPrompt,
                   quality,
                   effectiveSize,
                   moderation,

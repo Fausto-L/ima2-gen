@@ -75,6 +75,7 @@ export function AssetsWorkspace() {
   const [query, setQuery] = useState(filters.q);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [previewItem, setPreviewItem] = useState<GenerateItem | null>(null);
+  const [detailAssetOverride, setDetailAssetOverride] = useState<AssetItem | null>(null);
   const isMobile = useIsMobile();
   const keyingTarget = useAppStore((s) => s.keyingTarget);
   const pendingAssetDetailId = useAppStore((s) => s.pendingAssetDetailId);
@@ -83,13 +84,17 @@ export function AssetsWorkspace() {
     const id = pendingAssetDetailId;
     useAppStore.setState({ pendingAssetDetailId: null });
     // The target may be outside the current filter/page — reset filters so it
-    // becomes visible, then upsert it directly when the list lacks it
-    // (Socrates round 2: detail silently failed under active filters).
+    // becomes visible (local query too, or the debounced effect restores the
+    // old search), then upsert it directly when the list lacks it. The
+    // override keeps the detail mounted even if a reset load replaces the
+    // upserted entry (Socrates round 3).
     setFilters({ kind: null, folderId: null, tag: null, q: "" });
+    setQuery("");
     setSelectedAssetId(id);
     if (!useAppStore.getState().assets.some((asset) => asset.id === id)) {
       void getAssetById(id).then(({ asset }) => {
         useAppStore.setState((state) => ({ assets: [asset, ...state.assets.filter((entry) => entry.id !== asset.id)] }));
+        setDetailAssetOverride(asset);
       }).catch(() => {});
     }
   }, [pendingAssetDetailId, setFilters]);
@@ -115,7 +120,8 @@ export function AssetsWorkspace() {
   const elementRootView = filters.kind === "element" && !filters.folderId && !filters.q && !filters.tag;
   const emptyTitle = elementRootView ? "assets.emptyElementsTitle" : filters.folderId ? "assets.emptyFolderTitle" : filtered ? "assets.emptySearchTitle" : "assets.emptyTitle";
   const emptyBody = elementRootView ? "assets.emptyElementsBody" : filters.folderId ? "assets.emptyFolderBody" : filtered ? "assets.emptySearchBody" : "assets.emptyBody";
-  const selectedAsset = assets.find((asset) => asset.id === selectedAssetId) ?? null;
+  const selectedAsset = assets.find((asset) => asset.id === selectedAssetId)
+    ?? (detailAssetOverride?.id === selectedAssetId ? detailAssetOverride : null);
   const selectedElement = selectedAsset?.kind === "element" ? toElementDefinition(selectedAsset) : null;
   const closeDetail = useCallback(() => setSelectedAssetId(null), []);
   const detailRef = useMobileAssetDetailDialog(Boolean(selectedAsset && isMobile), closeDetail);
