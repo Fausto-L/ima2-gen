@@ -48,15 +48,26 @@ export async function executeMediaPlan(
   if (!taskId) throw new Error(`MCP_TASK_ID_MISSING:${adapter.provider}:${plan.toolName}`);
   options.onPhase?.("provider-queued");
 
-  let interval = options.pollIntervalMs ?? 3_000;
+  // Official guidance: >=5s between task polls, with jitter (260718).
+  let interval = options.pollIntervalMs ?? 5_000;
   let sawRunning = false;
+  let pollErrors = 0;
   for (;;) {
     if (options.signal?.aborted) throw new Error("MCP_JOB_ABORTED");
     if (Date.now() > deadline) throw new Error(`MCP_JOB_TIMEOUT:${taskId}`);
-    await sleep(interval, options.signal);
-    interval = Math.min(interval * 1.5, 12_000);
+    await sleep(interval + Math.floor(Math.random() * 1_000), options.signal);
+    interval = Math.min(interval * 1.5, 15_000);
     const pollPlan = adapter.buildPollCall(taskId);
-    const pollResult = await manager.callTool(adapter.provider, pollPlan.toolName, pollPlan.args, { signal: options.signal });
+    let pollResult: Record<string, unknown>;
+    try {
+      pollResult = await manager.callTool(adapter.provider, pollPlan.toolName, pollPlan.args, { signal: options.signal });
+      pollErrors = 0;
+    } catch (error) {
+      // A dropped poll must not kill a running remote task — retry up to 3.
+      pollErrors += 1;
+      if (pollErrors >= 3) throw error;
+      continue;
+    }
     const poll: MediaTaskPoll = adapter.parsePoll(pollResult);
     if (poll.status === "running" && !sawRunning) { sawRunning = true; options.onPhase?.("provider-running"); }
     if (poll.status === "succeeded") {

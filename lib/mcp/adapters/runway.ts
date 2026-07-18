@@ -190,11 +190,65 @@ function parsePoll(result: Record<string, unknown>): MediaTaskPoll {
     : rawStatus === "RUNNING" ? "running"
     : rawStatus === "PENDING" || rawStatus === "QUEUED" || rawStatus === "THROTTLED" ? "pending"
     : "unknown";
-  const outputUrls = extractHttpsUrls(text).filter((url) =>
-    /\.(png|jpe?g|webp|mp4|mov|webm)(\?|$)/i.test(url) || /\/datasets?\//i.test(url) || /cloudfront|runway/i.test(url),
-  );
+  const outputUrls = collectOutputUrls(result, text);
   const failureDetail = status === "failed" ? text.slice(0, 300) : undefined;
   return { status, outputUrls, ...(failureDetail ? { detail: failureDetail } : {}) };
+}
+
+/** Output URL priority (260718): structuredContent.url -> task.artifacts[].url
+ *  from the JSON text block -> raw text regex. Merged through a Set because
+ *  collectResultText already stringifies structuredContent into the text. */
+function collectOutputUrls(result: Record<string, unknown>, text: string): string[] {
+  const ordered: string[] = [];
+  const push = (url: unknown) => {
+    if (typeof url === "string" && /^https:\/\//i.test(url) && !ordered.includes(url)) ordered.push(url);
+  };
+  const structured = result.structuredContent as Record<string, unknown> | undefined;
+  push(structured?.url);
+  for (const artifact of artifactsFromText(text)) push(artifact);
+  for (const url of extractHttpsUrls(text)) {
+    if (/\.(png|jpe?g|webp|mp4|mov|webm)(\?|$)/i.test(url) || /\/datasets?\//i.test(url) || /cloudfront|runway/i.test(url)) push(url);
+  }
+  return ordered;
+}
+
+/** Artifacts carry the real media; previewUrls live under a different key and
+ *  are never picked up here. Video artifacts win over image previews. */
+function artifactsFromText(text: string): string[] {
+  const start = text.indexOf('"task"');
+  if (start === -1) return [];
+  const brace = text.lastIndexOf("{", start);
+  if (brace === -1) return [];
+  const end = balancedJsonEnd(text, brace);
+  if (end === -1) return [];
+  let parsed: { task?: { artifacts?: Array<{ url?: unknown }> } };
+  try { parsed = JSON.parse(text.slice(brace, end)); } catch { return []; }
+  const urls = (parsed.task?.artifacts ?? [])
+    .map((artifact) => artifact?.url)
+    .filter((url): url is string => typeof url === "string");
+  const videos = urls.filter((url) => /\.(mp4|mov|webm)(\?|$)/i.test(url));
+  return videos.length > 0 ? videos : urls;
+}
+
+/** End index (exclusive) of the JSON object starting at `brace`, honoring
+ *  string escapes — the pretty task block is followed by other content. */
+function balancedJsonEnd(text: string, brace: number): number {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = brace; i < text.length; i += 1) {
+    const ch = text[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === "\\" && inString) { escaped = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === "{") depth += 1;
+    if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return -1;
 }
 
 export type RunwayMediaAction = "upscale-video" | "upscale-image" | "edit-video";

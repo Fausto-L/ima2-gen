@@ -33,6 +33,7 @@ import { registerQuotaRoutes } from "./quota.js";
 import { registerAuthRoutes } from "./auth.js";
 import { registerMcpConnectionRoutes } from "./mcpConnections.js";
 import { registerMcpMediaRoutes } from "./mcpMedia.js";
+import { registerMcpRecoverRoutes } from "./mcpRecover.js";
 import { registerMcpTempReferenceRoutes } from "./mcpTempReferences.js";
 import { registerContractRoutes } from "./contracts.js";
 import { mountKeyRoutes } from "./keys.js";
@@ -76,6 +77,7 @@ export function configureRoutes(app, ctxRaw) {
     registerMcpConnectionRoutes(app, ctx);
     registerModelsRoutes(app, ctx);
     registerMcpMediaRoutes(app, ctx);
+    registerMcpRecoverRoutes(app, ctx);
     registerMcpTempReferenceRoutes(app, ctx);
     registerContractRoutes(app, ctx);
     mountKeyRoutes(app, ctx);

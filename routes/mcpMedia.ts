@@ -2,19 +2,18 @@
 // results: temp download -> generatedDir move -> STRICT sidecar (atomicWriteJson;
 // media rolled back on failure) -> thumbnail -> history invalidate -> done.
 import { randomBytes } from "node:crypto";
-import { copyFile, rm, stat } from "node:fs/promises";
+import { rm, stat } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import type { Express, Request, Response } from "express";
 import { atomicWriteJson } from "../lib/atomicWrite.js";
-import { generateImageThumbnail } from "../lib/imageThumb.js";
-import { generateVideoThumbnail } from "../lib/videoThumb.js";
-import { invalidateHistoryIndex } from "../lib/historyIndex.js";
 import { finishJob, isStartJobFailure, registerJobAbortController, setJobPhase, startJob } from "../lib/inflight.js";
 import { publishJobEvent } from "../lib/ssePublish.js";
 import { safeGeneratedFilePath } from "../lib/videoFrameExtract.js";
 import { concatVideos } from "../lib/videoConcat.js";
 import { executeMediaJob, executeMediaPlan } from "../lib/mcp/executeMediaJob.js";
 import { downloadMediaResult } from "../lib/mcp/downloadMediaResult.js";
+import { commitMediaResult } from "../lib/mcp/commitMediaResult.js";
+import { appendMcpJobLog, logMcpJobError } from "../lib/mcp/jobLog.js";
 import { buildRunwayActionCall, REFERENCE_TAG_PATTERN, runwayAdapter, type RunwayMediaAction } from "../lib/mcp/adapters/runway.js";
 import { uploadLocalMediaToRunway } from "../lib/mcp/adapters/runwayUpload.js";
 import { resolveMediaAction, type MediaOperation } from "../lib/mcp/mediaWorkflowRouter.js";
@@ -41,6 +40,17 @@ const ADAPTERS: Record<string, MediaProviderAdapter> = {
 
 function errorCode(error: unknown): string {
   return String((error as Error)?.message ?? error).split(":")[0] || "MCP_MEDIA_FAILED";
+}
+
+/** Query-stripped origin+path — signed URLs are never logged or persisted. */
+function stripQuery(rawUrl: string | undefined): string | null {
+  if (!rawUrl) return null;
+  try {
+    const url = new URL(rawUrl);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return null;
+  }
 }
 
 const IMAGE_INPUT_MAX_BYTES = 50 * 1024 * 1024;
@@ -173,7 +183,7 @@ async function runMediaAction(input: {
     setJobPhase(requestId, "downloading");
     publishJobEvent(requestId, "progress", { phase: "downloading" });
     const kind = input.operation === "image.upscale" ? "image" as const : "video" as const;
-    const download = await deps.download(result.outputUrls[0], { kind });
+    const download = await deps.download(result.outputUrls[0], { kind, attempts: 5, baseDelayMs: 4_000 });
     await commitMediaResult({
       ctx, deps, requestId, kind,
       tempPath: download.tempPath, cleanup: download.cleanup,
@@ -188,6 +198,7 @@ async function runMediaAction(input: {
     });
   } catch (error) {
     const code = errorCode(error);
+    void logMcpJobError(ctx.config.storage.generatedDir, { requestId, provider: "runway" }, error);
     finishJob(requestId, { status: "error", errorCode: code });
     publishJobEvent(requestId, "error", { code, message: "media action failed" });
   }
@@ -442,7 +453,11 @@ async function runMcpMediaJob(input: {
 
     setJobPhase(requestId, "downloading");
     publishJobEvent(requestId, "progress", { phase: "downloading" });
-    const download = await deps.download(result.outputUrls[0], { kind });
+    void appendMcpJobLog(ctx.config.storage.generatedDir, {
+      event: "succeeded", requestId, provider: adapter.provider,
+      taskId: result.taskId, sanitizedUrl: stripQuery(result.outputUrls[0]) ?? undefined,
+    });
+    const download = await deps.download(result.outputUrls[0], { kind, attempts: 5, baseDelayMs: 4_000 });
     const referenceParents = [
       ...(input.localReferences ?? []).map((entry) => ({
         filename: basename(entry.path), role: "image-reference" as const, ...(entry.tag ? { tag: entry.tag } : {}),
@@ -471,45 +486,8 @@ async function runMcpMediaJob(input: {
     });
   } catch (error) {
     const code = errorCode(error);
+    void logMcpJobError(ctx.config.storage.generatedDir, { requestId, provider: adapter.provider }, error);
     finishJob(requestId, { status: "error", errorCode: code });
     publishJobEvent(requestId, "error", { code, message: "MCP media generation failed" });
   }
-}
-
-/** Single atomic persistence path (050 contract): media -> STRICT sidecar
- *  (rollback on failure) -> thumbnail -> history -> done after commit. */
-async function commitMediaResult(input: {
-  ctx: ReturnType<typeof requireRuntimeContext>;
-  deps: McpMediaDeps;
-  requestId: string;
-  kind: "image" | "video";
-  tempPath: string;
-  cleanup: () => Promise<void>;
-  ext: string;
-  meta: Record<string, unknown>;
-  doneExtra: Record<string, unknown>;
-}): Promise<string> {
-  const { ctx, deps, requestId, kind } = input;
-  const filename = `${Date.now()}_${randomBytes(ctx.config.ids.generatedHexBytes).toString("hex")}_mcp.${input.ext}`;
-  const filePath = join(ctx.config.storage.generatedDir, filename);
-  const createdAt = Date.now();
-  try {
-    await copyFile(input.tempPath, filePath);
-    await deps.writeSidecar(filePath + ".json", { ...input.meta, createdAt });
-  } catch (commitError) {
-    await rm(filePath, { force: true });
-    throw commitError;
-  } finally {
-    await input.cleanup();
-  }
-  if (kind === "video") await generateVideoThumbnail(filePath).catch(() => undefined);
-  else await generateImageThumbnail(filePath).catch(() => undefined);
-  invalidateHistoryIndex();
-  finishJob(requestId, { status: "done", meta: { filename } });
-  publishJobEvent(requestId, "done", {
-    requestId, filename,
-    url: `/generated/${encodeURIComponent(filename)}`,
-    mediaType: kind, createdAt, ...input.doneExtra,
-  });
-  return filename;
 }
