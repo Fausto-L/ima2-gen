@@ -188,6 +188,7 @@ export function mapHistoryItem(it: Awaited<ReturnType<typeof getHistory>>["items
     video: it.video ?? null,
     videoSeries: it.videoSeries ?? null,
     videoContinuity: it.videoContinuity ?? null,
+    videoLineage: it.videoLineage ?? null,
     filename: it.filename,
     thumb: it.thumb ?? (isVideo ? undefined : it.url),
     prompt: it.prompt ?? undefined,

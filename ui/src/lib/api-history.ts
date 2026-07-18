@@ -9,6 +9,7 @@ export type HistoryItem = {
   video?: Record<string, unknown> | null;
   videoSeries?: { topic?: string; chainIndex?: number } | null;
   videoContinuity?: import("../types").VideoContinuityLineage | null;
+  videoLineage?: import("../types").VideoLineage | null;
   createdAt: number;
   prompt: string | null;
   userPrompt?: string | null;

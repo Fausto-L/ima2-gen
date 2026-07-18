@@ -41,6 +41,14 @@ export type VideoContinuityLineage = {
   entries: VideoContinuityEntry[];
 };
 
+export type VideoLineage = {
+  id: string;
+  parentId: string;
+  rootId: string;
+  seriesId: string;
+  sequenceIndex: number;
+};
+
 export type SizePreset =
   | "1024x1024"
   | "1536x1024"
@@ -65,6 +73,7 @@ export type GenerateItem = {
   video?: Record<string, unknown> | null;
   videoSeries?: { topic?: string; chainIndex?: number } | null;
   videoContinuity?: VideoContinuityLineage | null;
+  videoLineage?: VideoLineage | null;
   canvasMergedAt?: number;
   canvasVersion?: boolean;
   canvasSourceFilename?: string | null;

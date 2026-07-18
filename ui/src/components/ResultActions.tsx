@@ -1,15 +1,77 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAppStore } from "../store/useAppStore";
 import { useI18n } from "../i18n";
-import { exportImageToComfy } from "../lib/api";
+import { cancelInflight, exportImageToComfy } from "../lib/api";
+import { armStreamTimeout, ensureConnected, subscribe } from "../lib/eventChannel";
+import { parseSseErrorPayload } from "../lib/sseStreamError";
+import { toVideoHistoryItem, type VideoExtendDone } from "../lib/videoHistoryItem";
 import { isVideoItem, extractFirstFrame, extractMidFrame, extractLastFrame } from "../lib/videoMedia";
 import { continueFromItem, continueFromItemAsUrl } from "../lib/continueFromItem";
 import { ResultMetadataModal } from "./ResultMetadataModal";
 import type { GenerateItem } from "../types";
 
-interface ResultActionsProps {
-  imageOverride?: GenerateItem | null;
-  onAfterDeleteFocus?: () => void;
+interface ResultActionsProps { imageOverride?: GenerateItem | null; onAfterDeleteFocus?: () => void }
+
+type ExtendState = "idle" | "pending" | "error";
+type VideoExtendRequest = {
+  requestId: string;
+  sourceVideoId: string;
+  prompt?: string;
+  provider: "grok" | "grok-api";
+  model?: string;
+};
+
+async function submitVideoExtend(payload: VideoExtendRequest, signal: AbortSignal): Promise<void> {
+  try {
+    const response = await fetch("/api/video/extend", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal,
+    });
+    const data = await response.json().catch(() => ({})) as Record<string, unknown>;
+    if (!response.ok) throw parseSseErrorPayload(data, `Request failed: ${response.status}`);
+    if (response.status !== 202 || data.requestId !== payload.requestId ||
+      data.sourceVideoId !== payload.sourceVideoId || data.workflow !== "last-frame-i2v") {
+      throw new Error("Video extension returned an invalid acceptance response");
+    }
+  } catch (error) {
+    throw error instanceof Error ? error : new Error(String(error));
+  }
+}
+
+function postVideoExtendStream(payload: VideoExtendRequest, signal: AbortSignal): Promise<VideoExtendDone> {
+  ensureConnected();
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let clearTimer = () => {};
+    let unsubscribe = () => {};
+    const finish = (complete: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimer();
+      unsubscribe();
+      signal.removeEventListener("abort", onAbort);
+      complete();
+    };
+    const cancelJob = () => void cancelInflight(payload.requestId).catch(() => undefined);
+    const onAbort = () => finish(() => {
+      cancelJob();
+      reject(new DOMException("Aborted", "AbortError"));
+    });
+    unsubscribe = subscribe(payload.requestId, null, (event, data) => {
+      if (event === "done") finish(() => resolve(data as unknown as VideoExtendDone));
+      else if (event === "error") finish(() =>
+        reject(parseSseErrorPayload(data, "Video extension failed")));
+    });
+    clearTimer = armStreamTimeout(() => finish(() => {
+      cancelJob(); reject(new Error("Video extension stream timed out"));
+    }));
+    if (signal.aborted) return onAbort();
+    signal.addEventListener("abort", onAbort, { once: true });
+    const submission = submitVideoExtend(payload, signal);
+    submission.catch((error) => finish(() => reject(error)));
+  });
 }
 
 const CANVAS_MODE_PROMPT_ID = "canvas-mode-context";
@@ -41,15 +103,18 @@ export function ResultActions({
   const openCanvas = useAppStore((s) => s.openCanvas);
   const [comfyExporting, setComfyExporting] = useState(false);
   const [animating, setAnimating] = useState(false);
+  const [extendState, setExtendState] = useState<ExtendState>("idle");
   const [metadataOpen, setMetadataOpen] = useState(false);
+  const extendAbortRef = useRef<AbortController | null>(null);
 
+  useEffect(() => () => extendAbortRef.current?.abort(), []);
   const actionImage = imageOverride ?? currentImage;
   if (!actionImage) return null;
   const isVideo = isVideoItem(actionImage);
   const videoSrc = isVideo ? (actionImage.url || actionImage.image) : "";
   const canExportToComfy = Boolean(actionImage.filename);
-      const canAnimate = Boolean(actionImage.filename) && !isVideo;
-      const canExtend = isVideo && Boolean(actionImage.filename);
+  const canAnimate = Boolean(actionImage.filename) && !isVideo;
+  const canExtend = isVideo && Boolean(actionImage.filename);
   const isGrokProvider = actionImage.provider === "grok" || actionImage.provider === "grok-api";
   const providerUrlAlive = Boolean(
     isGrokProvider &&
@@ -72,6 +137,36 @@ export function ResultActions({
       setAnimating(false);
     }
   };
+
+  const extend = async () => {
+    if (!actionImage.filename || extendState === "pending") return;
+    const requestId = `vext_${crypto.randomUUID()}`;
+    const controller = new AbortController();
+    extendAbortRef.current = controller;
+    setExtendState("pending");
+    try {
+      const done = await postVideoExtendStream({
+        requestId,
+        sourceVideoId: actionImage.filename,
+        prompt: actionImage.prompt?.trim() || undefined,
+        provider: actionImage.provider === "grok-api" ? "grok-api" : "grok",
+        model: actionImage.model ?? undefined,
+      }, controller.signal);
+      useAppStore.getState().addHistoryItem(toVideoHistoryItem(done, actionImage));
+      setExtendState("idle");
+      showToast(t("toast.animateDone"));
+    } catch (error) {
+      const canceled = error instanceof DOMException && error.name === "AbortError";
+      setExtendState(canceled ? "idle" : "error");
+      if (!canceled) {
+        showToast(error instanceof Error ? error.message : t("toast.animateFailed"), true);
+      }
+    } finally {
+      if (extendAbortRef.current === controller) extendAbortRef.current = null;
+    }
+  };
+
+  const cancelExtend = () => extendAbortRef.current?.abort();
 
   const download = () => {
     const a = document.createElement("a");
@@ -310,23 +405,23 @@ export function ResultActions({
         </button>
       )}
       {canExtend && (
-        <button
-          type="button"
-          className="action-btn"
-          onClick={() => {
-            const url = actionImage.url || actionImage.image;
-            if (url) {
-              fetch("/api/video/extend", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ videoUrl: url, prompt: actionImage.prompt || "" }),
-              }).catch(() => {});
-            }
-          }}
-          title={t("result.extendTitle") ?? "이어가기"}
-        >
-          {t("result.extend") ?? "이어가기"}
-        </button>
+        <>
+          <button
+            type="button"
+            className="action-btn"
+            onClick={extend}
+            disabled={extendState === "pending"}
+            aria-busy={extendState === "pending"}
+            title={t("result.extendTitle") ?? "이어가기"}
+          >
+            {extendState === "pending"
+              ? t("inflight.streaming")
+              : extendState === "error" ? t("gallery.retry") : t("result.extend") ?? "이어가기"}
+          </button>
+          {extendState === "pending" && (
+            <button type="button" className="action-btn" onClick={cancelExtend}>{t("common.cancel")}</button>
+          )}
+        </>
       )}
       <button
         type="button"
