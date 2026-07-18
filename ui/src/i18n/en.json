@@ -46,6 +46,7 @@
     "sessionRenameFailed": "Failed to rename session.",
     "sessionDeleteFailed": "Failed to delete session.",
     "promptRequired": "Enter a prompt.",
+    "missingElements": "A selected element is missing. Remove it or re-add the element before generating.",
     "nodeCreated": "Node {id} created ({elapsed}s)",
     "nodeRootCreated": "Created a first node from this image.",
     "animateStarted": "Animating image to video…",

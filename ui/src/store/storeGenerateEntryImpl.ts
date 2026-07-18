@@ -9,6 +9,11 @@ export async function generateImpl(set: StoreSet, get: StoreGet): Promise<void> 
   const s = get();
   const prompt = composePrompt(s.prompt, s.insertedPrompts);
   if (!prompt) return;
+  // Missing element selections block generation globally (higgsfield 110 EM-09).
+  if ((s.missingElementIds ?? []).length > 0) {
+    get().showToast(t("toast.missingElements"), true);
+    return;
+  }
   if (s.videoModelSelected) return get().runVideoGenerate();
   const useMultimode = s.uiMode === "classic" && s.multimode;
   const pending = getCustomSizeConfirmation(s, { kind: useMultimode ? "multimode" : "classic" });

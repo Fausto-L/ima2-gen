@@ -30,7 +30,7 @@ import type { McpInputRole, McpPresetValue } from "../lib/mcpProviders";
 import type { McpReferenceSelection } from "../lib/mcpSelection";
 import type { Locale } from "../i18n";
 import type { SpriteRecipeDraft, SpriteRecipeRecord, SpriteRecipeSummary } from "../types/spriteRecipe";
-import type { ReferenceTraySlice } from "../lib/referenceTray";
+import type { ReferenceTraySlice, TrayItem } from "../lib/referenceTray";
 export type AssetGenWorkflow = "generate" | "sprite";
 
 export type GalleryScope = "current-session" | "all";
@@ -225,6 +225,13 @@ export type PresetState = {
 };
 
 export type AppState = PresetState & ReferenceTraySlice & {
+  // Element-mention catalog (higgsfield 110): full AssetItem records upserted
+  // on selection so tray chips survive a fresh store; missing ids block
+  // generation until removed or re-synced.
+  elementCatalog: AssetItem[] | null;
+  missingElementIds: string[];
+  addElementFromMention: (asset: AssetItem) => TrayItem | null;
+  syncElementCatalog: (records: AssetItem[]) => void;
   assetGenWorkflow: AssetGenWorkflow;
   setAssetGenWorkflow: (value: AssetGenWorkflow) => void;
   spriteRecipes: SpriteRecipeSummary[];

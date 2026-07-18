@@ -16,22 +16,20 @@ import {
 import { compressReferenceSource } from "./storeHelpers";
 import type { AppState, StoreSet, StoreGet } from "./storeTypes";
 import type { ClientNodeId } from "../lib/graph";
-import { mcpReferenceTag } from "../lib/mcpSelection";
 import {
   allocateAttachmentTag,
   hasTrayCapacity,
-  materializeLegacyFields,
   retireTrayTags,
   reviveTrayTag,
   selectAttachmentItems,
-  uniquifyElementTag,
   type AttachmentInput,
   type AttachmentMimeType,
   type AttachmentOrigin,
   type AttachmentTrayItem,
-  type ElementTrayItem,
   type TrayItem,
 } from "../lib/referenceTray";
+import { mutateTrayImpl, type TrayMutation, type TrayMutationOutcome, type TrayMutationPatch } from "../lib/elementCatalog";
+export { addTrayElementImpl, syncElementCatalogImpl } from "../lib/elementCatalog";
 
 function applyMetadataToState(
   state: AppState,
@@ -58,34 +56,10 @@ function applyMetadataToState(
   return patch;
 }
 
-type TrayMutationPatch = Partial<AppState> & {
-  trayItems?: TrayItem[];
-  nextAttachmentOrdinal?: number;
-  retiredTags?: Record<string, number>;
-};
-
-type TrayMutationOutcome<Result> = {
-  result: Result;
-  patch?: TrayMutationPatch;
-};
-type TrayMutation<Result> = (state: AppState, activeLimit: number) => TrayMutationOutcome<Result>;
-
 function mutateTray<Result>(set: StoreSet, mutation: TrayMutation<Result>): Result {
-  let result!: Result;
-  set((state) => {
-    const outcome = mutation(state, state.activeReferenceLimit());
-    result = outcome.result;
-    if (!outcome.patch) return {};
-    const trayItems = outcome.patch.trayItems ?? state.trayItems;
-    return {
-      ...outcome.patch,
-      trayItems,
-      ...materializeLegacyFields(trayItems),
-    };
-  });
-  return result;
+  // materializeLegacyFields(trayItems) remains centralized in mutateTrayImpl.
+  return mutateTrayImpl(set, mutation);
 }
-
 function inferAttachmentMimeType(dataUrl: string): AttachmentMimeType | null {
   const mimeType = /^data:(image\/(?:png|jpeg|webp));/i.exec(dataUrl)?.[1]?.toLowerCase();
   if (mimeType === "image/png" || mimeType === "image/jpeg" || mimeType === "image/webp") {
@@ -93,7 +67,6 @@ function inferAttachmentMimeType(dataUrl: string): AttachmentMimeType | null {
   }
   return null;
 }
-
 function createAttachmentItem(input: AttachmentInput, tag: string): AttachmentTrayItem {
   return {
     kind: "attachment",
@@ -101,9 +74,8 @@ function createAttachmentItem(input: AttachmentInput, tag: string): AttachmentTr
     tag,
     insertedAt: Date.now(),
     source: input,
-  };
+        };
 }
-
 function addPreparedAttachments(inputs: AttachmentInput[], set: StoreSet): TrayItem[] {
   return mutateTray(set, (state, activeLimit) => {
     const trayItems = [...state.trayItems];
@@ -136,7 +108,6 @@ function addPreparedAttachments(inputs: AttachmentInput[], set: StoreSet): TrayI
         };
   });
 }
-
 export function addTrayAttachmentsImpl(inputs: AttachmentInput[], set: StoreSet, _get: StoreGet): TrayItem[] {
   return addPreparedAttachments(inputs, set);
 }
@@ -155,7 +126,6 @@ export function addTrayAttachmentDataUrlImpl(
 export function addReferenceDataUrlImpl(dataUrl: string, set: StoreSet, get: StoreGet): void {
   addTrayAttachmentDataUrlImpl(dataUrl, "gallery", set, get);
 }
-
 export async function addReferencesImpl(
   files: File[],
   set: StoreSet,
@@ -240,47 +210,6 @@ export function applyMetadataRestoreImpl(set: StoreSet, get: StoreGet): void {
     set({ ...patch, metadataRestore: null });
   }
   get().showToast(t("metadata.applied"));
-}
-
-function elementReferenceFilenames(metadata: Record<string, unknown> | null): string[] {
-  const refs = metadata?.refs;
-  return Array.isArray(refs)
-    ? refs.filter((ref): ref is string => typeof ref === "string" && ref.length > 0)
-    : [];
-}
-
-export function addTrayElementImpl(
-  elementId: string,
-  set: StoreSet,
-  _get: StoreGet,
-): TrayItem | null {
-  return mutateTray(set, (state, activeLimit) => {
-    if (!hasTrayCapacity(state.trayItems, activeLimit)) return { result: null };
-    if (state.trayItems.some((item) => item.kind === "element" && item.source.elementId === elementId)) {
-      return { result: null };
-    }
-    const asset = state.assets.find((candidate) => candidate.id === elementId && candidate.kind === "element");
-    const requestedTag = asset ? mcpReferenceTag(asset.name) : null;
-    if (!asset || !requestedTag) return { result: null };
-
-    const tag = uniquifyElementTag(requestedTag, state.trayItems.map((item) => item.tag));
-    const item: ElementTrayItem = {
-      kind: "element",
-      tokenId: crypto.randomUUID(),
-      tag,
-      insertedAt: Date.now(),
-      source: {
-        elementId,
-        nameAtInsertion: asset.name,
-        referenceFilenames: elementReferenceFilenames(asset.metadata),
-      },
-    };
-    const retiredTags = reviveTrayTag(state.retiredTags, tag);
-    return {
-      result: item,
-      patch: { trayItems: [...state.trayItems, item], retiredTags },
-    };
-  });
 }
 
 function withoutContinuityPrompts(state: AppState): AppState["insertedPrompts"] {

@@ -9,33 +9,47 @@ import { Chip, ChipRow } from "./controls";
 import { ElementMentionMenu } from "./ElementMentionMenu";
 import type { ElementMentionKind } from "./ElementMentionChip";
 import { ReferenceTray } from "./composer/ReferenceTray";
+import { ElementMentionChips } from "./composer/ElementMentionChips";
 import { DeadTagMirror } from "./composer/DeadTagMirror";
 import { PromptComposerToolbar } from "./composer/PromptComposerToolbar";
 import { usePromptPaste } from "./composer/usePromptPaste";
 import { elementPreviewPath, loadAllElementAssets } from "../lib/elementMembership";
 import type { AssetItem } from "../store/storeTypes";
-
+import { addTrayElementImpl, syncElementCatalogImpl } from "../store/storeReferenceImpl";
+import { findElementTrayItem } from "../lib/elementCatalog";
+import type { TrayItem } from "../lib/referenceTray";
 type PromptComposerProps = {
   variant?: "sidebar" | "bottom";
 };
-
-// Element selection is supplied by the element-store slice, which is composed
-// into AppState independently of this UI surface.
 type ElementSelectionState = {
   addElementId?: (id: string) => void;
+  removeElementId?: (id: string) => void;
+  elementCatalog?: AssetItem[] | null;
+  missingElementIds?: string[];
+  addElementFromMention?: (asset: AssetItem) => TrayItem | null;
+  syncElementCatalog?: (records: AssetItem[]) => void;
 };
-
 type InternalRefDragItem = VideoReferenceDragPayload;
-
-// Mention-menu ids for tray attachments; selecting one only reinserts the
-// @tag text (tray membership is never mutated from the mention menu).
 const TRAY_MENTION_PREFIX = "tray:";
 
+function mentionKey(mention: MentionQuery): string {
+  return `${mention.start}:${mention.end}:${mention.query}`;
+}
+function addElementFromMention(asset: AssetItem): TrayItem | null {
+  const state = useAppStore.getState() as ReturnType<typeof useAppStore.getState> & ElementSelectionState;
+  return state.addElementFromMention
+    ? state.addElementFromMention(asset)
+    : addTrayElementImpl(asset.id, useAppStore.setState, useAppStore.getState, asset);
+}
+function syncElementCatalog(records: AssetItem[]): void {
+  const state = useAppStore.getState() as ReturnType<typeof useAppStore.getState> & ElementSelectionState;
+  if (state.syncElementCatalog) state.syncElementCatalog(records);
+  else syncElementCatalogImpl(records, useAppStore.setState, useAppStore.getState);
+}
 function parseCssPixelValue(value: string): number | null {
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
-
 export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
   const prompt = useAppStore((s) => s.prompt);
   const setPrompt = useAppStore((s) => s.setPrompt);
@@ -46,14 +60,24 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
   const selectedPresetIds = useAppStore((s) => s.selectedPresetIds);
   const removePreset = useAppStore((s) => s.removePreset);
   const elementSelection = useAppStore((s) => s as typeof s & ElementSelectionState);
-  const addElementId = elementSelection.addElementId;
+  const legacyAddElementId = elementSelection.addElementId;
+  const elementCatalog = elementSelection.elementCatalog ?? null;
+  const missingElementIds = elementSelection.missingElementIds ?? [];
   const [elements, setElements] = useState<AssetItem[]>([]);
-  // Assets and Create are exclusive workspaces. Always hydrate the complete
-  // Element list on Create mount instead of inheriting the last Assets filter.
+  const addElementId = (id: string): TrayItem | null => {
+    const asset = elements.find((candidate) => candidate.id === id);
+    if (asset) return addElementFromMention(asset);
+    legacyAddElementId?.(id);
+    return null;
+  };
   useEffect(() => {
     let cancelled = false;
     void loadAllElementAssets()
-      .then((items) => { if (!cancelled) setElements(items); })
+      .then((items) => {
+        if (cancelled) return;
+        setElements(items);
+        syncElementCatalog(items);
+      })
       .catch((error) => console.error("[ElementMention] load failed", error));
     return () => { cancelled = true; };
   }, []);
@@ -62,7 +86,6 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
   const trayItems = useAppStore((s) => s.trayItems);
   const retiredTags = useAppStore((s) => s.retiredTags);
   const removeTrayItem = useAppStore((s) => s.removeTrayItem);
-  // Provider/mode-aware cap (grok family image 3, grok video 7, MCP lane 0).
   const maxRefs = useAppStore((s) => s.activeReferenceLimit());
   const providerUrlReference = useAppStore((s) => s.providerUrlReference);
   const setProviderUrlReference = useAppStore((s) => s.setProviderUrlReference);
@@ -75,6 +98,9 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
   const attachmentCaretRef = useRef<number | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [mentionQuery, setMentionQuery] = useState<MentionQuery | null>(null);
+  const composingRef = useRef(false);
+  const compositionCommitRef = useRef<string | null>(null);
+  const dismissedMentionKeyRef = useRef<string | null>(null);
   const promptMode = useAppStore((s) => s.promptMode);
   const multimode = useAppStore((s) => s.multimode);
   const multimodeMaxImages = useAppStore((s) => s.multimodeMaxImages);
@@ -124,6 +150,11 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
     requestAnimationFrame(() => textareaRef.current?.setSelectionRange(caret, caret));
   };
 
+  const updateMentionAtCaret = (value: string, caret: number) => {
+    if (composingRef.current) return;
+    const next = findMentionAtCaret(value, caret);
+    setMentionQuery(next && mentionKey(next) !== dismissedMentionKeyRef.current ? next : null);
+  };
   const addFilesAtCaret = async (files: File[], caret: number, inspectMetadata: boolean): Promise<number> => {
     if (files.length === 0) return 0;
     const knownTokenIds = new Set(useAppStore.getState().trayItems.map((item) => item.tokenId));
@@ -152,9 +183,6 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
   };
 
   const attachInternalReference = async (item: InternalRefDragItem, caret: number): Promise<void> => {
-    // Images go through useImageAsReference (fetch → compress → base64), while
-    // videos contribute their last frame. The resulting tray tag is inserted at
-    // the caret snapshot owned by this drag operation.
     const knownTokenIds = new Set(useAppStore.getState().trayItems.map((trayItem) => trayItem.tokenId));
     try {
       const src = item.url || item.image;
@@ -173,7 +201,6 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setDragOver(false);
-    // Internal gallery drag — add as reference only (no prompt injection)
     const refData = e.dataTransfer.getData("application/ima2-ref");
     if (refData) {
       try {
@@ -341,6 +368,13 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
         </ChipRow>
       )}
 
+      <ElementMentionChips
+        items={trayItems}
+        assets={elementCatalog}
+        missingElementIds={missingElementIds}
+        onRemove={(elementId) => elementSelection.removeElementId?.(elementId)}
+      />
+
       <div className="composer__prompt-stack">
         <DeadTagMirror prompt={prompt} retiredTags={retiredTags} textareaRef={textareaRef} />
         <textarea
@@ -348,14 +382,33 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
           className="prompt-area composer__textarea"
           value={prompt}
           placeholder={placeholder}
-          onChange={(e) => {
-            setPrompt(e.target.value);
-            setMentionQuery(findMentionAtCaret(e.target.value, e.target.selectionStart));
+          onCompositionStart={() => {
+            composingRef.current = true;
+            setMentionQuery(null);
           }}
-          onClick={(e) => setMentionQuery(findMentionAtCaret(e.currentTarget.value, e.currentTarget.selectionStart))}
+          onCompositionEnd={(e) => {
+            composingRef.current = false;
+            compositionCommitRef.current = e.currentTarget.value;
+            queueMicrotask(() => { compositionCommitRef.current = null; });
+            updateMentionAtCaret(e.currentTarget.value, e.currentTarget.selectionStart);
+          }}
+          onChange={(e) => {
+            dismissedMentionKeyRef.current = null;
+            setPrompt(e.target.value);
+            if (compositionCommitRef.current === e.target.value) return;
+            updateMentionAtCaret(e.target.value, e.target.selectionStart);
+          }}
+          onClick={(e) => updateMentionAtCaret(e.currentTarget.value, e.currentTarget.selectionStart)}
           onKeyDown={(e) => {
+            if (e.key === "Escape" && mentionQuery) {
+              e.preventDefault();
+              dismissedMentionKeyRef.current = mentionKey(mentionQuery);
+              setMentionQuery(null);
+              return;
+            }
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();
+              if (missingElementIds.length > 0) return;
               void generate();
             }
           }}
@@ -367,9 +420,6 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
         caret={mentionQuery?.end ?? 0}
         query={mentionQuery?.query ?? ""}
         elements={[
-          // Tray attachments come first so a deleted @Image_N tag can be
-          // re-mentioned; selecting one reinserts the tag without mutating
-          // the tray (the tray stays the single source of truth).
           ...trayItems
             .filter((item): item is Extract<typeof item, { kind: "attachment" }> => item.kind === "attachment")
             .map((item) => ({
@@ -390,6 +440,7 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
           }),
         ]}
         onSelect={(element) => {
+          const existing = findElementTrayItem(useAppStore.getState().trayItems, element.id);
           if (element.id.startsWith(TRAY_MENTION_PREFIX)) {
             const tokenId = element.id.slice(TRAY_MENTION_PREFIX.length);
             const trayItem = useAppStore.getState().trayItems.find((item) => item.tokenId === tokenId);
@@ -400,14 +451,16 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps) {
             return;
           }
           addElementId?.(element.id);
-          if (mentionQuery) {
-            const trayElement = useAppStore.getState().trayItems.find(
-              (item) => item.kind === "element" && item.source.elementId === element.id,
-            );
-            if (trayElement) {
-              insertTagAtMention(trayElement.tag, mentionQuery);
-            }
+          if (existing) {
+            requestAnimationFrame(() => document.querySelector<HTMLElement>(
+              `[data-element-id="${CSS.escape(element.id)}"] .element-mention-chip__body`,
+            )?.focus());
+            setMentionQuery(null);
+            return;
           }
+          const trayElement = findElementTrayItem(useAppStore.getState().trayItems, element.id);
+          if (!trayElement || !mentionQuery) return;
+          insertTagAtMention(trayElement.tag, mentionQuery);
           setMentionQuery(null);
         }}
         onClose={() => setMentionQuery(null)}

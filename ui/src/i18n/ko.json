@@ -46,6 +46,7 @@
     "sessionRenameFailed": "세션 이름을 바꾸지 못했습니다.",
     "sessionDeleteFailed": "세션을 삭제하지 못했습니다.",
     "promptRequired": "프롬프트를 입력하세요.",
+    "missingElements": "선택한 엘리먼트를 찾을 수 없습니다. 제거하거나 다시 추가한 뒤 생성하세요.",
     "nodeCreated": "노드 {id} 생성 완료 ({elapsed}초)",
     "nodeRootCreated": "이 이미지를 첫 노드로 만들었습니다.",
     "animateStarted": "이미지를 비디오로 변환 중…",
