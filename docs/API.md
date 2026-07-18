@@ -1004,6 +1004,17 @@ I2V), or `unavailable` (`409 MEDIA_ACTION_UNAVAILABLE`, e.g. reframe while the
 provider is catalog-only). Async: `202 { requestId, mode, plan }`; results commit
 through the same single persistence owner with `parent`/`inputs` lineage.
 
+### `POST /api/mcp/tasks/:taskId/recover`
+
+Re-download a remote-succeeded MCP task into the generated library. Body:
+`{ provider?: "runway", kind?: "video"|"image" }`. Use after a generation's
+download/commit step failed transiently — provider assets stay fetchable for
+~24-48h. Re-polls `get_task`, requires `SUCCEEDED` with an output URL
+(`error` SSE event with `MCP_TASK_NOT_SUCCEEDED` otherwise), then runs the same
+download (with retry + IPv4 fallback) → single-persistence commit path as a
+normal generation. Async: `202 { requestId, taskId }`; `done` carries
+`recovered: true`.
+
 ## Contract Discovery
 
 Machine-readable tool contracts for AI agents (`ima2 tools` CLI backs onto these).
