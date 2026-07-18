@@ -51,6 +51,7 @@ export async function listHistoryRows(baseDir = config.storage.generatedDir) {
       video: meta?.video || null,
       videoSeries: meta?.videoSeries || null,
       videoContinuity: meta?.videoContinuity || null,
+      videoLineage: meta?.videoLineage || null,
       createdAt: meta?.createdAt || st?.mtimeMs || 0,
       prompt: meta?.prompt || null,
       userPrompt: meta?.userPrompt || meta?.prompt || null,

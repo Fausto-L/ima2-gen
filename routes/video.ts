@@ -1,5 +1,4 @@
 import { mkdir, readFile, unlink, writeFile } from "fs/promises";
-import { atomicWriteJson } from "../lib/atomicWrite.js";
 import { join } from "path";
 import { randomBytes } from "crypto";
 import { execFile } from "child_process";
@@ -42,6 +41,7 @@ import { requireRuntimeContext, type RouteRuntimeContext, type RuntimeContext } 
 import { generateVideoThumbnail } from "../lib/videoThumb.js";
 import { publish } from "../lib/eventBus.js";
 import { publishJobEvent } from "../lib/ssePublish.js";
+import { persistVideoArtifact } from "../lib/videoArtifactPersistence.js";
 import { normalizePresetIds } from "../lib/presetCompiler.js";
 import { getElementById } from "../lib/assetsStore.js";
 import { compileElements, ELEMENT_CAPACITY_DEFAULTS, type ElementDefinition, type ExistingReferenceInput } from "../lib/elementCompiler.js";
@@ -75,14 +75,7 @@ function isNormalizeError(x: unknown): x is NormalizeError {
 }
 
 export async function saveGeneratedVideoArtifact(ctx: RuntimeContext, filename: string, buffer: Buffer, metadata: unknown): Promise<void> {
-  const filePath = join(ctx.config.storage.generatedDir, filename);
-  await writeFile(filePath, buffer);
-  try {
-    await atomicWriteJson(`${filePath}.json`, metadata);
-  } catch (err) {
-    await unlink(filePath).catch(() => {});
-    throw err;
-  }
+  await persistVideoArtifact(ctx.config.storage.generatedDir, filename, buffer, metadata);
 }
 
 async function resolveSourceImage(

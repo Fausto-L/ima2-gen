@@ -1,15 +1,97 @@
 import type { Express, Request, Response } from "express";
 import { basename, join } from "node:path";
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import type { RouteRuntimeContext, RuntimeContext } from "../lib/runtimeContext.js";
 import { requireRuntimeContext } from "../lib/runtimeContext.js";
 import { getGrokProxyUrl } from "../lib/grokRuntime.js";
 import { logEvent, logError } from "../lib/logger.js";
-import { downloadVideo, pollVideoUntilDone } from "../lib/grokVideoAdapter.js";
+import { downloadVideo, generateVideoViaGrok, pollVideoUntilDone, type GrokVideoEvent, type GrokVideoGenerateResult, type GrokVideoOptions } from "../lib/grokVideoAdapter.js";
 import { invalidateHistoryIndex } from "../lib/historyIndex.js";
 import { ACTIVE_VIDEO_PROMPT_GUIDANCE, appendVideoContinuityEntry, lineageFromVideoMetadata, readVideoSidecar } from "../lib/videoContinuity.js";
-import { assertLocalMp4, extractVideoFrame, safeGeneratedFilePath } from "../lib/videoFrameExtract.js";
+import { assertLocalMp4, extractGeneratedVideoFrameB64, extractVideoFrame, safeGeneratedFilePath } from "../lib/videoFrameExtract.js";
+import { finishJob, INFLIGHT_RETRY_AFTER_SECONDS, isJobCanceled, isStartJobFailure, registerJobAbortController, setJobPhase, startJob } from "../lib/inflight.js";
+import { makeGenerationCanceledError } from "../lib/generationCancel.js";
+import { publish } from "../lib/eventBus.js";
+import { publishJobEvent } from "../lib/ssePublish.js";
+import { normalizeBodyRequestId } from "../lib/generationInputValidation.js";
+import { normalizeGrokVideoModel, normalizeVideoAspectRatio, normalizeVideoDuration, normalizeVideoResolution, validateVideoResolutionForRequest } from "../lib/imageModels.js";
+import { persistVideoArtifact } from "../lib/videoArtifactPersistence.js";
+import { deriveChildVideoLineage, normalizeVideoLineage } from "../lib/videoLineage.js";
+import { getMotionFragment, MOTION_PRESETS } from "../lib/videoMotionPresets.js";
+import { errInfo } from "../lib/errInfo.js";
+
+type ParentMetadata = {
+  provider?: unknown; model?: unknown;
+  prompt?: unknown; userPrompt?: unknown; revisedPrompt?: unknown;
+  presetIds?: unknown; motionPresetIds?: unknown;
+  video?: { duration?: unknown; resolution?: unknown; aspectRatio?: unknown };
+  videoLineage?: unknown; videoContinuity?: unknown; createdAt?: unknown;
+};
+export type VideoExtendedDependencies = {
+  extractFrame?: (generatedDir: string, filename: string, position: string, options: { signal: AbortSignal }) => Promise<string>;
+  generateVideo?: (prompt: string, ctx: RouteRuntimeContext, options: GrokVideoOptions) => Promise<GrokVideoGenerateResult>;
+  persistArtifact?: typeof persistVideoArtifact;
+  createFilename?: (ctx: RuntimeContext) => string;
+};
+
+function codedError(message: string, status: number, code: string, extra: Record<string, unknown> = {}) {
+  return Object.assign(new Error(message), { status, code, ...extra });
+}
+
+function validationError(value: unknown): { error: string; code: string; status: number } | null {
+  if (!value || typeof value !== "object" || !("error" in value)) return null;
+  return value as { error: string; code: string; status: number };
+}
+
+function localSourceId(value: unknown): string {
+  if (typeof value !== "string" || !value.trim() || value !== basename(value) || !/\.mp4$/i.test(value)) {
+    throw codedError("sourceVideoId must be a local .mp4 filename", 400, "VIDEO_SOURCE_LOCAL_ONLY");
+  }
+  return value;
+}
+
+function inheritedPrompt(value: unknown, parent: ParentMetadata | null): string {
+  const explicit = requirePrompt(value);
+  if (explicit) return explicit;
+  for (const candidate of [parent?.userPrompt, parent?.prompt, parent?.revisedPrompt]) {
+    const inherited = requirePrompt(candidate);
+    if (inherited) return inherited;
+  }
+  throw codedError("prompt required when the source has no prompt metadata", 400, "PROMPT_REQUIRED");
+}
+
+function motionSelection(value: unknown, parent: ParentMetadata | null): { ids: string[]; fragment: string } {
+  const inherited = Array.isArray(parent?.motionPresetIds)
+    ? parent.motionPresetIds
+    : Array.isArray(parent?.presetIds) ? parent.presetIds.filter((id: unknown) => typeof id === "string" && MOTION_PRESETS.has(id)) : [];
+  const raw = value === undefined ? inherited : value;
+  if (!Array.isArray(raw) || raw.some((id) => typeof id !== "string" || !MOTION_PRESETS.has(id))) {
+    throw codedError("motionPresetIds contains an unknown motion preset", 400, "VIDEO_EXTEND_UNSUPPORTED");
+  }
+  const ids = [...new Set(raw as string[])];
+  return { ids, fragment: ids.map((id) => getMotionFragment(id, "grok")).filter(Boolean).join(", ") };
+}
+
+function extractError(error: unknown, signal: AbortSignal): Error {
+  if (signal.aborted) return makeGenerationCanceledError();
+  const info = errInfo(error);
+  if (info.code === "ENOENT") return codedError("ffmpeg is unavailable", 503, "VIDEO_FRAME_EXTRACT_UNAVAILABLE");
+  const raw = info.raw as { killed?: unknown; signal?: unknown };
+  if (info.code === "ETIMEDOUT" || raw?.killed === true || raw?.signal === "SIGKILL") {
+    return codedError("ffmpeg frame extraction timed out", 504, "VIDEO_FRAME_EXTRACT_TIMEOUT", { retryable: true });
+  }
+  return codedError(info.message || "failed to extract the last video frame", 500, "VIDEO_FRAME_EXTRACT_FAILED");
+}
+
+function emitPhase(requestId: string, phase: string): void {
+  setJobPhase(requestId, phase);
+  publish(requestId, "phase", { requestId, phase });
+}
+
+function retryableData(error: unknown): { retryable: true } | Record<string, never> {
+  return (error as { retryable?: unknown })?.retryable === true ? { retryable: true } : {};
+}
 
 function videoProxyUrl(ctx: RuntimeContext, path: string) {
   return { url: getGrokProxyUrl(ctx, path), headers: { "Content-Type": "application/json", Authorization: "Bearer dummy" } };
@@ -75,7 +157,6 @@ async function saveVideoResult(
   await mkdir(ctx.config.storage.generatedDir, { recursive: true });
   const rand = randomBytes(ctx.config.ids.generatedHexBytes).toString("hex");
   const filename = `${Date.now()}_${rand}.mp4`;
-  const filePath = join(ctx.config.storage.generatedDir, filename);
   const sourceFilename = /^https?:\/\//i.test(options.source) || options.source.startsWith("data:") || /^file[-_]/.test(options.source)
     ? null
     : basename(options.source);
@@ -87,11 +168,12 @@ async function saveVideoResult(
     revisedPrompt: options.prompt,
     createdAt: Date.now(),
   });
-  await writeFile(filePath, buffer);
-  try {
-    await writeFile(
-      `${filePath}.json`,
-      JSON.stringify({
+  const createdAt = Date.now();
+  await persistVideoArtifact(
+    ctx.config.storage.generatedDir,
+    filename,
+    buffer,
+    {
         kind: "video",
         mediaType: "video",
         requestId: options.requestId,
@@ -99,7 +181,7 @@ async function saveVideoResult(
         userPrompt: options.prompt,
         provider: "grok",
         model: options.model,
-        createdAt: Date.now(),
+        createdAt,
         usage: options.usage ?? null,
         revisedPrompt: options.prompt,
         videoContinuity,
@@ -110,12 +192,8 @@ async function saveVideoResult(
           sourceUrl: summarizeSource(options.videoUrl),
           contentType,
         },
-      }),
-    );
-  } catch (err) {
-    await unlink(filePath).catch(() => {});
-    throw err;
-  }
+    },
+  );
   invalidateHistoryIndex();
   return { filename, url: `/generated/${encodeURIComponent(filename)}`, sourceUrl: options.videoUrl };
 }
@@ -136,7 +214,7 @@ function requestSignal(req: Request, res: Response, timeoutMs: number): AbortSig
 }
 
 function requirePrompt(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value : null;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function extractOutputText(data: Record<string, unknown>): string {
@@ -153,8 +231,12 @@ function extractOutputText(data: Record<string, unknown>): string {
   return texts.join("\n").trim();
 }
 
-export function registerVideoExtendedRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
+export function registerVideoExtendedRoutes(app: Express, ctxRaw: RouteRuntimeContext, dependencies: VideoExtendedDependencies = {}) {
   const ctx = requireRuntimeContext(ctxRaw);
+  const extractFrame = dependencies.extractFrame ?? ((dir, filename, position) => extractGeneratedVideoFrameB64(dir, filename, position));
+  const generateVideo = dependencies.generateVideo ?? generateVideoViaGrok;
+  const persistArtifact = dependencies.persistArtifact ?? persistVideoArtifact;
+  const createFilename = dependencies.createFilename ?? ((runtime) => `${Date.now()}_${randomBytes(runtime.config.ids.generatedHexBytes).toString("hex")}.mp4`);
 
   // --- Video Edit (V2V) ---
   app.post("/api/video/edit", async (req: Request, res: Response) => {
@@ -187,8 +269,131 @@ export function registerVideoExtendedRoutes(app: Express, ctxRaw: RouteRuntimeCo
     }
   });
 
-  // --- Video Extension ---
+  // --- Last-frame image-to-video extension ---
   app.post("/api/video/extend", async (req: Request, res: Response) => {
+    const requestId = normalizeBodyRequestId(req.body?.requestId, req.id);
+    const fail = (error: unknown) => {
+      const info = errInfo(error);
+      const status = info.status ?? 500;
+      const code = info.code ?? "VIDEO_EXTEND_FAILED";
+      const payload = { requestId, error: info.message, code, status, ...retryableData(error) };
+      publish(requestId, "error", payload);
+      if (!res.headersSent) res.status(status).json(payload);
+    };
+
+    let sourceVideoId: string;
+    let parent: ParentMetadata | null;
+    let prompt: string;
+    let provider: "grok" | "grok-api";
+    let model: string;
+    let duration: number;
+    let resolution: "480p" | "720p" | "1080p";
+    let aspectRatio: "1:1" | "16:9" | "9:16" | "4:3" | "3:4" | "3:2" | "2:3" | "auto";
+    let motion: { ids: string[]; fragment: string };
+    try {
+      sourceVideoId = localSourceId(req.body?.sourceVideoId);
+      await safeGeneratedFilePath(ctx.config.storage.generatedDir, sourceVideoId, { requireMp4: true }).catch((error: unknown) => {
+        const info = errInfo(error);
+        throw codedError(info.message || "source video not found", info.status === 404 ? 404 : 400, info.status === 404 ? "VIDEO_NOT_FOUND" : "VIDEO_SOURCE_LOCAL_ONLY");
+      });
+      parent = await readVideoSidecar(ctx.config.storage.generatedDir, sourceVideoId) as ParentMetadata | null;
+      const parentLineage = normalizeVideoLineage(parent?.videoLineage);
+      if (parentLineage && parentLineage.id !== sourceVideoId) throw codedError("source lineage id does not match filename", 500, "VIDEO_LINEAGE_INVALID");
+      prompt = inheritedPrompt(req.body?.prompt, parent);
+      const rawProvider = req.body?.provider ?? parent?.provider ?? "grok";
+      if (rawProvider !== "grok" && rawProvider !== "grok-api") throw codedError("video extension requires provider 'grok' or 'grok-api'", 400, "VIDEO_EXTEND_UNSUPPORTED");
+      provider = rawProvider;
+      const modelResult = normalizeGrokVideoModel(req.body?.model ?? parent?.model ?? ctx.config.grokProvider.defaultVideoModel);
+      const durationResult = normalizeVideoDuration(req.body?.duration ?? parent?.video?.duration);
+      const resolutionResult = normalizeVideoResolution(req.body?.resolution ?? parent?.video?.resolution);
+      const aspectResult = normalizeVideoAspectRatio(req.body?.aspectRatio ?? parent?.video?.aspectRatio);
+      for (const result of [modelResult, durationResult, resolutionResult, aspectResult]) {
+        const error = validationError(result);
+        if (error) throw codedError(error.error, error.status, error.code);
+      }
+      model = (modelResult as { model: string }).model;
+      duration = (durationResult as { duration: number }).duration;
+      resolution = (resolutionResult as { resolution: typeof resolution }).resolution;
+      aspectRatio = (aspectResult as { aspectRatio: typeof aspectRatio }).aspectRatio;
+      const resolutionError = validationError(validateVideoResolutionForRequest(model, resolution, "image-to-video"));
+      if (resolutionError) throw codedError(resolutionError.error, resolutionError.status, resolutionError.code);
+      motion = motionSelection(req.body?.motionPresetIds, parent);
+    } catch (error) {
+      fail(error);
+      return;
+    }
+
+    const started = startJob({ requestId, kind: "video", prompt, meta: { workflow: "last-frame-i2v", sourceVideoId, provider, model } });
+    if (started && isStartJobFailure(started)) {
+      if (started.code === "TOO_MANY_JOBS") res.setHeader("Retry-After", String(INFLIGHT_RETRY_AFTER_SECONDS));
+      fail(codedError(started.code === "TOO_MANY_JOBS" ? "Too many concurrent generation jobs" : "Request ID already in use", started.code === "TOO_MANY_JOBS" ? 429 : 409, started.code));
+      return;
+    }
+    const cancelController = new AbortController();
+    registerJobAbortController(requestId, cancelController);
+    emitPhase(requestId, "queued");
+    res.status(202).json({ ok: true, requestId, sourceVideoId, workflow: "last-frame-i2v" });
+
+    void (async () => {
+      const startedAt = Date.now();
+      let stage = "extracting-frame";
+      try {
+        emitPhase(requestId, stage);
+        let sourceImage: string;
+        try {
+          sourceImage = await extractFrame(ctx.config.storage.generatedDir, sourceVideoId, "last", { signal: cancelController.signal });
+        } catch (error) {
+          throw extractError(error, cancelController.signal);
+        }
+        if (cancelController.signal.aborted) throw makeGenerationCanceledError();
+        const parentContinuity = lineageFromVideoMetadata(sourceVideoId, parent);
+        const onEvent = (event: GrokVideoEvent) => {
+          setJobPhase(requestId, event.phase === "submitted" ? "streaming" : event.phase);
+          publish(requestId, event.phase, {
+            requestId,
+            ...(event.phase === "submitted" ? { xaiVideoRequestId: event.xaiVideoRequestId, requestedModel: event.requestedModel, effectiveModel: event.effectiveModel, modelFallback: event.modelFallback ?? null } : {}),
+            ...(event.phase === "progress" ? { progress: typeof event.progress === "number" ? event.progress / 100 : null, stalled: Boolean(event.stalled) } : {}),
+          });
+        };
+        const compiledPrompt = motion.fragment ? `${prompt}\n\nCamera motion: ${motion.fragment}.` : prompt;
+        const result = await generateVideo(compiledPrompt, ctx, {
+          model, mode: "image-to-video", duration, resolution, aspectRatio,
+          sourceImage, sourceMime: "image/png", signal: cancelController.signal,
+          requestId, continuityLineage: parentContinuity,
+          directApiKey: provider === "grok-api" ? ctx.xaiApiKey ?? undefined : undefined,
+          onEvent,
+        });
+        if (cancelController.signal.aborted) throw makeGenerationCanceledError();
+        stage = "persisting";
+        emitPhase(requestId, stage);
+        const filename = createFilename(ctx);
+        const createdAt = Date.now();
+        const videoLineage = deriveChildVideoLineage(filename, sourceVideoId, parent);
+        const videoContinuity = appendVideoContinuityEntry(parentContinuity, { filename, userPrompt: prompt, revisedPrompt: result.revisedPrompt, createdAt });
+        const elapsed = +((createdAt - startedAt) / 1000).toFixed(1);
+        const video = { operation: "extend", mode: "image-to-video", sourceVideoId, sourceFrame: "last", duration: result.duration, resolution: result.resolution, aspectRatio: result.aspectRatio, xaiVideoRequestId: result.xaiVideoRequestId };
+        const metadata = { kind: "video", mediaType: "video", providerUrl: result.url, requestId, prompt, userPrompt: prompt, revisedPrompt: result.revisedPrompt, motionPresetIds: motion.ids, provider, model: result.effectiveModel, createdAt, elapsed, usage: result.usage, webSearchCalls: result.webSearchCalls, video, videoLineage, videoContinuity };
+        try {
+          await persistArtifact(ctx.config.storage.generatedDir, filename, result.videoBuffer, metadata);
+        } catch (error) {
+          throw codedError(errInfo(error).message, 500, "VIDEO_PERSIST_FAILED");
+        }
+        invalidateHistoryIndex();
+        const done = { requestId, filename, url: `/generated/${encodeURIComponent(filename)}`, providerUrl: result.url, mediaType: "video", provider, model: result.effectiveModel, prompt, userPrompt: prompt, revisedPrompt: result.revisedPrompt, createdAt, elapsed, usage: result.usage, webSearchCalls: result.webSearchCalls, video, videoLineage, videoContinuity };
+        publishJobEvent(requestId, "done", done);
+        finishJob(requestId, { status: "completed", meta: { filename, xaiVideoRequestId: result.xaiVideoRequestId } });
+      } catch (error) {
+        if (!isJobCanceled(requestId)) {
+          const info = errInfo(error);
+          publish(requestId, "error", { requestId, error: info.message, code: info.code ?? "VIDEO_EXTEND_FAILED", status: info.status ?? 500, ...retryableData(error) });
+          finishJob(requestId, { status: "error", httpStatus: info.status ?? 500, errorCode: info.code ?? "VIDEO_EXTEND_FAILED", meta: { stage } });
+        }
+      }
+    })();
+  });
+
+  // --- Provider-native legacy extension ---
+  app.post("/api/video/extend/native", async (req: Request, res: Response) => {
     try {
       const { prompt: rawPrompt, videoUrl, duration = 6, model = "grok-imagine-video" } = req.body ?? {};
       const prompt = requirePrompt(rawPrompt);
@@ -198,21 +403,16 @@ export function registerVideoExtendedRoutes(app: Express, ctxRaw: RouteRuntimeCo
       const dur = Number(duration);
       if (!Number.isInteger(dur) || dur < 2 || dur > 10) return res.status(400).json({ error: "duration must be an integer between 2 and 10" });
       const signal = requestSignal(req, res, envDeadline("IMA2_VIDEO_EXTEND_TIMEOUT_MS", 10 * 60_000));
-
       const { url, headers } = videoProxyUrl(ctx, "/v1/videos/extensions");
       const video = await resolveVideoInput(ctx, videoUrl);
       const apiRes = await fetch(url, { method: "POST", headers, body: JSON.stringify({ model: validModel, prompt, duration: dur, video }), signal });
       if (!apiRes.ok) { const t = await apiRes.text(); return res.status(apiRes.status).json({ error: t }); }
       const { request_id } = (await apiRes.json()) as { request_id: string };
       if (!request_id) return res.status(502).json({ error: "No request_id in response" });
-      logEvent("video", "extend:start", { requestId: request_id, model: validModel, duration: dur });
-
       const result = await pollVideoUntilDone(ctx, request_id, { signal });
       if (result.respectModeration === false) return res.status(502).json({ error: "Grok video blocked by moderation" });
       if (!result.videoUrl) return res.status(502).json({ error: "No video URL in response" });
       const saved = await saveVideoResult(ctx, { requestId: request_id, prompt, model: validModel, operation: "extend", source: videoUrl, duration: result.duration ?? null, videoUrl: result.videoUrl, usage: result.usage, signal });
-
-      logEvent("video", "extend:done", { requestId: request_id, totalDuration: result.duration });
       res.json({ requestId: request_id, url: saved.url, filename: saved.filename, sourceUrl: saved.sourceUrl, duration: result.duration, model: validModel });
     } catch (err: any) {
       logError("video", "extend:error", err);

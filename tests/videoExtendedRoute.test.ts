@@ -199,13 +199,13 @@ test("/api/video/edit rejects whitespace prompt and unsafe generated-file inputs
   }
 });
 
-test("/api/video/extend validates duration/model and rejects moderation-blocked result", async () => {
+test("/api/video/extend/native validates duration/model and rejects moderation-blocked result", async () => {
   const proxy = makeProxy({ operation: "extend", blocked: true });
   const proxyUrl = await listen(proxy);
   const generatedDir = await mkdtemp(join(tmpdir(), "ima2-video-ext-extend-"));
   const { server, url } = await videoApp(generatedDir, Number(new URL(proxyUrl).port));
   try {
-    const badDuration = await fetch(`${url}/api/video/extend`, {
+    const badDuration = await fetch(`${url}/api/video/extend/native`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt: "continue", videoUrl: "https://vidgen.example/input.mp4", duration: "abc" }),
@@ -213,7 +213,7 @@ test("/api/video/extend validates duration/model and rejects moderation-blocked 
     assert.equal(badDuration.status, 400);
     assert.match((await badDuration.json()).error, /duration must be an integer/);
 
-    const badModel = await fetch(`${url}/api/video/extend`, {
+    const badModel = await fetch(`${url}/api/video/extend/native`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt: "continue", videoUrl: "https://vidgen.example/input.mp4", duration: 5, model: "grok-imagine-video-1.5-preview" }),
@@ -221,7 +221,7 @@ test("/api/video/extend validates duration/model and rejects moderation-blocked 
     assert.equal(badModel.status, 400);
     assert.match((await badModel.json()).error, /only supports grok-imagine-video/);
 
-    const blocked = await fetch(`${url}/api/video/extend`, {
+    const blocked = await fetch(`${url}/api/video/extend/native`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt: "continue", videoUrl: "https://vidgen.example/input.mp4", duration: 5 }),
@@ -235,13 +235,13 @@ test("/api/video/extend validates duration/model and rejects moderation-blocked 
   }
 });
 
-test("/api/video/extend reports moderation block even when upstream omits url", async () => {
+test("/api/video/extend/native reports moderation block even when upstream omits url", async () => {
   const proxy = makeProxy({ operation: "extend", blocked: true, blockedWithoutUrl: true });
   const proxyUrl = await listen(proxy);
   const generatedDir = await mkdtemp(join(tmpdir(), "ima2-video-ext-blocked-"));
   const { server, url } = await videoApp(generatedDir, Number(new URL(proxyUrl).port));
   try {
-    const blocked = await fetch(`${url}/api/video/extend`, {
+    const blocked = await fetch(`${url}/api/video/extend/native`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt: "continue", videoUrl: "https://vidgen.example/input.mp4", duration: 5 }),
