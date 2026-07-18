@@ -212,28 +212,31 @@ test("cancel during preflight (sidecar await) stops before 202 and provider work
   let providerCalls = 0;
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
+  let markEntered!: () => void;
+  const entered = new Promise<void>((resolve) => { markEntered = resolve; });
   const seen: BusEvent[] = [];
   const stopWatch = subscribe((event) => { if (event.jobId === requestId && (event.event === "done" || event.event === "error")) seen.push(event); });
   const generate = successfulGenerator();
   const { server, url } = await makeApp(dir, {
-    readSidecar: async (d: string, f: string) => { await gate; return readFile(join(d, `${f}.json`), "utf8").then(JSON.parse); },
+    readSidecar: async (d: string, f: string) => { markEntered(); await gate; return readFile(join(d, `${f}.json`), "utf8").then(JSON.parse); },
     extractFrame: async () => "png",
     generateVideo: async (prompt, ctx, options) => { providerCalls += 1; return generate(prompt, ctx, options); },
   });
   try {
     const pending = postExtend(url, { sourceVideoId: "root.mp4", requestId, prompt: "continue" });
+    // Wait until the handler is actually parked inside the gated preflight
+    // await, so the cancel lands mid-preflight (not before admission).
+    await entered;
     abortJob(requestId);
     release();
     const response = await pending;
     assert.equal(response.status, 499);
     await new Promise((resolve) => setTimeout(resolve, 100));
     assert.equal(providerCalls, 0, "provider must not run after preflight cancel");
-    // Ordering-dependent: if abort lands after admission it publishes the
-    // canceled error; if it races ahead of admission the tombstone silently
-    // denies startJob. Either way: no done, at most one canceled error.
+    // Deterministic ordering: abort lands after admission but before preflight
+    // completes, so abortJob publishes exactly one canceled error.
     assert.equal(seen.filter((e) => e.event === "done").length, 0, "no done after preflight cancel");
-    assert.ok(seen.every((e) => e.data?.code === "GENERATION_CANCELED"), `only canceled errors allowed, saw ${seen.map((e) => e.data?.code)}`);
-    assert.ok(seen.length <= 1, `at most one terminal event, saw ${seen.length}`);
+    assert.deepEqual(seen.map((e) => e.data?.code), ["GENERATION_CANCELED"], "exactly one canceled terminal event from abortJob");
   } finally {
     release();
     stopWatch();

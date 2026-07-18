@@ -79,15 +79,15 @@ export function startJob({ requestId, kind, prompt, meta = {}, respectCanceledTo
   if (getJob(requestId)) {
     return { ok: false, code: "REQUEST_ID_IN_USE" };
   }
-  if (countActiveJobs() >= MAX_CONCURRENT_JOBS) {
-    return { ok: false, code: "TOO_MANY_JOBS" };
-  }
   // Opt-in tombstone respect (extend audit B2 round 3): a DELETE that raced
   // ahead of admission must still win. Without this, startJob deleted the
   // tombstone and ran a job the user already canceled. Off by default — the
   // agent queue's retry path reuses requestIds after cancel legitimately.
   if (respectCanceledTombstone && terminalJobs.get(requestId)?.status === "canceled") {
     return { ok: false, code: "GENERATION_CANCELED" };
+  }
+  if (countActiveJobs() >= MAX_CONCURRENT_JOBS) {
+    return { ok: false, code: "TOO_MANY_JOBS" };
   }
   const startedAt = Date.now();
   const normalizedPrompt = typeof prompt === "string" ? prompt.slice(0, 500) : "";
