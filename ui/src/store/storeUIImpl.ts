@@ -109,7 +109,7 @@ export function applyMergedCanvasImageImpl(item: GenerateItem, set: StoreSet): v
 
 export function addReferenceDataUrlImpl(dataUrl: string, set: StoreSet, get: StoreGet): void {
   set((s) =>
-    s.referenceImages.length >= get().referenceLimit
+    s.referenceImages.length >= get().activeReferenceLimit()
       ? s
       : { referenceImages: [...s.referenceImages, dataUrl], providerUrlReference: null },
   );

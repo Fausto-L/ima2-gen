@@ -48,7 +48,8 @@ export function ResultActions({
   const isVideo = isVideoItem(actionImage);
   const videoSrc = isVideo ? (actionImage.url || actionImage.image) : "";
   const canExportToComfy = Boolean(actionImage.filename);
-  const canAnimate = Boolean(actionImage.filename) && !isVideo;
+      const canAnimate = Boolean(actionImage.filename) && !isVideo;
+      const canExtend = isVideo && Boolean(actionImage.filename);
   const isGrokProvider = actionImage.provider === "grok" || actionImage.provider === "grok-api";
   const providerUrlAlive = Boolean(
     isGrokProvider &&
@@ -306,6 +307,25 @@ export function ResultActions({
           title={t("result.animateTitle")}
         >
           {animating ? t("result.animating") : t("result.animate")}
+        </button>
+      )}
+      {canExtend && (
+        <button
+          type="button"
+          className="action-btn"
+          onClick={() => {
+            const url = actionImage.url || actionImage.image;
+            if (url) {
+              fetch("/api/video/extend", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ videoUrl: url, prompt: actionImage.prompt || "" }),
+              }).catch(() => {});
+            }
+          }}
+          title={t("result.extendTitle") ?? "이어가기"}
+        >
+          {t("result.extend") ?? "이어가기"}
         </button>
       )}
       <button
