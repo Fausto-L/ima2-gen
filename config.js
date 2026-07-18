@@ -123,6 +123,15 @@ export const config = {
     github: {
         token: pickStr(env.IMA2_GITHUB_TOKEN, fileCfg.github?.token, ""),
     },
+    mcp: {
+        // Remote MCP provider connections (030 WP3). Ids must exist in the compiled
+        // provider registry (lib/mcp/providerRegistry.ts); this is an enable list,
+        // not an arbitrary endpoint connector.
+        enabledProviders: (pickStr(env.IMA2_MCP_PROVIDERS, Array.isArray(fileCfg.mcp?.enabledProviders) ? fileCfg.mcp.enabledProviders.join(",") : undefined, "runway,higgsfield"))
+            .split(",").map((s) => s.trim()).filter(Boolean),
+        tokenDir: pickStr(env.IMA2_MCP_TOKEN_DIR, fileCfg.mcp?.tokenDir, join(configDir, "mcp")),
+        snapshotDir: pickStr(env.IMA2_MCP_SNAPSHOT_DIR, fileCfg.mcp?.snapshotDir, join(configDir, "mcp", "snapshots")),
+    },
     storage: {
         configDir,
         packageRoot,
