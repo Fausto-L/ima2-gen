@@ -42,6 +42,26 @@ const DYNAMIC_T_IDENTIFIERS = new Map<string, readonly string[]>([
     "chain.animate", "chain.edit", "chain.useAsRef", "chain.rebake",
     "chain.saveToAssets", "chain.saveAsElement",
   ]],
+  // NodeCommandPalette commandText/portTypeLabel computed keys (higgsfield 120).
+  // Falls back to the descriptor's own text when the key is absent.
+  ["ui/src/components/node-canvas/NodeCommandPalette.tsx :: key", [
+    "nodeStudio.commands.image-generate.label", "nodeStudio.commands.image-generate.description",
+    "nodeStudio.portTypes.prompt", "nodeStudio.portTypes.image", "nodeStudio.portTypes.images",
+    "nodeStudio.portTypes.video", "nodeStudio.portTypes.mask", "nodeStudio.portTypes.element-refs",
+    "nodeStudio.portTypes.element-notes", "nodeStudio.portTypes.settings", "nodeStudio.portTypes.any-media",
+  ]],
+  // NodeCommandPalette CATEGORY_LABEL_KEYS literals (line-level const map).
+  ["ui/src/components/node-canvas/NodeCommandPalette.tsx :: CATEGORY_LABEL_KEYS[category]", [
+    "nodeStudio.palette.categories.input", "nodeStudio.palette.categories.generate",
+    "nodeStudio.palette.categories.transform", "nodeStudio.palette.categories.reference",
+    "nodeStudio.palette.categories.output",
+  ]],
+  // useNodeStudioController COMPATIBILITY_REASON_KEYS literals (line-level const map).
+  ["ui/src/components/node-canvas/useNodeStudioController.ts :: COMPATIBILITY_REASON_KEYS[reason]", [
+    "nodeStudio.compatibility.sameDirection", "nodeStudio.compatibility.typeMismatch",
+    "nodeStudio.compatibility.cardinality", "nodeStudio.compatibility.selfEdge",
+    "nodeStudio.compatibility.duplicateEdge", "nodeStudio.compatibility.unknownPort",
+  ]],
   // IMAGE_MODEL_OPTIONS, UNSUPPORTED_IMAGE_MODELS, VIDEO_MODEL_OPTIONS in imageModels.ts,
   // plus REASONING_EFFORT_OPTIONS in reasoning.ts.
   ["ui/src/components/ImageModelSelect.tsx :: option.fullLabelKey", [

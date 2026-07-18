@@ -160,14 +160,11 @@ describe("node UI compact metadata contract", () => {
   });
 
   it("preserves directional node connection handles through connect and session save", () => {
-    const canvas = readSource("ui/src/components/NodeCanvas.tsx");
-    const store = readSource("ui/src/store/useAppStore.ts");
+    const controller = readSource("ui/src/components/node-canvas/useNodeConnectionController.ts");
+    const store = readSource("ui/src/store/storeGraphSave.ts");
 
-    assert.match(canvas, /connectNodes\(params\.source,\s*params\.target,\s*params\.sourceHandle,\s*params\.targetHandle\)/);
-    assert.match(canvas, /connectionState\.toNode \|\| connectionState\.toHandle/);
-    assert.match(store, /sourceHandle\?: string \| null/);
-    assert.match(store, /targetHandle\?: string \| null/);
-    assert.match(store, /sourceHandle,\s*\n\s*targetHandle,/);
+    assert.match(controller, /connectNodes\(connection\.source,\s*connection\.target,\s*connection\.sourceHandle,\s*connection\.targetHandle\)/);
+    assert.match(controller, /state\.isValid \|\| state\.toNode \|\| state\.toHandle/);
     assert.match(store, /sourceHandle:\s*e\.sourceHandle \?\? null/);
     assert.match(store, /targetHandle:\s*e\.targetHandle \?\? null/);
     assert.match(store, /sourceHandle:\s*typeof data\.sourceHandle === "string" \? data\.sourceHandle : null/);
@@ -218,11 +215,15 @@ describe("node UI compact metadata contract", () => {
   });
 
   it("preserves the dragged source handle when creating a child node from a connector", () => {
-    const canvas = readSource("ui/src/components/NodeCanvas.tsx");
-    const store = readSource("ui/src/store/useAppStore.ts");
+    const controller = readSource("ui/src/components/node-canvas/useNodeConnectionController.ts");
+    const insertion = readSource("ui/src/lib/nodeStudioGraph.ts");
+    const store = readSource("ui/src/store/storeGraphNodeImpl.ts");
 
-    assert.match(canvas, /connectionState\.fromHandle\?\.id \?\? null/);
-    assert.match(canvas, /addChildNodeAt\(fromNodeId,\s*pos,\s*connectionState\.fromHandle\?\.id \?\? null\)/);
+    // Drag-end resolves the dragged handle into the palette's source port;
+    // the inserted child edge inherits that exact handle.
+    assert.match(controller, /resolveNodePort\(node, state\.fromHandle\?\.id, "output"\)/);
+    assert.match(insertion, /sourceHandle: input\.sourcePort\.handleId/);
+    assert.match(insertion, /`\$\{input\.sourcePort\.nodeId\}:\$\{input\.sourcePort\.handleId\}->\$\{id\}:target-left`/);
     assert.match(store, /function normalizeNodeHandleId\(/);
     assert.match(store, /function getOppositeTargetHandle\(sourceHandle\?: string \| null\): string \| null/);
     assert.match(store, /case "source-right":[\s\S]*?return "target-left"/);

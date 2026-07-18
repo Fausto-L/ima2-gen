@@ -39,8 +39,12 @@ describe("node context and edit search policy", () => {
   it("forwards the selected provider from Node Mode requests", () => {
     const store = readStoreBundle();
     const nodePayload = /postNodeGenerateStream\(\{\s*[\s\S]*?\},\s*\{/.exec(store)?.[0] ?? "";
-    assert.match(nodePayload, /provider:\s*s\.provider/);
-    assert.match(nodePayload, /model:\s*s\.imageModel/);
+    // Branch variants carry per-node overrides; the payload uses them and the
+    // fallback chain still lands on the globally selected provider/model.
+    assert.match(nodePayload, /provider:\s*nodeProvider/);
+    assert.match(nodePayload, /model:\s*nodeModel/);
+    assert.match(store, /node\.data\.provider[\s\S]{0,120}: s\.provider/);
+    assert.match(store, /node\.data\.model[\s\S]{0,120}: s\.imageModel/);
   });
 
   it("logs safe context shape instead of raw prompts or images", () => {
@@ -51,4 +55,3 @@ describe("node context and edit search policy", () => {
     assert.doesNotMatch(oauth, /logEvent\("oauth-edit", "request", \{[^}]*prompt/);
   });
 });
-

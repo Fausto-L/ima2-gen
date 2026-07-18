@@ -618,6 +618,18 @@ use the standard envelope with codes such as `INVALID_ASSET_KIND`,
 
 Version mismatch returns `GRAPH_VERSION_CONFLICT` and the current version. This only means the client saved against a stale graph version; it is not proof that another browser tab changed the graph.
 
+## Node Templates
+
+Node graph templates (higgsfield 120). Seed templates ship with the app and are read-only; user templates are created from the canvas.
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/api/node-templates` | List template summaries (seed + user) |
+| `POST` | `/api/node-templates` | Create a user template (`201 { template }`) |
+| `POST` | `/api/node-templates/:id/instantiate` | Return a graph copy with fresh node IDs (never auto-runs) |
+| `PATCH` | `/api/node-templates/:id` | Rename a user template (seed → `403`) |
+| `DELETE` | `/api/node-templates/:id` | Delete a user template (seed → `403`) |
+
 Graph save requests may include observability headers:
 
 ```text
