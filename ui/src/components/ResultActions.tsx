@@ -67,8 +67,8 @@ export function ResultActions({
     if (!actionImage.filename || animating) return;
     setAnimating(true);
     try {
-      await useAppStore.getState().animateImage(actionImage.filename, actionImage.prompt ?? undefined);
-      showToast(t("toast.animateDone"));
+      const started = await useAppStore.getState().animateImage(actionImage.filename, actionImage.prompt ?? undefined);
+      if (started) showToast(t("toast.animateDone"));
     } catch (error) {
       const message = error instanceof Error ? error.message : t("toast.animateFailed");
       showToast(message, true);

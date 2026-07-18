@@ -498,7 +498,7 @@ addChildNodeAt: (parentClientId, position, sourceHandle) => addChildNodeAtImpl(p
     await runVideoGenerateImpl(nodeId, set, get);
   },
   animateImage: async (filename, prompt) => {
-    await animateImageImpl(filename, prompt, set, get);
+    return animateImageImpl(filename, prompt, set, get);
   },
   setReasoningEffort: (reasoningEffort) => setReasoningEffortImpl(reasoningEffort, set),
   setWebSearchEnabled: (webSearchEnabled) => setWebSearchEnabledImpl(webSearchEnabled, set),

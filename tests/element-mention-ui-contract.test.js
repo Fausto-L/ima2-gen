@@ -266,10 +266,19 @@ test("EM-09b missing elements block generation at the button and the entry gate"
   const entryBody = generateEntry.slice(generateEntry.indexOf("export async function generateImpl"));
   assert.ok(entryBody.indexOf("missingElementsBlock(get)") < entryBody.indexOf("runVideoGenerate"), "missing gate must run before provider dispatch");
   // Custom-size approval and animate also recheck (post-modal state can change).
-  assert.match(generateEntry, /export async function confirmCustomSizeAdjustmentImpl[\s\S]*?missingElementsBlock\(get\)/);
+  const confirmBody = generateEntry.slice(generateEntry.indexOf("export async function confirmCustomSizeAdjustmentImpl"));
+  assert.ok(confirmBody.indexOf("missingElementsBlock(get)") > -1 && confirmBody.indexOf("missingElementsBlock(get)") < confirmBody.indexOf("runGenerate(adjustedSize)"), "custom-size approval must recheck before dispatch");
+  assert.match(confirmBody, /kind !== "node-in-place" && missingElementsBlock/, "node continuations stay out of the missing gate");
   const videoImpl = read("ui/src/store/storeVideoImpl.ts");
   assert.match(videoImpl, /missingElementsBlock } from "\.\/storeGenerateEntryImpl"/);
-  assert.match(videoImpl, /export async function animateImageImpl[\s\S]*?missingElementsBlock\(get\)/);
+  const animateBody = videoImpl.slice(videoImpl.indexOf("export async function animateImageImpl"));
+  assert.ok(animateBody.indexOf("missingElementsBlock(get)") > -1 && animateBody.indexOf("missingElementsBlock(get)") < animateBody.indexOf("compilePresets"), "animate must block before payload assembly");
+  assert.match(animateBody, /return false;/);
+  // Callers toast success only when the job actually started (no error+success pair).
+  const resultActions = read("ui/src/components/ResultActions.tsx");
+  const chaining = read("ui/src/lib/resultChaining.ts");
+  assert.match(resultActions, /if \(started\) showToast\(t\("toast\.animateDone"\)\)/);
+  assert.match(chaining, /if \(started\) store\.showToast\(t\("toast\.animateDone"\)\)/);
   // Store contract: catalog state and actions are formally bound.
   const storeTypes = read("ui/src/store/storeTypes.ts");
   const appStore = read("ui/src/store/useAppStore.ts");

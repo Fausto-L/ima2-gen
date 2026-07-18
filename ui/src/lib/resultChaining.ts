@@ -62,7 +62,7 @@ export async function executeChaining(
   actionId: ChainingActionId,
   item: GenerateItem,
   getStore: () => {
-    animateImage: (filename: string, prompt?: string) => Promise<void>;
+    animateImage: (filename: string, prompt?: string) => Promise<boolean>;
     openCanvas: () => void;
     selectHistory: (item: GenerateItem) => void;
     addReferences: (files: File[]) => Promise<void>;
@@ -77,8 +77,8 @@ export async function executeChaining(
     case "animate": {
       if (!item.filename) return;
       try {
-        await store.animateImage(item.filename, item.prompt ?? undefined);
-        store.showToast(t("toast.animateDone"));
+        const started = await store.animateImage(item.filename, item.prompt ?? undefined);
+        if (started) store.showToast(t("toast.animateDone"));
       } catch (error) {
         store.showToast(
           error instanceof Error ? error.message : t("toast.animateFailed"),

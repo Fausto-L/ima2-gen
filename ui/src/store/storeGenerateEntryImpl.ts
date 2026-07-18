@@ -56,7 +56,9 @@ export function missingElementsBlock(get: StoreGet): boolean {
 export async function confirmCustomSizeAdjustmentImpl(set: StoreSet, get: StoreGet): Promise<void> {
   const pending = get().customSizeConfirm;
   if (!pending) return;
-  if (missingElementsBlock(get)) return;
+  // Recheck missing only for classic/multimode continuations — node
+  // continuations do not send global elementIds and are out of scope (110).
+  if (pending.continuation.kind !== "node-in-place" && missingElementsBlock(get)) return;
   const adjustedSize = formatSize(pending.adjustedW, pending.adjustedH);
   set({
     customW: pending.adjustedW,

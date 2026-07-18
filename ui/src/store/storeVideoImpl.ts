@@ -243,15 +243,16 @@ export async function animateImageImpl(
   prompt: string | undefined,
   set: StoreSet,
   get: StoreGet,
-): Promise<void> {
+): Promise<boolean> {
   const p = prompt?.trim();
   if (!p) {
     get().showToast(ACTIVE_VIDEO_PROMPT_GUIDANCE, true);
     throw new Error(ACTIVE_VIDEO_PROMPT_GUIDANCE);
   }
   // Missing element selections block animate too (higgsfield 110 EM-09) —
-  // elementIds flow into the I2V request below.
-  if (missingElementsBlock(get)) return;
+  // elementIds flow into the I2V request below. Returns false when blocked so
+  // callers do not show a success toast (Euler round 2).
+  if (missingElementsBlock(get)) return false;
   const presetState = get();
   const compiled = compilePresets({
     catalog: getAllPresets(),
@@ -323,4 +324,6 @@ export async function animateImageImpl(
     set({ inFlight: remaining, activeGenerations: remaining.length, videoProgress: null });
     get().startInFlightPolling();
   }
+  return true;
+
 }
