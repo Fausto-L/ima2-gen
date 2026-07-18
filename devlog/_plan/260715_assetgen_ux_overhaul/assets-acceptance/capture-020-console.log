@@ -1,0 +1,4 @@
+remove-bg button present: true
+save button present: true
+keyed asset: remove-bg button absent: true
+captures done
