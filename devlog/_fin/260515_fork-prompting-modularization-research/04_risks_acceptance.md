@@ -129,6 +129,7 @@ Assertions:
 - Composer blocks can move before/after main prompt.
 - Sidecar metadata records composer state.
 - Selecting history restores composer state.
+- **SUPERSEDED (2026-07-18):** This criterion was deliberately replaced by the Prompt Studio workspace-profile contract. `ui/src/lib/workspaceProfile.ts:19-25` keeps the composer untouched when a history item is selected; `tests/issue75-prompt-studio-state-contract.test.js:44` pins that behavior. This is intentional product behavior, not a regression.
 - Sidebar history groups multimode sequences.
 - Viewer zoom/pan is implemented through hook/component, not a large inline `Canvas.tsx` block.
 
