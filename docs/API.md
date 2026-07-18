@@ -500,7 +500,30 @@ Edit an existing video via Grok V2V. This is a blocking JSON endpoint that start
 
 ### `POST /api/video/extend`
 
-Extend a video from its last frame. This is a blocking JSON endpoint that starts the xAI extension job, polls it, downloads the combined output MP4, and saves it as a generated video artifact.
+Extend a video from its last frame (last-frame→I2V orchestration). This is an async job endpoint: it returns HTTP 202 immediately and streams lifecycle events (`queued → extracting-frame → planning → submitted/progress → persisting → done` or `error`) over `GET /api/events`. The server extracts the parent video's last frame, injects it as the image-to-video source, and records durable lineage on the child artifact.
+
+```json
+{
+  "sourceVideoId": "1780226256355_50252101.mp4",
+  "requestId": "vext_optional",
+  "prompt": "camera pulls back (optional — inherits parent prompt when empty)",
+  "provider": "grok",
+  "model": "grok-imagine-video",
+  "duration": 6
+}
+```
+
+Immediate response:
+
+```json
+{ "ok": true, "requestId": "vext_...", "sourceVideoId": "1780226256355_50252101.mp4", "workflow": "last-frame-i2v" }
+```
+
+The terminal `done` payload carries `video.operation: "extend"`, `video.sourceFrame: "last"`, and `videoLineage` (`id`, `parentId`, `rootId`, `seriesId`, `sequenceIndex`). Duplicate `requestId` returns 409. Frame-extraction failures map to `VIDEO_FRAME_EXTRACT_UNAVAILABLE` (503), `VIDEO_FRAME_EXTRACT_TIMEOUT` (504, retryable), or `VIDEO_FRAME_EXTRACT_FAILED` (500).
+
+### `POST /api/video/extend/native`
+
+Legacy provider-native extension (blocking JSON). Starts the xAI extension job, polls it, downloads the combined output MP4, and saves it as a generated video artifact. Prefer `/api/video/extend` for new integrations.
 
 ```json
 {
@@ -511,7 +534,7 @@ Extend a video from its last frame. This is a blocking JSON endpoint that starts
 }
 ```
 
-`duration` must be an integer from 2 to 10 seconds. Edit and extension support `grok-imagine-video` only; `grok-imagine-video-1.5` and its preview alias are not accepted for these endpoints.
+`duration` must be an integer from 2 to 10 seconds. Edit and native extension support `grok-imagine-video` only; `grok-imagine-video-1.5` and its preview alias are not accepted for these endpoints.
 
 ### `GET /api/video/frame`
 

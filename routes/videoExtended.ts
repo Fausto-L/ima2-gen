@@ -20,6 +20,7 @@ import { persistVideoArtifact } from "../lib/videoArtifactPersistence.js";
 import { deriveChildVideoLineage, normalizeVideoLineage } from "../lib/videoLineage.js";
 import { getMotionFragment, MOTION_PRESETS } from "../lib/videoMotionPresets.js";
 import { errInfo } from "../lib/errInfo.js";
+import { codedVideoError as codedError, emitPhase, extractError, retryableData } from "../lib/videoExtendedHelpers.js";
 
 type ParentMetadata = {
   provider?: unknown; model?: unknown;
@@ -34,10 +35,6 @@ export type VideoExtendedDependencies = {
   persistArtifact?: typeof persistVideoArtifact;
   createFilename?: (ctx: RuntimeContext) => string;
 };
-
-function codedError(message: string, status: number, code: string, extra: Record<string, unknown> = {}) {
-  return Object.assign(new Error(message), { status, code, ...extra });
-}
 
 function validationError(value: unknown): { error: string; code: string; status: number } | null {
   if (!value || typeof value !== "object" || !("error" in value)) return null;
@@ -71,29 +68,6 @@ function motionSelection(value: unknown, parent: ParentMetadata | null): { ids: 
   }
   const ids = [...new Set(raw as string[])];
   return { ids, fragment: ids.map((id) => getMotionFragment(id, "grok")).filter(Boolean).join(", ") };
-}
-
-function extractError(error: unknown, signal: AbortSignal): Error {
-  if (signal.aborted) return makeGenerationCanceledError();
-  const info = errInfo(error);
-  if (info.code === "ENOENT") return codedError("ffmpeg is unavailable", 503, "VIDEO_FRAME_EXTRACT_UNAVAILABLE");
-  if (info.code === "FFMPEG_UNAVAILABLE") return codedError("ffmpeg is unavailable", 503, "VIDEO_FRAME_EXTRACT_UNAVAILABLE");
-  if (info.code === "VIDEO_FRAME_EXTRACT_TIMEOUT") return codedError("ffmpeg frame extraction timed out", 504, "VIDEO_FRAME_EXTRACT_TIMEOUT", { retryable: true });
-  if (info.code === "VIDEO_FRAME_EXTRACT_ABORTED") return makeGenerationCanceledError();
-  const raw = info.raw as { killed?: unknown; signal?: unknown };
-  if (info.code === "ETIMEDOUT" || raw?.killed === true || raw?.signal === "SIGKILL") {
-    return codedError("ffmpeg frame extraction timed out", 504, "VIDEO_FRAME_EXTRACT_TIMEOUT", { retryable: true });
-  }
-  return codedError(info.message || "failed to extract the last video frame", 500, "VIDEO_FRAME_EXTRACT_FAILED");
-}
-
-function emitPhase(requestId: string, phase: string): void {
-  setJobPhase(requestId, phase);
-  publish(requestId, "phase", { requestId, phase });
-}
-
-function retryableData(error: unknown): { retryable: true } | Record<string, never> {
-  return (error as { retryable?: unknown })?.retryable === true ? { retryable: true } : {};
 }
 
 function videoProxyUrl(ctx: RuntimeContext, path: string) {
