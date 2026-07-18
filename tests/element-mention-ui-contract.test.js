@@ -8,6 +8,7 @@ import {
   addTrayElementImpl,
   syncElementCatalogImpl,
 } from "../ui/src/lib/elementCatalog.ts";
+import { removeTrayElementImpl } from "../ui/src/lib/elementCatalog.ts";
 
 const read = (path) => readFileSync(path, "utf8");
 const composer = read("ui/src/components/PromptComposer.tsx");
@@ -214,8 +215,26 @@ test("EM-11 each chip removes only its stable element ID", () => {
   addTrayElementImpl(hero.id, store.set, store.get, hero);
   assert.match(chipRow, /onRemove=\{props\.onRemove\}/);
   assert.match(composer, /onRemove=\{\(elementId\) => elementSelection\.removeElementId\?\.\(elementId\)\}/);
-  assert.match(referenceStore, /removeTrayElementImpl[\s\S]*removeTrayItemImpl\(item\.tokenId, set, get\)/);
+  assert.match(elementCatalog, /export function removeTrayElementImpl[\s\S]*retireTrayTags\(state\.retiredTags, \[removed\]\)/);
+  assert.match(referenceStore, /export \{ removeTrayElementImpl \} from "\.\.\/lib\/elementCatalog"/);
   assert.match(chip, /type="button"[\s\S]*aria-label=\{`Remove \$\{name\} element`\}/);
+  // Executable: simulate missing, then actually remove the element and assert
+  // the missing marker clears (Euler false-confidence fix).
+  syncElementCatalogImpl([], store.set, store.get);
+  assert.deepEqual(store.get().missingElementIds, [hero.id]);
+  removeTrayElementImpl(hero.id, store.set, store.get);
+  assert.deepEqual(store.get().selectedElementIds, []);
+  assert.deepEqual(store.get().missingElementIds, []);
+});
+
+test("EM-11b restoring the catalog clears the missing marker", () => {
+  const hero = elementAsset();
+  const store = createReferenceStoreHarness();
+  addTrayElementImpl(hero.id, store.set, store.get, hero);
+  syncElementCatalogImpl([], store.set, store.get);
+  assert.deepEqual(store.get().missingElementIds, [hero.id]);
+  syncElementCatalogImpl([hero], store.set, store.get);
+  assert.deepEqual(store.get().missingElementIds, []);
 });
 
 test("EM-12 caret positioning, portal, and listbox ARIA clean up together", () => {
@@ -243,9 +262,14 @@ test("EM-09b missing elements block generation at the button and the entry gate"
   // generateImpl: programmatic early-return before any provider dispatch.
   assert.match(generateEntry, /missingElementIds \?\? \[\]\)\.length > 0/);
   assert.match(generateEntry, /showToast\(t\("toast\.missingElements"\), true\)/);
-  const gateIndex = generateEntry.indexOf("missingElementIds");
-  const dispatchIndex = generateEntry.indexOf("runVideoGenerate");
-  assert.ok(gateIndex > -1 && dispatchIndex > -1 && gateIndex < dispatchIndex, "missing gate must run before provider dispatch");
+  // generateImpl: the block call precedes provider dispatch inside the entry.
+  const entryBody = generateEntry.slice(generateEntry.indexOf("export async function generateImpl"));
+  assert.ok(entryBody.indexOf("missingElementsBlock(get)") < entryBody.indexOf("runVideoGenerate"), "missing gate must run before provider dispatch");
+  // Custom-size approval and animate also recheck (post-modal state can change).
+  assert.match(generateEntry, /export async function confirmCustomSizeAdjustmentImpl[\s\S]*?missingElementsBlock\(get\)/);
+  const videoImpl = read("ui/src/store/storeVideoImpl.ts");
+  assert.match(videoImpl, /missingElementsBlock } from "\.\/storeGenerateEntryImpl"/);
+  assert.match(videoImpl, /export async function animateImageImpl[\s\S]*?missingElementsBlock\(get\)/);
   // Store contract: catalog state and actions are formally bound.
   const storeTypes = read("ui/src/store/storeTypes.ts");
   const appStore = read("ui/src/store/useAppStore.ts");

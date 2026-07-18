@@ -245,12 +245,7 @@ export function removeTrayItemImpl(tokenId: string, set: StoreSet, get: StoreGet
   persistContinuityPromptChange(beforePrompts, get().insertedPrompts);
 }
 
-export function removeTrayElementImpl(elementId: string, set: StoreSet, get: StoreGet): void {
-  const item = get().trayItems.find(
-    (candidate) => candidate.kind === "element" && candidate.source.elementId === elementId,
-  );
-  if (item) removeTrayItemImpl(item.tokenId, set, get);
-}
+export { removeTrayElementImpl } from "../lib/elementCatalog";
 
 export function removeReferenceImpl(index: number, set: StoreSet, get: StoreGet): void {
   const item = selectAttachmentItems(get())[index];

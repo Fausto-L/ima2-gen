@@ -18,6 +18,7 @@ import {
 } from "./storeHelpers";
 import type { AppState, ImageNodeData } from "./storeTypes";
 import type { ClientNodeId } from "../lib/graph";
+import { missingElementsBlock } from "./storeGenerateEntryImpl";
 import { clearFlightAbort, registerFlightAbort } from "./flightAbortRegistry";
 import { t } from "../i18n";
 import { compilePresets, type PresetProvider } from "../../../lib/presetCompiler.js";
@@ -248,6 +249,9 @@ export async function animateImageImpl(
     get().showToast(ACTIVE_VIDEO_PROMPT_GUIDANCE, true);
     throw new Error(ACTIVE_VIDEO_PROMPT_GUIDANCE);
   }
+  // Missing element selections block animate too (higgsfield 110 EM-09) —
+  // elementIds flow into the I2V request below.
+  if (missingElementsBlock(get)) return;
   const presetState = get();
   const compiled = compilePresets({
     catalog: getAllPresets(),

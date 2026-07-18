@@ -1,6 +1,7 @@
 import {
   hasTrayCapacity,
   materializeLegacyFields,
+  retireTrayTags,
   reviveTrayTag,
   uniquifyElementTag,
   type ElementTrayItem,
@@ -143,6 +144,26 @@ export function findElementTrayItem(
   return items.find(
     (item): item is ElementTrayItem => item.kind === "element" && item.source.elementId === elementId,
   );
+}
+
+/**
+ * Element-only tray removal. Mirrors removeTrayItemImpl's element path
+ * (filter + retire tag) without the attachment-specific side effects. Lives
+ * here (not storeReferenceImpl) so contract tests and the composer can import
+ * it without the Vite-only import.meta.env chain.
+ */
+export function removeTrayElementImpl(elementId: string, set: StoreSet, _get: StoreGet): void {
+  mutateTrayImpl(set, (state) => {
+    const removed = findElementTrayItem(state.trayItems, elementId);
+    if (!removed) return { result: undefined };
+    return {
+      result: undefined,
+      patch: {
+        trayItems: state.trayItems.filter((item) => item.tokenId !== removed.tokenId),
+        retiredTags: retireTrayTags(state.retiredTags, [removed]),
+      },
+    };
+  });
 }
 
 export function syncElementCatalogImpl(records: AssetItem[], set: StoreSet, _get: StoreGet): void {

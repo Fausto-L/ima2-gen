@@ -9,11 +9,7 @@ export async function generateImpl(set: StoreSet, get: StoreGet): Promise<void> 
   const s = get();
   const prompt = composePrompt(s.prompt, s.insertedPrompts);
   if (!prompt) return;
-  // Missing element selections block generation globally (higgsfield 110 EM-09).
-  if ((s.missingElementIds ?? []).length > 0) {
-    get().showToast(t("toast.missingElements"), true);
-    return;
-  }
+  if (missingElementsBlock(get)) return;
   if (s.videoModelSelected) return get().runVideoGenerate();
   const useMultimode = s.uiMode === "classic" && s.multimode;
   const pending = getCustomSizeConfirmation(s, { kind: useMultimode ? "multimode" : "classic" });
@@ -45,9 +41,22 @@ export function cancelMultimodeImpl(set: StoreSet, get: StoreGet): void {
   });
 }
 
+/** Missing element selections block every generation entry (higgsfield 110
+ * EM-09). Returns true when blocked (and toasts). Checked at generateImpl,
+ * custom-size approval, and animate — the check must also run AFTER any
+ * modal, since catalog state can change while it is open. */
+export function missingElementsBlock(get: StoreGet): boolean {
+  if ((get().missingElementIds ?? []).length > 0) {
+    get().showToast(t("toast.missingElements"), true);
+    return true;
+  }
+  return false;
+}
+
 export async function confirmCustomSizeAdjustmentImpl(set: StoreSet, get: StoreGet): Promise<void> {
   const pending = get().customSizeConfirm;
   if (!pending) return;
+  if (missingElementsBlock(get)) return;
   const adjustedSize = formatSize(pending.adjustedW, pending.adjustedH);
   set({
     customW: pending.adjustedW,
