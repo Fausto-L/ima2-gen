@@ -17,7 +17,7 @@
 | 050 | attachment `@` 멘션 재삽입과 tray limit toast parity를 적용하고 브라우저 시나리오를 기록했다. | `050_attachment-mention-parity.md`, `051_wp5-qa-notes.md`, `evidence-050-mention-menu.png`, `evidence-050-tag-reinserted.png`, `evidence-050-limit-toast.png` |
 | 060 | Assets sidebar의 Element Library top-level 진입점과 element-scoped empty state를 적용했다. | `060_element-library-entry.md`, `evidence-060-element-library.png` |
 | 070 | gallery favorite ON 시 Assets 입장, OFF/삭제의 독립성, Assets 이름 변경 계약을 적용했다. | `070_star-to-assets-rename.md`, `evidence-070-star-on.png`, `evidence-070-rename.png` |
-| 080 | gallery/result/Assets 세 표면의 별표 접근성·상태 소유권을 공통 제어로 통일했다. | `080_star-controls-result-assets.md`, `assets-080/evidence-080-desktop-1440-result-star.png`, `assets-080/evidence-080-mobile-500-result.png`, `assets-080/evidence-080-mobile-500-assets-star.png` |
+| 080 | gallery/result/Assets 세 표면의 별표 접근성·상태 소유권을 공통 제어로 통일했다. | `080_star-controls-result-assets.md`, `assets-080/evidence-080-desktop-1440-result-star.png`, `assets-080/evidence-080-mobile-390-result.png`, `assets-080/evidence-080-mobile-390-assets-star.png` |
 
 ## 080 implementation and verification record — 2026-07-18
 
@@ -42,10 +42,9 @@
 ### Browser QA evidence
 
 - `assets-080/evidence-080-desktop-1440-result-star.png` — local server `:3333`, agbrowse, 1440 desktop result-frame star.
-- `assets-080/evidence-080-mobile-500-result.png` — mobile-class 500px result-frame star.
-- `assets-080/evidence-080-mobile-500-assets-star.png` — mobile-class 500px Assets card stars with filled/unfilled state visible.
-
-The intended 390px mobile capture was substituted with 500px because headless Chrome window bounds enforced a larger minimum. This is a viewport substitution, not a claim that 390px was captured.
+- `assets-080/evidence-080-mobile-390-result.png` — 390px result-frame star (Playwright device emulation viewport 390×844, 2026-07-18 재캡처).
+- `assets-080/evidence-080-mobile-390-assets-star.png` — 390px Assets card stars with filled/unfilled state visible.
+- `assets-080/evidence-080-mobile-500-*.png` — 1차 캡처(500px, window-bounds 제약). 390px 재캡처로 대체한 뒤 경과 기록으로 보존한다.
 
 `assets-080/evidence-080-desktop-1440-assets-star.png` predates the confirmed 080 closeout set and, despite its filename, was captured at a smaller viewport. It is superseded and is not used as evidence for a 1440px Assets-card assertion.
 
