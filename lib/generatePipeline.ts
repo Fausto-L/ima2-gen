@@ -23,10 +23,13 @@ import { normalizeComposerInsertedPrompts, normalizeComposerPrompt, } from "./co
 import { errInfo } from "./errInfo.js";
 import { requireRuntimeContext, type RuntimeContext } from "./runtimeContext.js";
 import { STORYBOARD_PREFIX } from "./storyboardPrefix.js";
+import { parseBackgroundPreset, backgroundPromptSuffix, backgroundPlannerConstraint } from "./backgroundPresets.js";
 import { validateModeration, imageFormatFromMime, upstreamErrorFields } from "./routeHelpers.js";
 import { publish } from "./eventBus.js";
 import { publishJobEvent } from "./ssePublish.js";
 import { normalizeBodyRequestId, validateBoundedCount, validateGenerationPrompt } from "./generationInputValidation.js";
+import { getElementById } from "./assetsStore.js";
+import { compileElements, ELEMENT_CAPACITY_DEFAULTS, type ElementDefinition, type ExistingReferenceInput } from "./elementCompiler.js";
 export async function runGeneratePipeline(req: Request, res: Response, ctx: RuntimeContext) {
     const requestId = normalizeBodyRequestId(req.body?.requestId, req.id);
     const asyncMode = req.body?.async === true;
@@ -73,6 +76,7 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
       } = req.body;
       const promptError = validateGenerationPrompt(prompt);
       if (promptError) return fail(400, promptError);
+
       const maxGeneratedImages = Math.max(
         1,
         Math.trunc(Number(ctx.config.limits.maxGeneratedImages) || 1),
@@ -82,6 +86,11 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
       const count = countResult.value;
       const storyboardActive = req.body?.storyboard === true;
       const storyboardPrefix = storyboardActive ? STORYBOARD_PREFIX : "";
+      const backgroundParse = parseBackgroundPreset(req.body?.backgroundPreset);
+      if ("error" in backgroundParse) {
+        return fail(400, { error: backgroundParse.error, code: backgroundParse.code });
+      }
+      const backgroundPreset = backgroundParse.preset;
       const composerPrompt = normalizeComposerPrompt(req.body?.composerPrompt);
       const composerInsertedPrompts = normalizeComposerInsertedPrompts(
         req.body?.composerInsertedPrompts,
@@ -102,12 +111,72 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
       const effectiveSize = providerOptions.size;
       const webSearchEnabled = providerOptions.webSearchEnabled;
       const activeProvider = providerOptions.provider;
+
+      // --- Element injection (after provider resolution) ---
+      const rawElementIds: string[] = Array.isArray(req.body?.elementIds)
+        ? req.body.elementIds.filter((id: unknown) => typeof id === "string" && id)
+        : [];
+      let elementNotesFragment = "";
+      let elementResolvedRefs: string[] = [];
+      let appliedElementIds: string[] = [];
+      if (rawElementIds.length > 0) {
+        try {
+          const elementMap = new Map<string, ElementDefinition>();
+          for (const eid of rawElementIds) {
+            const record = getElementById(eid);
+            if (record?.metadata) {
+              const meta = typeof record.metadata === "string" ? JSON.parse(record.metadata) : record.metadata;
+              elementMap.set(eid, {
+                id: eid,
+                name: meta.name ?? record.name,
+                kind: meta.elementKind ?? "character",
+                refs: Array.isArray(meta.refs) ? meta.refs : [],
+                notes: meta.notes,
+                defaultStrength: meta.defaultStrength,
+                createdAt: record.createdAt ?? 0,
+                updatedAt: record.updatedAt ?? 0,
+              });
+            }
+          }
+          const providerKey = (activeProvider === "grok" || activeProvider === "grok-api") ? "grok"
+            : activeProvider === "gemini-api" ? "gemini"
+            : activeProvider === "agy" ? "gpt" : "gpt";
+          const modeKey = "image" as const;
+          const capacity = ELEMENT_CAPACITY_DEFAULTS[providerKey]?.[modeKey] ?? { maxTotalRefs: 6, maxRefsPerElement: 6 };
+          const compiled = compileElements({
+            elementIds: rawElementIds,
+            elements: elementMap,
+            existingRefs: references.map((r: string): ExistingReferenceInput => ({ source: "composer", path: r })),
+            provider: providerKey,
+            mode: modeKey,
+            capacity,
+            missingPolicy: "collect",
+          });
+          elementNotesFragment = compiled.notesFragment;
+          appliedElementIds = compiled.elementIds;
+          for (const slot of compiled.referenceSlots) {
+            try {
+              const buf = await readFile(slot.path);
+              const mime = slot.path.endsWith(".png") ? "image/png" : "image/jpeg";
+              elementResolvedRefs.push(`data:${mime};base64,${buf.toString("base64")}`);
+            } catch {
+              logEvent("generate", "element_ref_read_failed", { requestId, path: slot.path, elementId: slot.elementId });
+            }
+          }
+        } catch (e) {
+          logEvent("generate", "element_compile_failed", { requestId, error: errInfo(e) });
+        }
+      }
+      const mergedReferences = [...references, ...elementResolvedRefs];
+
       const normalizedPromptMode = promptMode === "direct" ? "direct" : "auto";
-      const generationPrompt = storyboardPrefix + prompt;
+      const elementSuffix = elementNotesFragment ? `\n${elementNotesFragment}` : "";
+      const generationPrompt = storyboardPrefix + prompt + elementSuffix
+        + (backgroundPreset ? ` ${backgroundPromptSuffix(backgroundPreset, "image")}` : "");
       const moderationCheck = validateModeration(ctx, moderation);
       if (moderationCheck.error) return fail(400, { error: moderationCheck.error });
-      const referencePayload = summarizeReferencePayload(references);
-      const refCheckResult = validateAndNormalizeRefs(references);
+      const referencePayload = summarizeReferencePayload(mergedReferences as string[]);
+      const refCheckResult = validateAndNormalizeRefs(mergedReferences as string[]);
       if (refCheckResult.error) {
         return fail(400, { error: refCheckResult.error, code: refCheckResult.code });
       }
@@ -206,6 +275,7 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
           referenceCount: grokRefs.length,
           references: grokRefs,
           directApiKey: grokDirectApiKey,
+          backgroundConstraint: backgroundPreset ? backgroundPlannerConstraint(backgroundPreset) : undefined,
         })
         : null;
       const generateOne = async () => {
@@ -354,7 +424,10 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
             usage: r.value.usage || null,
             webSearchCalls: r.value.webSearchCalls || 0,
             webSearchEnabled,
-            refsCount: providerRefCount,
+           refsCount: providerRefCount,
+           ...(backgroundPreset ? { backgroundPreset } : {}),
+            ...(Array.isArray(req.body?.presetIds) && req.body.presetIds.length > 0 ? { presetIds: req.body.presetIds } : {}),
+            ...(appliedElementIds.length > 0 ? { elementIds: appliedElementIds } : {}),
           };
           const rawBuffer = Buffer.from(r.value.b64, "base64");
           const embedded: any = await embedImageMetadataBestEffort(rawBuffer, resultFormat, meta, {

@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "fs/promises";
+import { mkdir, readFile, writeFile } from "fs/promises";
 import { safeWriteSidecar } from "./atomicWrite.js";
 import { join } from "path";
 import { randomBytes } from "crypto";
@@ -25,6 +25,43 @@ import { publish } from "./eventBus.js";
 import { publishJobEvent } from "./ssePublish.js";
 import { normalizeMaxImages, sequenceStatus, type MultimodeImage, type MultimodeRouteItem, } from "./multimodeHelpers.js";
 import { normalizeBodyRequestId, validateBoundedCount, validateGenerationPrompt } from "./generationInputValidation.js";
+import { getElementById } from "./assetsStore.js";
+import { compileElements, ELEMENT_CAPACITY_DEFAULTS, type ElementDefinition, type ExistingReferenceInput } from "./elementCompiler.js";
+
+async function resolveMultimodeElements(
+  elementIds: string[], references: string[], activeProvider: string, requestId: string | undefined,
+) {
+  let notesFragment = "";
+  const resolvedRefs: string[] = [];
+  let appliedIds: string[] = [];
+  try {
+    const elements = new Map<string, ElementDefinition>();
+    for (const id of elementIds) {
+      const record = getElementById(id);
+      if (!record?.metadata) continue;
+      const meta = typeof record.metadata === "string" ? JSON.parse(record.metadata) : record.metadata;
+      elements.set(id, { id, name: meta.name ?? record.name, kind: meta.elementKind ?? "character", refs: Array.isArray(meta.refs) ? meta.refs : [], notes: meta.notes, defaultStrength: meta.defaultStrength, createdAt: record.createdAt ?? 0, updatedAt: record.updatedAt ?? 0 });
+    }
+    const provider = activeProvider === "grok" || activeProvider === "grok-api" ? "grok"
+      : activeProvider === "gemini-api" ? "gemini" : "gpt";
+    const capacity = ELEMENT_CAPACITY_DEFAULTS[provider]?.image ?? { maxTotalRefs: 6, maxRefsPerElement: 6 };
+    const compiled = compileElements({ elementIds, elements, existingRefs: references.map((path): ExistingReferenceInput => ({ source: "composer", path })), provider, mode: "image", capacity, missingPolicy: "collect" });
+    notesFragment = compiled.notesFragment;
+    appliedIds = compiled.elementIds;
+    for (const slot of compiled.referenceSlots) {
+      try {
+        const buffer = await readFile(slot.path);
+        const mime = slot.path.endsWith(".png") ? "image/png" : "image/jpeg";
+        resolvedRefs.push(`data:${mime};base64,${buffer.toString("base64")}`);
+      } catch {
+        logEvent("multimode", "element_ref_read_failed", { requestId, path: slot.path, elementId: slot.elementId });
+      }
+    }
+  } catch (error) {
+    logEvent("multimode", "element_compile_failed", { requestId, error: errInfo(error) });
+  }
+  return { notesFragment, resolvedRefs, appliedIds };
+}
 function dualEmitMultimode(res: Response, requestId: string, event: string, data: unknown) {
   if (!res.writableEnded) writeSse(res, event, data);
   if (event === "done") {
@@ -133,6 +170,16 @@ export async function runMultimodePipeline(req: Request, res: Response, ctx: Run
       const effectiveSize = providerOptions.size;
       const webSearchEnabled = providerOptions.webSearchEnabled;
       const activeProvider = providerOptions.provider;
+      // --- Element injection ---
+      const rawElementIds: string[] = Array.isArray(req.body?.elementIds)
+       ? req.body.elementIds.filter((id: unknown) => typeof id === "string" && id)
+      : [];
+     const elementResult = rawElementIds.length > 0
+        ? await resolveMultimodeElements(rawElementIds, references as string[], activeProvider as string, requestId as string)
+        : { notesFragment: "", resolvedRefs: [] as string[], appliedIds: [] as string[] };
+      const { notesFragment: elementNotesFragment, resolvedRefs: elementResolvedRefs, appliedIds: appliedElementIds } = elementResult;
+      const mergedReferences = [...references, ...elementResolvedRefs];
+      const generationPrompt = prompt + (elementNotesFragment ? `\n${elementNotesFragment}` : "");
       const moderationCheck = validateModeration(ctx, moderation);
       if (moderationCheck.error) {
         finishStatus = "error";
@@ -145,7 +192,7 @@ export async function runMultimodePipeline(req: Request, res: Response, ctx: Run
           requestId,
         });
       }
-      const refCheckResult = validateAndNormalizeRefs(references);
+      const refCheckResult = validateAndNormalizeRefs(mergedReferences);
       if (refCheckResult.error) {
         finishStatus = "error";
         finishHttpStatus = 400;
@@ -159,7 +206,7 @@ export async function runMultimodePipeline(req: Request, res: Response, ctx: Run
       }
       const refCheck = refCheckResult as Extract<typeof refCheckResult, { refs: string[] }>;
       const incomingProviderUrl = typeof req.body?.providerUrl === "string" && req.body.providerUrl.startsWith("http") ? req.body.providerUrl : null;
-      const referencePayload = summarizeReferencePayload(references);
+      const referencePayload = summarizeReferencePayload(mergedReferences);
       const started = startJob({
         requestId,
         kind: "multimode",
@@ -252,9 +299,11 @@ export async function runMultimodePipeline(req: Request, res: Response, ctx: Run
           usage: latestUsage,
           webSearchCalls: latestWebSearchCalls,
           webSearchEnabled,
-          refsCount: refCheck.refs.length,
+         refsCount: refCheck.refs.length,
           ...(image.providerUrl ? { providerUrl: image.providerUrl } : {}),
-        };
+          ...(Array.isArray(req.body?.presetIds) && req.body.presetIds.length > 0 ? { presetIds: req.body.presetIds } : {}),
+          ...(appliedElementIds.length > 0 ? { elementIds: appliedElementIds } : {}),
+       };
         const rawBuffer = Buffer.from(image.b64, "base64");
         const embedded = await embedImageMetadataBestEffort(rawBuffer, resultFormat, meta, {
           version: ctx.packageVersion,
@@ -283,7 +332,7 @@ export async function runMultimodePipeline(req: Request, res: Response, ctx: Run
       dualEmitMultimode(res, requestId, "phase", { phase: "streaming", requestId, sequenceId, maxImages });
       let generated: { images: Array<{ b64: string; revisedPrompt?: string | null }>; usage: Record<string, number> | null; webSearchCalls?: number; extraIgnored?: number };
       if (activeProvider === "gemini-api") {
-        const r = await generateViaGeminiApi(prompt, requireRuntimeContext(ctx), {
+        const r = await generateViaGeminiApi(generationPrompt, requireRuntimeContext(ctx), {
           model: imageModel,
           size: effectiveSize,
           signal: cancelController.signal,
@@ -296,7 +345,7 @@ export async function runMultimodePipeline(req: Request, res: Response, ctx: Run
           webSearchCalls: r.webSearchCalls,
         };
       } else if (activeProvider === "agy") {
-        const r = await generateViaAgy(prompt, {
+        const r = await generateViaAgy(generationPrompt, {
           references: refCheck.refDetails,
           signal: cancelController.signal,
           requestId,
@@ -312,7 +361,7 @@ export async function runMultimodePipeline(req: Request, res: Response, ctx: Run
         const grokRefs = incomingProviderUrl
           ? [{ b64: "", url: incomingProviderUrl }, ...refCheck.refDetails]
           : refCheck.refDetails;
-        generated = await generateMultimodeViaGrok(prompt, ctx, {
+        generated = await generateMultimodeViaGrok(generationPrompt, ctx, {
           model: grokModel,
           maxImages,
           size: effectiveSize,
@@ -328,7 +377,7 @@ export async function runMultimodePipeline(req: Request, res: Response, ctx: Run
       } else {
         generated = await generateMultimodeViaResponses(
           activeProvider,
-          prompt,
+          generationPrompt,
           quality,
           effectiveSize,
           moderation,

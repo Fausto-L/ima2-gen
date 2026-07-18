@@ -26,6 +26,11 @@ import { getAllPresets } from "../lib/presets";
 type StoreSet = (p: Partial<AppState>) => void;
 type StoreGet = () => AppState;
 
+function selectedElementIds(state: AppState): string[] {
+  const ids = (state as AppState & { selectedElementIds?: unknown }).selectedElementIds;
+  return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
+}
+
 function toPresetProvider(provider: AppState["provider"]): PresetProvider {
   if (provider === "grok" || provider === "grok-api") return "grok";
   if (provider === "gemini-api") return "gemini";
@@ -127,6 +132,7 @@ export async function runVideoGenerateImpl(
       topic: get().videoTopic || undefined,
       storyboard: get().storyboardActive || undefined,
       presetIds: compiled.appliedPresetIds,
+      elementIds: selectedElementIds(get()),
       sessionId: requestSessionId,
       clientNodeId: nodeId ?? null,
       ...(providerUrl ? { providerUrl } : {}),
@@ -268,6 +274,7 @@ export async function animateImageImpl(
     const payload = {
       prompt: finalPrompt,
       presetIds: compiled.appliedPresetIds,
+      elementIds: selectedElementIds(get()),
       requestId: flightId,
       mode: "image-to-video" as const,
       sourceFilename: filename,

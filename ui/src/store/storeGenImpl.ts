@@ -32,6 +32,11 @@ import { getAllPresets } from "../lib/presets";
 type StoreSet = (p: Partial<AppState> | ((s: AppState) => Partial<AppState>)) => void;
 type StoreGet = () => AppState;
 
+function selectedElementIds(state: AppState): string[] {
+  const ids = (state as AppState & { selectedElementIds?: unknown }).selectedElementIds;
+  return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
+}
+
 function toPresetProvider(provider: AppState["provider"]): PresetProvider {
   if (provider === "grok" || provider === "grok-api") return "grok";
   if (provider === "gemini-api") return "gemini";
@@ -112,6 +117,7 @@ export async function generateMultimodeImpl(
       composerPrompt,
       composerInsertedPrompts,
       presetIds: compiled.appliedPresetIds,
+      elementIds: selectedElementIds(s),
       ...(s.providerUrlReference
         ? { providerUrl: s.providerUrlReference }
         : s.referenceImages.length
@@ -315,6 +321,7 @@ export async function runGenerateImpl(
       composerPrompt,
       composerInsertedPrompts,
       presetIds: compiled.appliedPresetIds,
+      elementIds: selectedElementIds(s),
       ...(s.providerUrlReference
         ? { providerUrl: s.providerUrlReference }
         : s.referenceImages.length

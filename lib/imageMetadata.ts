@@ -72,6 +72,7 @@ export function buildIma2MetadataPayload(meta: any = {}, context: any = {}) {
     webSearchCalls: Number.isFinite(meta.webSearchCalls) ? meta.webSearchCalls : 0,
     styleSheetApplied: Boolean(meta.styleSheetApplied),
     presetIds: stringArray(meta.presetIds),
+    elementIds: stringArray(meta.elementIds),
   };
   return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
 }
