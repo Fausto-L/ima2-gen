@@ -83,6 +83,11 @@ export function AssetsWorkspace() {
     if (!pendingAssetDetailId) return;
     const id = pendingAssetDetailId;
     useAppStore.setState({ pendingAssetDetailId: null });
+    // Seed/clear the override FIRST: an existing filtered target can still
+    // vanish from the reset page, and a stale override from a prior request
+    // must never outlive a failed fetch (Socrates round 4).
+    const existing = useAppStore.getState().assets.find((asset) => asset.id === id) ?? null;
+    setDetailAssetOverride(existing);
     // The target may be outside the current filter/page — reset filters so it
     // becomes visible (local query too, or the debounced effect restores the
     // old search), then upsert it directly when the list lacks it. The
@@ -91,7 +96,7 @@ export function AssetsWorkspace() {
     setFilters({ kind: null, folderId: null, tag: null, q: "" });
     setQuery("");
     setSelectedAssetId(id);
-    if (!useAppStore.getState().assets.some((asset) => asset.id === id)) {
+    if (!existing) {
       void getAssetById(id).then(({ asset }) => {
         useAppStore.setState((state) => ({ assets: [asset, ...state.assets.filter((entry) => entry.id !== asset.id)] }));
         setDetailAssetOverride(asset);

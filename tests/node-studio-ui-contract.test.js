@@ -290,6 +290,9 @@ describe("EN — element node lifecycle", () => {
     const workspace = read("ui/src/components/assets/AssetsWorkspace.tsx");
     assert.match(workspace, /setFilters\(\{ kind: null, folderId: null, tag: null, q: "" \}\)/);
     assert.match(workspace, /setQuery\(""\)/);
+    assert.match(workspace, /const existing = useAppStore\.getState\(\)\.assets\.find/);
+    assert.match(workspace, /setDetailAssetOverride\(existing\)/);
+    assert.match(workspace, /if \(!existing\)/);
     assert.match(workspace, /getAssetById\(id\)/);
     assert.match(workspace, /assets: \[asset, \.\.\.state\.assets\.filter\(\(entry\) => entry\.id !== asset\.id\)\]/);
     assert.match(workspace, /detailAssetOverride\?\.id === selectedAssetId \? detailAssetOverride : null/);
