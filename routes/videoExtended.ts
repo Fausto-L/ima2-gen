@@ -10,7 +10,7 @@ import { downloadVideo, generateVideoViaGrok, pollVideoUntilDone, type GrokVideo
 import { invalidateHistoryIndex } from "../lib/historyIndex.js";
 import { ACTIVE_VIDEO_PROMPT_GUIDANCE, appendVideoContinuityEntry, lineageFromVideoMetadata, readVideoSidecar } from "../lib/videoContinuity.js";
 import { assertLocalMp4, extractGeneratedVideoFrameB64, extractVideoFrame, safeGeneratedFilePath } from "../lib/videoFrameExtract.js";
-import { finishJob, INFLIGHT_RETRY_AFTER_SECONDS, isJobCanceled, isStartJobFailure, registerJobAbortController, setJobPhase, startJob } from "../lib/inflight.js";
+import { finishJob, INFLIGHT_RETRY_AFTER_SECONDS, isJobCanceled, isStartJobFailure, registerJobAbortController, setJobPhase, startJob, updateJobAdmission } from "../lib/inflight.js";
 import { makeGenerationCanceledError } from "../lib/generationCancel.js";
 import { publish } from "../lib/eventBus.js";
 import { publishJobEvent } from "../lib/ssePublish.js";
@@ -20,7 +20,7 @@ import { persistVideoArtifact } from "../lib/videoArtifactPersistence.js";
 import { deriveChildVideoLineage, normalizeVideoLineage } from "../lib/videoLineage.js";
 import { getMotionFragment, MOTION_PRESETS } from "../lib/videoMotionPresets.js";
 import { errInfo } from "../lib/errInfo.js";
-import { codedVideoError as codedError, emitPhase, extractError, retryableData } from "../lib/videoExtendedHelpers.js";
+import { codedVideoError as codedError, emitPhase, envDeadline, extractError, requestSignal, requirePrompt, retryableData } from "../lib/videoExtendedHelpers.js";
 
 type ParentMetadata = {
   provider?: unknown; model?: unknown;
@@ -34,6 +34,7 @@ export type VideoExtendedDependencies = {
   generateVideo?: (prompt: string, ctx: RouteRuntimeContext, options: GrokVideoOptions) => Promise<GrokVideoGenerateResult>;
   persistArtifact?: typeof persistVideoArtifact;
   createFilename?: (ctx: RuntimeContext) => string;
+  readSidecar?: typeof readVideoSidecar;
 };
 
 function validationError(value: unknown): { error: string; code: string; status: number } | null {
@@ -175,25 +176,6 @@ async function saveVideoResult(
   return { filename, url: `/generated/${encodeURIComponent(filename)}`, sourceUrl: options.videoUrl };
 }
 
-function envDeadline(name: string, fallbackMs: number): number {
-  const value = Number(process.env[name]);
-  return Number.isFinite(value) && value >= 1000 ? value : fallbackMs;
-}
-
-function requestSignal(req: Request, res: Response, timeoutMs: number): AbortSignal {
-  const ac = new AbortController();
-  const abort = () => {
-    if (!res.writableEnded) ac.abort();
-  };
-  req.on("aborted", abort);
-  res.on("close", abort);
-  return AbortSignal.any([ac.signal, AbortSignal.timeout(timeoutMs)]);
-}
-
-function requirePrompt(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
 function extractOutputText(data: Record<string, unknown>): string {
   const output = Array.isArray(data.output) ? data.output : [];
   const texts: string[] = [];
@@ -211,6 +193,7 @@ function extractOutputText(data: Record<string, unknown>): string {
 export function registerVideoExtendedRoutes(app: Express, ctxRaw: RouteRuntimeContext, dependencies: VideoExtendedDependencies = {}) {
   const ctx = requireRuntimeContext(ctxRaw);
   const extractFrame = dependencies.extractFrame ?? ((dir, filename, position, options) => extractGeneratedVideoFrameB64(dir, filename, position, options));
+  const readSidecar = dependencies.readSidecar ?? readVideoSidecar;
   const generateVideo = dependencies.generateVideo ?? generateVideoViaGrok;
   const persistArtifact = dependencies.persistArtifact ?? persistVideoArtifact;
   const createFilename = dependencies.createFilename ?? ((runtime) => `${Date.now()}_${randomBytes(runtime.config.ids.generatedHexBytes).toString("hex")}.mp4`);
@@ -249,14 +232,21 @@ export function registerVideoExtendedRoutes(app: Express, ctxRaw: RouteRuntimeCo
   // --- Last-frame image-to-video extension ---
   app.post("/api/video/extend", async (req: Request, res: Response) => {
     const requestId = normalizeBodyRequestId(req.body?.requestId, req.id);
+    const canceledResponse = () => {
+      // A canceled job gets no error event from this handler (abortJob already
+      // recorded + published the canceled terminal state when it was active).
+      const canceled = makeGenerationCanceledError() as Error & { status?: number; code?: string };
+      if (!res.headersSent) res.status(canceled.status ?? 499).json({ requestId, error: canceled.message, code: canceled.code ?? "GENERATION_CANCELED", status: canceled.status ?? 499 });
+    };
     // Admit the job BEFORE any await so a client cancel (DELETE inflight) can
     // never lose the race against preflight (audit blocker B2). Prompt/meta
     // are provisional here; authoritative values are resolved below.
-    const startedEarly = startJob({ requestId, kind: "video", prompt: String(req.body?.prompt ?? ""), meta: { workflow: "last-frame-i2v", sourceVideoId: req.body?.sourceVideoId ?? null } });
+    const startedEarly = startJob({ requestId, kind: "video", prompt: String(req.body?.prompt ?? ""), meta: { workflow: "last-frame-i2v", sourceVideoId: req.body?.sourceVideoId ?? null }, respectCanceledTombstone: true });
     if (startedEarly && isStartJobFailure(startedEarly)) {
       // Duplicate/capacity: respond WITHOUT publishing — the requestId channel
       // belongs to the ACTIVE job and an error event here would corrupt its
       // terminal stream (audit blocker B1).
+      if (startedEarly.code === "GENERATION_CANCELED") { canceledResponse(); return; }
       if (startedEarly.code === "TOO_MANY_JOBS") res.setHeader("Retry-After", String(INFLIGHT_RETRY_AFTER_SECONDS));
       const status = startedEarly.code === "TOO_MANY_JOBS" ? 429 : 409;
       res.status(status).json({ requestId, error: startedEarly.code === "TOO_MANY_JOBS" ? "Too many concurrent generation jobs" : "Request ID already in use", code: startedEarly.code, status });
@@ -265,6 +255,7 @@ export function registerVideoExtendedRoutes(app: Express, ctxRaw: RouteRuntimeCo
     const cancelController = new AbortController();
     registerJobAbortController(requestId, cancelController);
     const fail = (error: unknown) => {
+      if (isJobCanceled(requestId)) { canceledResponse(); return; }
       const info = errInfo(error);
       const status = info.status ?? 500;
       const code = info.code ?? "VIDEO_EXTEND_FAILED";
@@ -273,14 +264,6 @@ export function registerVideoExtendedRoutes(app: Express, ctxRaw: RouteRuntimeCo
       finishJob(requestId, { status: "error", httpStatus: status, errorCode: code, meta: { stage: "preflight" } });
       if (!res.headersSent) res.status(status).json(payload);
     };
-    // A cancel that arrived during admission/preflight must stop before any
-    // provider work (B2). Mirror the async catch's rule: a canceled job gets
-    // no error event (cancel is already the recorded terminal state).
-    if (isJobCanceled(requestId) || cancelController.signal.aborted) {
-      const canceled = makeGenerationCanceledError() as Error & { status?: number; code?: string };
-      if (!res.headersSent) res.status(canceled.status ?? 499).json({ requestId, error: canceled.message, code: canceled.code ?? "GENERATION_CANCELED", status: canceled.status ?? 499 });
-      return;
-    }
 
     let sourceVideoId: string;
     let parent: ParentMetadata | null;
@@ -297,7 +280,7 @@ export function registerVideoExtendedRoutes(app: Express, ctxRaw: RouteRuntimeCo
         const info = errInfo(error);
         throw codedError(info.message || "source video not found", info.status === 404 ? 404 : 400, info.status === 404 ? "VIDEO_NOT_FOUND" : "VIDEO_SOURCE_LOCAL_ONLY");
       });
-      parent = await readVideoSidecar(ctx.config.storage.generatedDir, sourceVideoId) as ParentMetadata | null;
+      parent = await readSidecar(ctx.config.storage.generatedDir, sourceVideoId) as ParentMetadata | null;
       const parentLineage = normalizeVideoLineage(parent?.videoLineage);
       if (parentLineage && parentLineage.id !== sourceVideoId) throw codedError("source lineage id does not match filename", 500, "VIDEO_LINEAGE_INVALID");
       prompt = inheritedPrompt(req.body?.prompt, parent);
@@ -323,6 +306,14 @@ export function registerVideoExtendedRoutes(app: Express, ctxRaw: RouteRuntimeCo
       fail(error);
       return;
     }
+
+    // Post-preflight cancel check (B2 round 2): a DELETE can only interleave
+    // during the preflight awaits, so this is the earliest point that can
+    // actually observe it — before 202 and before any provider work.
+    if (isJobCanceled(requestId) || cancelController.signal.aborted) { canceledResponse(); return; }
+    // Install authoritative job metadata now that inheritance is resolved
+    // (admission was provisional).
+    updateJobAdmission(requestId, { prompt, meta: { workflow: "last-frame-i2v", sourceVideoId, provider, model } });
 
     emitPhase(requestId, "queued");
     res.status(202).json({ ok: true, requestId, sourceVideoId, workflow: "last-frame-i2v" });

@@ -9,7 +9,10 @@ const read = (path) => readFileSync(join(root, path), "utf8");
 
 test("ResultActions extends a video by filename through the singleton SSE channel", () => {
   const source = read("ui/src/components/ResultActions.tsx");
-  assert.match(source, /import \{[^}]*subscribe[^}]*\} from "\.\.\/lib\/eventChannel"/s);
+  const stream = read("ui/src/lib/videoExtendStream.ts");
+  assert.match(source, /import \{ postVideoExtendStream[^}]* \} from "\.\.\/lib\/videoExtendStream"/);
+  assert.match(stream, /import \{[^}]*subscribe[^}]*\} from "\.\/eventChannel"/s);
+  assert.match(stream, /whenConnected\(\)\.then\(\(\) => submitVideoExtend/);
   assert.match(source, /const requestId = `vext_\$\{crypto\.randomUUID\(\)\}`/);
   assert.match(source, /sourceVideoId: actionImage\.filename/);
   assert.match(source, /await postVideoExtendStream\(/);
@@ -19,9 +22,10 @@ test("ResultActions extends a video by filename through the singleton SSE channe
 
 test("ResultActions exposes pending, retry, cancellation, and immediate history insertion", () => {
   const source = read("ui/src/components/ResultActions.tsx");
+  const stream = read("ui/src/lib/videoExtendStream.ts");
   assert.match(source, /disabled=\{extendState === "pending"\}/);
   assert.match(source, /extendState === "error"\s*\?\s*t\("gallery\.retry"\)/);
-  assert.match(source, /cancelInflight\((?:payload\.)?requestId\)/);
+  assert.match(stream, /cancelInflight\(payload\.requestId\)/);
   assert.match(source, /addHistoryItem\(toVideoHistoryItem\(done, actionImage\)\)/);
   assert.match(source, /onClick=\{extend\}/);
 });

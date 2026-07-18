@@ -14,7 +14,8 @@ test("key config mutations use a process-wide queue and unique temp names", () =
 
 test("extended video operations combine disconnect and deadline signals", () => {
   const video = source("routes/videoExtended.ts");
-  assert.match(video, /AbortSignal\.any\(\[ac\.signal, AbortSignal\.timeout\(timeoutMs\)\]\)/);
+  const helpers = source("lib/videoExtendedHelpers.ts");
+  assert.match(helpers, /AbortSignal\.any\(\[ac\.signal, AbortSignal\.timeout\(timeoutMs\)\]\)/);
   assert.match(video, /IMA2_VIDEO_EDIT_TIMEOUT_MS/);
   assert.match(video, /IMA2_VIDEO_EXTEND_TIMEOUT_MS/);
   assert.match(video, /IMA2_VIDEO_ANALYZE_TIMEOUT_MS/);

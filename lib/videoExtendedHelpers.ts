@@ -1,3 +1,4 @@
+import type { Request, Response } from "express";
 import { publish } from "./eventBus.js";
 import { errInfo } from "./errInfo.js";
 import { makeGenerationCanceledError } from "./generationCancel.js";
@@ -31,4 +32,23 @@ export function emitPhase(requestId: string, phase: string): void {
 
 export function retryableData(error: unknown): { retryable: true } | Record<string, never> {
   return (error as { retryable?: unknown })?.retryable === true ? { retryable: true } : {};
+}
+
+export function envDeadline(name: string, fallbackMs: number): number {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value >= 1000 ? value : fallbackMs;
+}
+
+export function requestSignal(req: Request, res: Response, timeoutMs: number): AbortSignal {
+  const ac = new AbortController();
+  const abort = () => {
+    if (!res.writableEnded) ac.abort();
+  };
+  req.on("aborted", abort);
+  res.on("close", abort);
+  return AbortSignal.any([ac.signal, AbortSignal.timeout(timeoutMs)]);
+}
+
+export function requirePrompt(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }

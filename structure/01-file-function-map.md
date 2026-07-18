@@ -74,13 +74,13 @@ routes/
 |---|---:|---|
 | `server.ts` | 523 | Express bootstrap, middleware wiring, OAuth startup, runtime advertisement, port fallback, post-listen MCP restore, coordinated shutdown, route registration, static serving |
 | `config.ts` | 376 | Centralized runtime config (env > `~/.ima2/config.json` > defaults), prompt import/index caps, web-search/reasoning-effort defaults, API-provider defaults, and backward-compatible flat re-exports |
-| `routes/index.ts` | 85 | Route registration hub: health, capabilities, events, storage, metadata, history, imageImport, sessions, edit, nodes, multimode, generate, agent, prompt builder, generationRequestLog, annotations, canvasVersions, comfy, prompts, prompt import, keys, auth, quota, grok, agy, video, videoExtended, and (when `features.cardNews`) cardNews |
+| `routes/index.ts` | 87 | Route registration hub: health, capabilities, events, storage, metadata, history, imageImport, sessions, edit, nodes, multimode, generate, agent, prompt builder, generationRequestLog, annotations, canvasVersions, comfy, prompts, prompt import, keys, auth, quota, grok, agy, video, videoExtended, and (when `features.cardNews`) cardNews |
 | `routes/capabilities.ts` | 35 | `GET /api/capabilities` — agent-facing runtime defaults; `GET/PATCH /api/config/grok-planner` — Grok planner model query/update |
 | `routes/generate.ts` | 13 | Classic generation API route wiring |
 | `routes/edit.ts` | 407 | Edit API, mask validation, cancellation, OAuth/API edit response save, provider/web-search/reasoning-effort plumbing |
 | `routes/multimode.ts` | 10 | `POST /api/generate/multimode` route wiring |
 | `routes/video.ts` | 513 | `POST /api/video/generate` SSE: Grok video T2V/I2V/Ref2V, active prompt guard, continuation lineage, sidecar persistence |
-| `routes/videoExtended.ts` | 495 | Video edit, extension, frame extraction, and Grok 4.3 first/last-frame analysis |
+| `routes/videoExtended.ts` | 486 | Video edit, extension, frame extraction, and Grok 4.3 first/last-frame analysis |
 | `routes/nodes.ts` | 28 | Node generation and node fetch route wiring |
 | `routes/sessions.ts` | 318 | SQLite-backed session list/load/save/rename/delete, style-sheet get/put/enable/extract, graph save |
 | `routes/history.ts` | 234 | History list, cursor pagination, favorites-only filtering, grouped gallery, soft delete (OS trash), restore, gallery favorite toggle, permanent delete |
@@ -147,7 +147,7 @@ routes/
 | `lib/systemTrash.ts` | 21 | Cross-platform OS-trash helper wrapping the `trash` dependency |
 | `lib/db.ts` | 354 | SQLite bootstrap and migrations: sessions, nodes, edges, inflight, prompts, prompt folders, canvas versions |
 | `lib/nodeStore.ts` | 92 | Node image and metadata load/save |
-| `lib/inflight.ts` | 349 | SQLite-backed active job registry for classic/node/multimode, abort controllers, cancel state, and short-lived terminal job snapshots |
+| `lib/inflight.ts` | 376 | SQLite-backed active job registry for classic/node/multimode, abort controllers, cancel state, and short-lived terminal job snapshots |
 | `lib/logger.ts` | 162 | Safe structured logging, redaction, level filtering, and test sink helpers |
 | `lib/requestLogger.ts` | 50 | API-only request lifecycle logging and sanitized request ID middleware |
 | `lib/codexDetect.ts` | 154 | Codex OAuth session detection helper |
@@ -155,7 +155,7 @@ routes/
 | `lib/errorClassify.ts` | 110 | Upstream/OAuth error classifier for stable error codes, including provider validation errors |
 | `lib/generationErrors.ts` | 243 | Generation error normalization, retry classification, status mapping |
 | `lib/historyList.ts` | 200 | History reconstruction from generated assets, sidecars, embedded XMP metadata fallback, session-aware rows |
-| `lib/videoContinuity.ts` | 189 | Video active-prompt guard, generated video sidecar lineage read/normalize/append, max-4 continuity retention, planner context formatting |
+| `lib/videoContinuity.ts` | 192 | Video active-prompt guard, generated video sidecar lineage read/normalize/append, max-4 continuity retention, planner context formatting |
 | `lib/videoFrameExtract.ts` | 100 | Generated-dir-safe MP4 validation and ffmpeg frame extraction for video frame/analyze/continue workflows |
 | `lib/grokVideoAdapter.ts` | 490 | Grok video planner and xAI video generation adapter, including continuity-aware prompt planning and model fallback metadata |
 | `lib/localImportStore.ts` | 115 | Validates raw PNG/JPEG/WebP body, writes timestamped `imported-*` to generated/, embeds XMP metadata, returns GenerateItem-shaped row |

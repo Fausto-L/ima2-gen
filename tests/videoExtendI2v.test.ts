@@ -205,6 +205,43 @@ test("cancel during extraction ends with exactly one terminal event and zero pro
   }
 });
 
+test("cancel during preflight (sidecar await) stops before 202 and provider work", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ima2-extend-preflight-cancel-"));
+  await makeParent(dir);
+  const requestId = "i2v-preflight-cancel";
+  let providerCalls = 0;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const seen: BusEvent[] = [];
+  const stopWatch = subscribe((event) => { if (event.jobId === requestId && (event.event === "done" || event.event === "error")) seen.push(event); });
+  const generate = successfulGenerator();
+  const { server, url } = await makeApp(dir, {
+    readSidecar: async (d: string, f: string) => { await gate; return readFile(join(d, `${f}.json`), "utf8").then(JSON.parse); },
+    extractFrame: async () => "png",
+    generateVideo: async (prompt, ctx, options) => { providerCalls += 1; return generate(prompt, ctx, options); },
+  });
+  try {
+    const pending = postExtend(url, { sourceVideoId: "root.mp4", requestId, prompt: "continue" });
+    abortJob(requestId);
+    release();
+    const response = await pending;
+    assert.equal(response.status, 499);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(providerCalls, 0, "provider must not run after preflight cancel");
+    // Ordering-dependent: if abort lands after admission it publishes the
+    // canceled error; if it races ahead of admission the tombstone silently
+    // denies startJob. Either way: no done, at most one canceled error.
+    assert.equal(seen.filter((e) => e.event === "done").length, 0, "no done after preflight cancel");
+    assert.ok(seen.every((e) => e.data?.code === "GENERATION_CANCELED"), `only canceled errors allowed, saw ${seen.map((e) => e.data?.code)}`);
+    assert.ok(seen.length <= 1, `at most one terminal event, saw ${seen.length}`);
+  } finally {
+    release();
+    stopWatch();
+    await close(server);
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("unreadable parent sidecar fails closed with VIDEO_PARENT_METADATA_INVALID and zero provider calls", async () => {
   const dir = await mkdtemp(join(tmpdir(), "ima2-extend-corrupt-"));
   await writeFile(join(dir, "root.mp4"), fakeMp4());

@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useAppStore } from "../store/useAppStore";
 import { useI18n } from "../i18n";
-import { cancelInflight, exportImageToComfy } from "../lib/api";
-import { armStreamTimeout, ensureConnected, subscribe, whenConnected } from "../lib/eventChannel";
-import { parseSseErrorPayload } from "../lib/sseStreamError";
-import { toVideoHistoryItem, type VideoExtendDone } from "../lib/videoHistoryItem";
+import { exportImageToComfy } from "../lib/api";
+import { toVideoHistoryItem } from "../lib/videoHistoryItem";
+import { postVideoExtendStream } from "../lib/videoExtendStream";
 import { isVideoItem, extractFirstFrame, extractMidFrame, extractLastFrame } from "../lib/videoMedia";
 import { continueFromItem, continueFromItemAsUrl } from "../lib/continueFromItem";
 import { ResultMetadataModal } from "./ResultMetadataModal";
@@ -13,69 +12,6 @@ import type { GenerateItem } from "../types";
 interface ResultActionsProps { imageOverride?: GenerateItem | null; onAfterDeleteFocus?: () => void }
 
 type ExtendState = "idle" | "pending" | "error";
-type VideoExtendRequest = {
-  requestId: string;
-  sourceVideoId: string;
-  prompt?: string;
-  provider: "grok" | "grok-api";
-  model?: string;
-};
-
-async function submitVideoExtend(payload: VideoExtendRequest, signal: AbortSignal): Promise<void> {
-  try {
-    const response = await fetch("/api/video/extend", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal,
-    });
-    const data = await response.json().catch(() => ({})) as Record<string, unknown>;
-    if (!response.ok) throw parseSseErrorPayload(data, `Request failed: ${response.status}`);
-    if (response.status !== 202 || data.requestId !== payload.requestId ||
-      data.sourceVideoId !== payload.sourceVideoId || data.workflow !== "last-frame-i2v") {
-      throw new Error("Video extension returned an invalid acceptance response");
-    }
-  } catch (error) {
-    throw error instanceof Error ? error : new Error(String(error));
-  }
-}
-
-function postVideoExtendStream(payload: VideoExtendRequest, signal: AbortSignal): Promise<VideoExtendDone> {
-  ensureConnected();
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    let clearTimer = () => {};
-    let unsubscribe = () => {};
-    const finish = (complete: () => void) => {
-      if (settled) return;
-      settled = true;
-      clearTimer();
-      unsubscribe();
-      signal.removeEventListener("abort", onAbort);
-      complete();
-    };
-    const cancelJob = () => void cancelInflight(payload.requestId).catch(() => undefined);
-    const onAbort = () => finish(() => {
-      cancelJob();
-      reject(new DOMException("Aborted", "AbortError"));
-    });
-    unsubscribe = subscribe(payload.requestId, null, (event, data) => {
-      if (event === "done") finish(() => resolve(data as unknown as VideoExtendDone));
-      else if (event === "error") finish(() =>
-        reject(parseSseErrorPayload(data, "Video extension failed")));
-    });
-    clearTimer = armStreamTimeout(() => finish(() => {
-      cancelJob(); reject(new Error("Video extension stream timed out"));
-    }));
-    if (signal.aborted) return onAbort();
-    signal.addEventListener("abort", onAbort, { once: true });
-    // Await SSE transport open BEFORE submitting (audit blocker B3): on a fresh
-    // connection a terminal event emitted before the server-side subscription
-    // is installed would be lost, hanging the promise until timeout.
-    const submission = whenConnected().then(() => submitVideoExtend(payload, signal));
-    submission.catch((error) => finish(() => reject(error)));
-  });
-}
 
 const CANVAS_MODE_PROMPT_ID = "canvas-mode-context";
 const CANVAS_MODE_PROMPT_NAME = "Canvas Mode";

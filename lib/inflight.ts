@@ -1,7 +1,7 @@
 import { config } from "../config.js";
 import { getDb } from "./db.js";
 import { publish } from "./eventBus.js";
-import { logEvent } from "./logger.js";
+import { logError, logEvent } from "./logger.js";
 
 // SQLite-backed inflight job registry.
 // Tracks generation requests that are currently running on the server so clients
@@ -57,7 +57,7 @@ const ORPHAN_CONTROLLER_TTL_MS = Math.max(config.inflight.ttlMs * 6, 60 * 60 * 1
 export const MAX_CONCURRENT_JOBS = Math.max(1, Math.trunc(Number(config.limits.maxParallel) || 24));
 export const INFLIGHT_RETRY_AFTER_SECONDS = 5;
 
-export type StartJobFailureCode = "REQUEST_ID_IN_USE" | "TOO_MANY_JOBS";
+export type StartJobFailureCode = "REQUEST_ID_IN_USE" | "TOO_MANY_JOBS" | "GENERATION_CANCELED";
 export type StartJobResult = { ok: true } | { ok: false; code: StartJobFailureCode };
 
 export function isStartJobFailure(r: StartJobResult): r is { ok: false; code: StartJobFailureCode } {
@@ -66,11 +66,13 @@ export function isStartJobFailure(r: StartJobResult): r is { ok: false; code: St
 
 // Phases: "queued" → "streaming" (upstream connection open, waiting for image)
 //                 → "decoding" (b64 received, writing to disk)
-export function startJob({ requestId, kind, prompt, meta = {} }: {
+export function startJob({ requestId, kind, prompt, meta = {}, respectCanceledTombstone = false }: {
   requestId: string;
   kind: string;
   prompt?: string | null;
   meta?: Record<string, unknown>;
+  /** Opt-in: deny admission when a fresh canceled tombstone exists (extend route only — queue retry reuses requestIds legitimately). */
+  respectCanceledTombstone?: boolean;
 }): StartJobResult | undefined {
   if (!requestId) return;
   purgeStaleJobs();
@@ -79,6 +81,13 @@ export function startJob({ requestId, kind, prompt, meta = {} }: {
   }
   if (countActiveJobs() >= MAX_CONCURRENT_JOBS) {
     return { ok: false, code: "TOO_MANY_JOBS" };
+  }
+  // Opt-in tombstone respect (extend audit B2 round 3): a DELETE that raced
+  // ahead of admission must still win. Without this, startJob deleted the
+  // tombstone and ran a job the user already canceled. Off by default — the
+  // agent queue's retry path reuses requestIds after cancel legitimately.
+  if (respectCanceledTombstone && terminalJobs.get(requestId)?.status === "canceled") {
+    return { ok: false, code: "GENERATION_CANCELED" };
   }
   const startedAt = Date.now();
   const normalizedPrompt = typeof prompt === "string" ? prompt.slice(0, 500) : "";
@@ -180,6 +189,24 @@ export function setJobPhase(requestId: string | null | undefined, phase: string)
     .prepare("UPDATE inflight SET phase = ?, phase_at = ? WHERE request_id = ?")
     .run(phase, Date.now(), requestId);
   logEvent("inflight", "phase", { requestId, kind: j.kind, phase });
+}
+
+/**
+ * Replace a job's prompt/meta after admission when the authoritative values
+ * are only known post-preflight (e.g. extend admission is provisional until
+ * parent inheritance resolves). No-op for unknown or terminal jobs.
+ */
+export function updateJobAdmission(requestId: string | null | undefined, { prompt, meta }: { prompt?: string | null; meta?: Record<string, unknown> }): void {
+  if (!requestId || !getJob(requestId)) return;
+  const normalizedPrompt = typeof prompt === "string" ? prompt.slice(0, 500) : "";
+  const normalizedMeta = normalizeMeta(meta ?? {});
+  try {
+    getDb()
+      .prepare(`UPDATE inflight SET prompt = ?, meta = ? WHERE request_id = ?`)
+      .run(normalizedPrompt, JSON.stringify(normalizedMeta), requestId);
+  } catch (err: unknown) {
+    logError("inflight", "update_admission:error", err);
+  }
 }
 
 export function finishJob(requestId: string | null | undefined, options: any = {}) {

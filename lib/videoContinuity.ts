@@ -54,8 +54,11 @@ export async function readVideoSidecar(generatedDir: string, filename: string): 
   let raw: string;
   try {
     raw = await readFile(join(generatedDir, `${safe}.json`), "utf-8");
-  } catch {
-    return null; // no sidecar — legitimate for pre-lineage artifacts
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return null; // no sidecar — legitimate for pre-lineage artifacts
+    // EACCES/EISDIR/other present-but-unreadable failures fail closed, same as
+    // malformed JSON — silently treating them as "no sidecar" resets lineage.
+    throw Object.assign(new Error("parent video metadata is unreadable"), { status: 500, code: "VIDEO_PARENT_METADATA_INVALID" });
   }
   try {
     return JSON.parse(raw) as VideoMeta;
