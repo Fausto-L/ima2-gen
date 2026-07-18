@@ -46,6 +46,7 @@ status: planned
 | `NodeCanvas.tsx:67-74` | `onConnect`가 handle 의미를 해석하지 않고 `connectNodes`를 바로 호출한다. | canvas boundary에서 descriptor resolve → `canConnectPorts` → reason surface 순서를 강제한다. |
 | `NodeCanvas.tsx:76-90` | 빈 공간 port drop은 즉시 generic child를 만든다. | filtered palette open으로 교체한다. |
 | `NodeCanvas.tsx:111-114` | empty graph는 legacy plus button만 보이며 ReactFlow 자체도 렌더하지 않는다. | ReactFlow는 항상 mount하고 empty state를 overlay로 렌더해야 Space/palette/fitView가 같은 좌표계를 쓴다. |
+| `ImageNode.tsx:208-215,376-383` | handle은 `target-{top,right,bottom,left}` / `source-{top,right,bottom,left}`라는 위치 ID만 가진다. semantic type/role attribute는 없다. | `ImageNode`를 바꾸지 않고 `node.type + flow handle ID`를 논리 포트로 번역하는 catalog가 필요하다. |
 | `NodeCanvasEmptyState.tsx:31-32` | 31은 DOM-order 주석, 실제 component 선언은 32다. 3택 순서는 이미 정확하다. | component 수정 없이 consumer wiring을 우선한다. |
 | `NodeTemplatePicker.tsx:72` | seed/user/search/card/copy/rename/delete UI는 있지만 data owner가 없다. | 서버 summary API와 callback만 주입한다. |
 | `NodeCommandPalette.tsx:31,40,61` | 31은 ranking, 40은 exact type equality filter, 61은 active insertion이다. | filter만 shared matrix로 교체하고 기존 keyboard/ranking을 보존한다. |
@@ -97,6 +98,99 @@ commitGraphSnapshot(input: {
 
 action은 dangling edge, duplicate node/edge ID, element discriminator 누락을 먼저 검사한다. 성공 시 `deriveParentServerNodeIds` 후 단 한 번의 `set({ graphNodes, graphEdges })`, 단 한 번의 `scheduleGraphSave()`를 수행한다. 실패 시 `set`을 호출하지 않는다. 이것이 현재 undo 부재 환경의 branch rollback 경계다.
 
+## Semantic port catalog — 위치 handle을 논리 포트로 번역한다
+
+결정: `NEW ui/src/lib/nodePortCatalog.ts`가 유일한 `node.type × flowHandleId → logical port` 정본이다. 현재 `ImageNode.tsx`의 handle ID는 그대로 두며 이 파일은 read-only다. `data.kind`나 template label로 포트 의미를 추론하지 않는다. 현재 실제 renderer 기준 node role은 `imageNode`와 `elementReferenceNode` 둘뿐이다.
+
+### 정확한 mapping table
+
+| React Flow `node.type` | 기존 flow handle ID | logical port ID | direction | `NodePortType` | cardinality/equivalent handles |
+|---|---|---|---|---|---|
+| `imageNode` | `target-top` | `image-input` | input | `image` | single; 모든 `target-*`는 같은 logical input |
+| `imageNode` | `target-right` | `image-input` | input | `image` | single; 모든 `target-*`는 같은 logical input |
+| `imageNode` | `target-bottom` | `image-input` | input | `image` | single; 모든 `target-*`는 같은 logical input |
+| `imageNode` | `target-left` | `image-input` | input | `image` | single; 모든 `target-*`는 같은 logical input |
+| `imageNode` | `source-top` | `image-output` | output | `image` | many consumers; 모든 `source-*`는 같은 logical output |
+| `imageNode` | `source-right` | `image-output` | output | `image` | many consumers; 모든 `source-*`는 같은 logical output |
+| `imageNode` | `source-bottom` | `image-output` | output | `image` | many consumers; 모든 `source-*`는 같은 logical output |
+| `imageNode` | `source-left` | `image-output` | output | `image` | many consumers; 모든 `source-*`는 같은 logical output |
+| `elementReferenceNode` | `refs` | `element-refs-output` | output | `element-refs` | many consumers; `refs`만 equivalent |
+| `elementReferenceNode` | `notes` | `element-notes-output` | output | `element-notes` | many consumers; `notes`만 equivalent |
+
+`elementReferenceNode`에는 input handle이 없다. 현재 별도 prompt node/renderer도 없으므로 `notes → prompt`를 image target에 거짓 매핑하지 않는다. notes port drag는 palette에서 prompt-compatible command가 생기기 전까지 “후보 없음”을 표시하고, direct `notes → imageNode`는 matrix의 `TYPE_MISMATCH`로 차단한다. 080 seed의 `prompt/generator/result` data kind도 renderer가 모두 `imageNode`인 동안 위 image mapping만 사용한다.
+
+template seed의 legacy edge handle `output`/`input`은 `normalizeTemplateGraph()`에서 commit 전에 각각 `source-right`/`target-left`로 바꾼다. runtime catalog에 렌더되지 않는 가짜 `output`/`input` handle을 등록하지 않는다.
+
+### `nodePortCatalog.ts` executable shape
+
+```ts
+import type { GraphNode } from "../store/storeTypes";
+import type { NodePortType, PortDescriptor } from "./nodeCompatibility";
+
+const IMAGE_TARGET_HANDLES = ["target-top", "target-right", "target-bottom", "target-left"] as const;
+const IMAGE_SOURCE_HANDLES = ["source-top", "source-right", "source-bottom", "source-left"] as const;
+
+type PortBinding = {
+  nodeType: "imageNode" | "elementReferenceNode";
+  flowHandleId: string;
+  logicalPortId: string;
+  direction: "input" | "output";
+  type: NodePortType;
+  acceptsMany: boolean;
+  equivalentHandleIds: readonly string[];
+};
+
+export const NODE_PORT_BINDINGS: readonly PortBinding[] = [
+  ...IMAGE_TARGET_HANDLES.map((flowHandleId) => ({
+    nodeType: "imageNode" as const, flowHandleId, logicalPortId: "image-input",
+    direction: "input" as const, type: "image" as const, acceptsMany: false,
+    equivalentHandleIds: IMAGE_TARGET_HANDLES,
+  })),
+  ...IMAGE_SOURCE_HANDLES.map((flowHandleId) => ({
+    nodeType: "imageNode" as const, flowHandleId, logicalPortId: "image-output",
+    direction: "output" as const, type: "image" as const, acceptsMany: true,
+    equivalentHandleIds: IMAGE_SOURCE_HANDLES,
+  })),
+  { nodeType: "elementReferenceNode", flowHandleId: "refs", logicalPortId: "element-refs-output",
+    direction: "output", type: "element-refs", acceptsMany: true, equivalentHandleIds: ["refs"] },
+  { nodeType: "elementReferenceNode", flowHandleId: "notes", logicalPortId: "element-notes-output",
+    direction: "output", type: "element-notes", acceptsMany: true, equivalentHandleIds: ["notes"] },
+];
+
+export function resolveNodePort(
+  node: GraphNode,
+  flowHandleId: string | null | undefined,
+  expectedDirection: "input" | "output",
+): PortDescriptor | null {
+  if (!flowHandleId) return null;
+  const nodeType = node.type === "elementReferenceNode" ? "elementReferenceNode"
+    : node.type === "imageNode" ? "imageNode" : null;
+  if (!nodeType) return null;
+  const binding = NODE_PORT_BINDINGS.find((entry) =>
+    entry.nodeType === nodeType && entry.flowHandleId === flowHandleId && entry.direction === expectedDirection);
+  return binding ? { nodeId: node.id, handleId: binding.flowHandleId,
+    logicalPortId: binding.logicalPortId, equivalentHandleIds: binding.equivalentHandleIds,
+    direction: binding.direction, type: binding.type, acceptsMany: binding.acceptsMany } : null;
+}
+```
+
+`PortDescriptor`에는 `logicalPortId`와 `equivalentHandleIds`를 추가한다. `nodeCompatibility.ts`의 duplicate/cardinality 검사는 raw handle 하나가 아니라 equivalent set을 사용해야 한다.
+
+```ts
+function edgeUsesPort(edgeHandle: string | null | undefined, port: PortDescriptor): boolean {
+  return typeof edgeHandle === "string" && port.equivalentHandleIds.includes(edgeHandle);
+}
+
+function hasDuplicateEdge(source: PortDescriptor, target: PortDescriptor, edges: readonly GraphEdge[]) {
+  return edges.some((edge) => edge.source === source.nodeId && edge.target === target.nodeId
+    && edgeUsesPort(edge.sourceHandle, source) && edgeUsesPort(edge.targetHandle, target));
+}
+
+function hasExistingInput(target: PortDescriptor, edges: readonly GraphEdge[]) {
+  return edges.some((edge) => edge.target === target.nodeId && edgeUsesPort(edge.targetHandle, target));
+}
+```
+
 ## File change map
 
 | Op | Path | Diff-level change |
@@ -105,7 +199,8 @@ action은 dangling edge, duplicate node/edge ID, element discriminator 누락을
 | MODIFY | `routes/index.ts` | `registerNodeTemplateRoutes` import/register. |
 | GENERATED | `routes/nodeTemplates.js`, `routes/index.js` | `npm run build:server` 산출물. 직접 편집하지 않는다. |
 | NEW | `ui/src/lib/api-node-templates.ts` | summary/graph DTO와 list/create/instantiate/update/delete client. |
-| NEW | `ui/src/lib/nodeStudioCatalog.ts` | command IDs, React Flow node type, port definitions, handle→descriptor resolve, compatibility reason→i18n key. |
+| NEW | `ui/src/lib/nodeStudioCatalog.ts` | command IDs, React Flow node type, typed command input/output definitions, compatibility reason→i18n key. |
+| NEW | `ui/src/lib/nodePortCatalog.ts` | 위 exact table, `resolveNodePort`, equivalent-handle semantics. 기존 positional `ImageNode` handles를 그대로 해석한다. |
 | NEW | `ui/src/lib/nodeStudioGraph.ts` | template normalize, atomic snapshot validation/build, palette insert, element drop node build, upstream missing-element 탐색. |
 | NEW | `ui/src/lib/nodeElementInputs.ts` | 실행 직전 연결된 element를 최신 Assets record로 resolve하고 refs/notes/revision snapshot을 materialize. |
 | NEW | `ui/src/components/node-canvas/useNodeStudioController.ts` | picker/palette/branch state, focus restoration, keyboard guards, REST load/copy, connect/drop handlers, fitView scheduling. |
@@ -118,7 +213,7 @@ action은 dangling edge, duplicate node/edge ID, element discriminator 누락을
 | MODIFY | `ui/src/components/NodeBatchBar.tsx` | exactly-one selected source일 때 Branch action을 노출하고 controller dialog를 연다. element node는 generation count에서 제외한다. |
 | MODIFY | `ui/src/components/Sidebar.tsx` | node mode에서 `NodeElementTray`를 mount해 canvas와 동시에 보이는 drag source를 제공한다. |
 | MODIFY | `ui/src/components/node-canvas/ElementReferenceNode.tsx` | shared `ElementReferenceNodeData` type을 사용하고 resolved revision/missing status를 표현한다. |
-| MODIFY | `ui/src/lib/nodeCompatibility.ts` | `canConnectPortTypes(outputType, inputType)` export; `canConnectPorts`도 이를 사용해 matrix 정본을 하나로 유지. |
+| MODIFY | `ui/src/lib/nodeCompatibility.ts` | `NodePortType` 기반 descriptor에 logical/equivalent handles 추가, `canConnectPortTypes(outputType, inputType)` export, duplicate/cardinality를 logical port 단위로 검사. |
 | MODIFY | `ui/src/lib/nodeBranching.ts` | provider/settings override type을 실제 `ImageNodeData`와 맞추고 invalid output diagnostic을 보존한다. |
 | MODIFY | `ui/src/store/storeTypes.ts` | image data의 optional node discriminator/element snapshot/provider override, `commitGraphSnapshot` action 추가. |
 | MODIFY | `ui/src/store/storeUIImpl.ts`, `ui/src/store/useAppStore.ts` | atomic graph commit implementation/wiring. |
@@ -129,7 +224,12 @@ action은 dangling edge, duplicate node/edge ID, element discriminator 누락을
 | MODIFY | `ui/src/styles/node-canvas-extras.css` | overlay backdrop, toolbar, branch dialog, element tray, typed status; 기존 empty/picker/palette CSS 재사용. |
 | MODIFY | `ui/src/index.css` | `@import "./styles/node-canvas-extras.css";`. |
 | NEW | `tests/node-studio-ui-contract.test.js` | NT/NC/NB/EN source-contract + representative helper hybrid. |
-| GENERATED | `docs/migration/runtime-test-inventory.md` | `npm run test:inventory` 정책에 따라 갱신 여부 확인. 수동 편집 금지. |
+
+`ui/src/components/ImageNode.tsx`는 change map에 넣지 않는다. catalog가 현재 positional IDs를 그대로 소비하므로 handle JSX를 바꿀 이유가 없다. 테스트는 실제 8개 ImageNode handle ID가 table에 정확히 한 번씩 존재하는지 고정한다.
+
+### Main-session-owned generated artifact
+
+`docs/migration/runtime-test-inventory.md` 재생성은 부모/main session 소유다. 이 delegated unit의 file map과 write scope에 넣지 않으며 `scripts/classify-tests.mjs`로 갱신하지 않는다. 구현 검증에서 `npm run test:inventory`는 check-only로 실행하고, 새 test 등록 때문에 실패하면 출력과 필요한 main-session 조치만 보고한다.
 
 ## Diff unit 1 — Canvas shell과 empty state
 
@@ -200,11 +300,28 @@ empty state와 populated canvas toolbar의 “Templates”가 같은 `openTempla
 `NodeCommandPalette`의 direction vocabulary를 `nodeCompatibility.PortDescriptor`의 `input/output`으로 통일한다.
 
 ```diff
+-export type NodePortDefinition = { id: string; type: string };
+-export type NodePortDescriptor = NodePortDefinition & { direction: "source" | "target" };
++import { canConnectPortTypes, type NodePortType, type PortDescriptor } from "../../lib/nodeCompatibility";
++export type NodePortDefinition = { id: string; type: NodePortType };
+ 
+-sourcePort?: NodePortDescriptor;
++sourcePort?: PortDescriptor;
+ 
 -return command.inputPorts.some((port) => port.type === sourcePort.type);
 +return sourcePort.direction === "output" && command.inputPorts.some(
 +  (port) => canConnectPortTypes(sourcePort.type, port.type),
 +);
 ```
+
+현재 executable command/port catalog는 아래처럼 제한한다. 존재하지 않는 prompt/video renderer를 command로 광고하지 않는다.
+
+| command ID | React Flow type | input ports | output ports | 진입 |
+|---|---|---|---|---|
+| `image-generate` | `imageNode` | `image-input:image` | `image-output:image` | 일반 palette + compatible port palette |
+| `element-reference` | `elementReferenceNode` | 없음 | `element-refs-output:element-refs`, `element-notes-output:element-notes` | element 선택이 필요한 tray/drop 전용; 일반 palette에서 미완성 node를 만들지 않음 |
+
+따라서 `image` 또는 `element-refs` output drag에는 `image-generate`가 보이고, `element-notes` output drag에는 현재 compatible command가 0개다. 이 결과는 exact equality가 아니라 `canConnectPortTypes(sourcePort.type, input.type)`에서 나온다.
 
 Canvas keyboard contract:
 
@@ -215,18 +332,39 @@ Canvas keyboard contract:
 - port를 빈 공간에 놓으면 `onConnectEnd`가 generic child를 만들지 않고 source `PortDescriptor`와 pointer anchor로 filtered palette를 연다.
 - insert는 screen→flow 좌표 변환, node build, optional edge build를 한 snapshot으로 commit한다. compatible input이 1개면 자동 연결하고, 2개 이상이면 명시적 port choice를 요구한다.
 
+```ts
+const fromNode = connectionState.fromNode
+  ? nodes.find((node) => node.id === connectionState.fromNode?.id) ?? null
+  : null;
+const sourcePort = fromNode
+  ? resolveNodePort(fromNode, connectionState.fromHandle?.id, "output")
+  : null;
+if (!sourcePort) {
+  showToast(t("nodeStudio.connection.UNKNOWN_PORT"), true);
+  return;
+}
+openCommandPalette({ anchor: { clientX, clientY }, sourcePort });
+```
+
 Canvas direct connection contract:
 
 ```diff
 -connectNodes(params.source, params.target, params.sourceHandle, params.targetHandle);
-+const source = resolveOutputPort(params.source, params.sourceHandle, nodes);
-+const target = resolveInputPort(params.target, params.targetHandle, nodes);
++const byId = new Map(nodes.map((node) => [node.id, node]));
++const sourceNode = params.source ? byId.get(params.source) : undefined;
++const targetNode = params.target ? byId.get(params.target) : undefined;
++const source = sourceNode ? resolveNodePort(sourceNode, params.sourceHandle, "output") : null;
++const target = targetNode ? resolveNodePort(targetNode, params.targetHandle, "input") : null;
++if (!source || !target) {
++  showToast(t("nodeStudio.connection.UNKNOWN_PORT"), true);
++  return;
++}
 +const verdict = canConnectPorts(source, target, { nodes, edges });
 +if (!verdict.allowed) {
 +  showToast(t(compatibilityReasonKey(verdict.reason)), true);
 +  return;
 +}
-+connectNodes(...);
++connectNodes(params.source, params.target, params.sourceHandle, params.targetHandle);
 ```
 
 descriptor resolve 실패도 `UNKNOWN_PORT` UI reason으로 fail closed한다. `canConnectPorts`의 기존 typed reason union은 변경하지 않고 UI mapping에서 unknown을 별도로 처리한다.
@@ -312,8 +450,9 @@ house style은 `composer-mention-parity-contract.test.js`의 source read/orderin
 ### NC group
 
 - NC-01/02: canvas-only `/`, empty-canvas-only Space, editable target guard를 source contract로 고정한다.
-- NC-03: palette가 `canConnectPortTypes`를 import/call하고 exact `port.type === sourcePort.type` 비교가 사라진다.
+- NC-03: `ImageNode.tsx`의 실제 8개 positional handle ID가 `NODE_PORT_BINDINGS`에 정확히 한 번씩 있고, `refs`/`notes`도 각 1회인지 검사한다. palette가 `canConnectPortTypes`를 import/call하고 exact `port.type === sourcePort.type` 비교가 사라진다.
 - NC-05~10 boundary: `NodeCanvas` controller가 `canConnectPorts` verdict 전에 `connectNodes`를 호출하지 않으며 typed reason을 surface한다.
+- NC-10: `target-left`와 `target-top`이 같은 `image-input` equivalent set이므로 두 번째 incoming edge를 `CARDINALITY`로 차단한다.
 - NC-11/12: palette insertion이 좌표 변환 후 `commitGraphSnapshot(reason=palette)` 한 번으로 node+edge를 적용한다.
 - Escape close 뒤 wrapper focus 복원을 assertion한다.
 
@@ -345,12 +484,12 @@ house style은 `composer-mention-parity-contract.test.js`의 source read/orderin
 | Recent | 다른 non-empty session이 있는 빈 session | Resume recent가 최신 graph를 열며 template/blank mutation은 없다. |
 | Template copy | empty state 또는 toolbar에서 같은 seed 선택 후 Make a copy | server fresh IDs, 한 graph commit, picker close, fitView, 자동 생성 없음. 두 번 copy하면 ID set이 다르다. |
 | Existing graph replace | populated canvas toolbar에서 template copy | confirmation 거절 시 graph 불변; 승인 시 old→copy가 한 commit으로 교체. |
-| Incompatible connect | image output을 video-only input에 drop | edge가 생기지 않고 `TYPE_MISMATCH`의 번역 reason이 toast + live status에 보인다. |
-| Cardinality | occupied single input에 두 번째 edge | edge 불변, `CARDINALITY` reason 표시. replace는 별도 승인 없이는 하지 않는다. |
+| Incompatible connect | element `notes` output을 `imageNode`의 `target-left`에 drop | catalog가 `element-notes → image`를 만들고 matrix가 거부한다. edge는 생기지 않고 `TYPE_MISMATCH` 번역 reason이 toast + live status에 보인다. |
+| Cardinality | 한 image source를 `target-left`에 연결한 뒤 다른 source를 같은 node의 `target-top`에 연결 | 두 flow handle이 같은 logical `image-input`이라 edge 불변, `CARDINALITY` reason 표시. |
 | Palette canvas focus | canvas background focus 후 `/` | palette open, 검색 input focus. Escape 후 canvas focus 복귀. |
 | Literal slash | ImageNode textarea/template search/branch input에서 `/` | 문자가 입력되고 palette는 열리지 않는다. |
 | Empty Space | node 0개인 canvas background에서 Space | palette open. button/input focus 또는 node가 있는 canvas에서는 기본 동작 유지. |
-| Port palette | image output을 빈 공간에 release | image-compatible command만 보이고 선택 시 node+edge가 한 commit으로 생성. |
+| Port palette | image output을 빈 공간에 release | `image-generate`만 보이고 선택 시 node+edge가 한 commit으로 생성. `notes` output에서는 후보 없음 reason 표시. |
 | Branch success | source 하나 선택 → 2–4 provider/settings rows → Apply | branch graph 전체가 한 commit으로 생기고 각 generation request가 node override를 사용. |
 | Branch rollback | invalid source/duplicate variant/dangling candidate를 test fixture로 주입 | commit count 0, nodes/edges reference와 serialized value 모두 이전 snapshot과 동일. |
 | Element drop | Node sidebar element를 canvas로 drag 또는 keyboard add | drop point에 `elementReferenceNode`, name/ref count/thumbnail 표시, optional edge도 같은 commit. |
@@ -363,7 +502,8 @@ house style은 `composer-mention-parity-contract.test.js`의 source read/orderin
 - [ ] `NodeCanvas`가 `NodeCanvasEmptyState`, `NodeTemplatePicker`, `NodeCommandPalette`, `ElementReferenceNode`, branch action의 실제 consumer다.
 - [ ] template list/user CRUD/copy는 server REST를 통하고 copy마다 fresh IDs이며 자동 실행하지 않는다.
 - [ ] `/`와 Space는 canvas focus 조건에서만 열리고 editable surface의 literal 입력을 침범하지 않는다.
-- [ ] palette filter와 direct connect가 같은 compatibility matrix를 사용한다.
+- [ ] `nodePortCatalog.ts`가 현재 ImageNode 8개 handles와 ElementReferenceNode 2개 handles를 exact table로 소유하며 unknown node/handle은 fail closed한다.
+- [ ] palette filter와 direct connect가 같은 port catalog + compatibility matrix를 사용한다.
 - [ ] 모든 incompatible connect는 edge mutation 없이 typed reason을 사용자에게 표시한다.
 - [ ] template/palette/branch/element drop은 nodes와 edges를 분리 setter로 적용하지 않고 atomic commit action 하나를 사용한다.
 - [ ] branch UI는 2–4 variants만 허용하고 실제 request가 per-node provider/settings override를 소비한다.
@@ -373,6 +513,7 @@ house style은 `composer-mention-parity-contract.test.js`의 source read/orderin
 - [ ] `index.css`가 `node-canvas-extras.css`를 import한다.
 - [ ] `tests/node-studio-ui-contract.test.js`가 NT/NC/NB/EN groups와 chaining subset guard를 포함하고 기존 pure-helper matrix 전수를 복제하지 않는다.
 - [ ] `NodeCanvas.tsx` < 500 lines, 모든 신규 함수 < 50 lines, 모든 async path에 try/catch가 있다.
+- [ ] delegated implementation은 `docs/migration/runtime-test-inventory.md`를 수정/재생성하지 않는다. check 실패는 main session에 전달한다.
 - [ ] 100/130 소유 파일·계약을 구현하지 않는다.
 
 ## 구현 순서
@@ -394,7 +535,7 @@ npm run typecheck
 npm run typecheck:tests
 npm run build:server
 cd ui && npm run build
-cd .. && npm run test:inventory
+cd .. && npm run test:inventory # check-only; 갱신 필요 시 main session에 보고
 npm test
 ```
 

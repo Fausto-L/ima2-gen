@@ -24,7 +24,7 @@ composer에는 상태 연결·입력 이벤트·선택 처리만 남긴다.
 - 활성 조건: `070_elements.md`의 mention UI 구현은 존재하지만 chip production render,
   IME/sticky Escape, `tests/element-mention-ui-contract.test.js` 중 하나라도 비어 있다.
 - 완료 조건: focused contract test, UI typecheck/build, test inventory가 모두 green이고
-  아래 IME/missing/duplicate 활성 시나리오가 코드와 테스트 양쪽에서 닫힌다.
+  아래 IME/fresh-store/missing/duplicate 활성 시나리오가 코드와 테스트 양쪽에서 닫힌다.
 - 중단 조건: server/compiler/provider 계약 변경이 필요하거나 element 선택 모델을
   `trayItems`가 아닌 별도 저장 모델로 바꿔야 할 경우. 해당 범위는 이 단위에서
   확장하지 않고 부모 phase로 반환한다.
@@ -34,6 +34,8 @@ composer에는 상태 연결·입력 이벤트·선택 처리만 남긴다.
 ### IN
 
 - classic composer의 element mention 감지, 선택, ordered chip row, 제거.
+- fresh Create workspace에서 global `state.assets`가 비어 있어도 menu의 full
+  `AssetItem` snapshot으로 tray 선택을 원자적으로 생성하는 경로.
 - IME composition 중 menu update 억제와 composition commit 후 1회 재평가.
 - Escape로 닫은 동일 mention range/query의 sticky suppression과 다음 text mutation 해제.
 - 삭제된 element의 missing chip 보존 및 모든 classic image/video 진입 전 generation
@@ -62,6 +64,7 @@ composer에는 상태 연결·입력 이벤트·선택 처리만 남긴다.
 | composer wiring | `ui/src/components/PromptComposer.tsx:351-355,364-414` | onChange/onClick마다 parser 실행, 선택 시 ID 추가·range 치환·menu close |
 | production chip gap | `PromptComposer.tsx:9-10,330-342` | menu는 value import지만 chip은 type-only import이며 preset chip만 실제 렌더됨 |
 | selection state | `ui/src/store/storeReferenceImpl.ts:252-283,319-324` | element ID 중복 방지와 ID 기반 제거가 tray 단일 writer 안에 존재 |
+| fresh-store blocker | `PromptComposer.tsx:50-59,381-402` + `storeReferenceImpl.ts:259-264` | menu는 local `elements`로 열리지만 writer는 global `state.assets`만 조회하므로 fresh Create의 빈 store에서 선택이 `null`로 끝남 |
 | recent order | `lib/assetsStore.ts:351-358` | element 목록의 기반 정렬은 `created_at DESC, id DESC` |
 | CSS | `ui/src/styles/element-mention.css:1-36` | menu/chip/missing/mobile bottom-sheet 스타일 존재 |
 | contract test | `tests/element-mention-ui-contract.test.js` | 파일 없음 |
@@ -76,6 +79,8 @@ composer에는 상태 연결·입력 이벤트·선택 처리만 남긴다.
 - dedupe의 mutation 시작은 `storeReferenceImpl.ts:257`이고 실제 duplicate predicate는
   **`:259-260`**이다. 제거 함수는 `:319-324`다.
 - 선택 wiring은 `PromptComposer.tsx:392-414`, 입력 갱신은 `:351-355`다.
+- B1 핵심은 `storeReferenceImpl.ts:262-264`다. local menu가 가진 full asset record가
+  writer로 전달되지 않아 `state.assets=[]`이면 requested tag와 tray item을 만들지 못한다.
 
 ## Before → After
 
@@ -87,8 +92,10 @@ Before:
 textarea onChange/onClick
   -> findMentionAtCaret
   -> menu
-  -> addElementId + @query range 치환
-  -> 선택 ID는 tray에 남지만 화면에는 chip이 없음
+  -> local elements에는 option이 보임
+  -> addElementId(id)
+  -> writer는 global state.assets에서만 id 조회
+  -> fresh Create(state.assets=[])에서는 null/no-op, range 치환과 chip 모두 없음
 
 IME composing change도 매번 parser 실행
 Escape -> menu close -> 같은 caret click에서 즉시 다시 열림
@@ -105,13 +112,17 @@ textarea mutation
   -> query key(range + query)가 suppressed key와 다를 때만 menu open
 
 select
-  -> tray 단일 writer가 stable element ID dedupe
+  -> composer가 local elements에서 selected AssetItem을 찾음
+  -> addElementFromMention(selectedAsset)로 full record 전달
+  -> tray 단일 writer가 elementCatalog에 record를 ID upsert
+  -> 같은 mutation에서 stable element ID dedupe + tray item 생성
   -> 현재 @query range만 @tag + space로 치환
   -> menu close
   -> tray 선택 순서대로 ElementMentionChips 렌더
 
-catalog sync
-  -> 선택 ID 중 없는 ID를 missingElementIds로 materialize
+full-record catalog sync
+  -> loadAllElementAssets 성공 시 AssetItem[] 전체를 elementCatalog에 replace
+  -> 선택 ID 중 catalog에 없는 ID를 missingElementIds로 materialize
   -> missing chip 유지
   -> GenerateButton disabled + generate entry early return
 ```
@@ -133,7 +144,7 @@ After:
 <ChipRow ariaLabel="Selected presets">...</ChipRow>
 <ElementMentionChips
   items={selectedElementItems}
-  assets={elements}
+  assets={elementCatalog ?? []}
   missingElementIds={missingElementIds}
   onRemove={removeElementId}
 />
@@ -155,15 +166,15 @@ chip row는 textarea 바깥, preset row와 prompt stack 사이에 둔다. DOM �
 
 | Op | 경로 | diff-level 책임 | 예상 순증감 |
 |---|---|---|---:|
-| NEW | `ui/src/components/composer/ElementMentionChips.tsx` | element tray item을 선택 순서대로 `ElementMentionChip`에 투영한다. live asset이 있으면 현재 thumbnail/name/kind를 쓰고, 없으면 `nameAtInsertion`과 `missing` 상태를 보존한다. remove는 element ID를 그대로 전달한다. | +55 |
-| MODIFY | `ui/src/components/PromptComposer.tsx` | chip value component/row import, selected element/missing state 연결, composition ref와 dismissed-query ref, 공용 `updateMentionAtCaret`, composition start/end, sticky Escape, duplicate 선택 시 기존 chip focus를 추가한다. text replacement와 tray attachment branch는 유지한다. 최종 500줄 미만을 강제한다. | +35~45 |
-| MODIFY | `ui/src/lib/referenceTray.ts` | `selectMissingElementIds(items, availableIds)` 순수 helper와 availability state contract를 추가한다. 입력 순서를 보존하고 ID를 중복 출력하지 않는다. | +20 |
-| MODIFY | `ui/src/store/storeReferenceImpl.ts` | 전체 element catalog ID snapshot을 받는 `syncElementCatalogImpl`을 추가하고, `mutateTray`가 tray 변경 때 missing IDs를 같은 writer에서 재계산하도록 한다. add/remove dedupe 계약은 변경하지 않는다. | +25 |
-| MODIFY | `ui/src/store/storeTypes.ts` | `elementCatalogIds: string[] \| null`, `missingElementIds: string[]`, `syncElementCatalog(ids)`를 reference tray/app state 계약에 추가한다. `null`은 아직 catalog 검증 전이라는 뜻이며 missing으로 오판하지 않는다. | +8 |
-| MODIFY | `ui/src/store/useAppStore.ts` | catalog/missing 초기값과 sync action binding을 추가한다. `PromptComposer`의 full element load 성공 후에만 catalog snapshot을 갱신한다. | +6 |
+| NEW | `ui/src/components/composer/ElementMentionChips.tsx` | element tray item을 선택 순서대로 `ElementMentionChip`에 투영한다. live full-record catalog가 있으면 현재 thumbnail/name/kind를 쓰고, 없으면 `nameAtInsertion`과 `missing` 상태를 보존한다. executable test가 같은 projection을 실행하도록 `buildElementMentionChipModels` 순수 함수를 export한다. | +65 |
+| MODIFY | `ui/src/components/PromptComposer.tsx` | chip row와 full `elementCatalog` 연결, composition/sticky Escape를 추가한다. full element load 성공 시 `syncElementCatalog(elements)`를 호출하고, element option 선택 시 local `elements.find(id)`의 **full `AssetItem`**을 `addElementFromMention(asset)`로 writer에 전달한다. writer가 반환한 tray item이 있을 때만 range를 치환한다. 최종 500줄 미만을 강제한다. | +40~50 |
+| MODIFY | `ui/src/lib/referenceTray.ts` | `selectMissingElementIds(items, elementCatalog)` 순수 helper를 추가한다. catalog `null`은 미검증, `[]`는 검증된 empty로 구분하며 입력 순서와 ID dedupe를 보존한다. | +20 |
+| MODIFY | `ui/src/store/storeReferenceImpl.ts` | 선택안 (a): `addTrayElementImpl(elementId, set, get, snapshot?)`가 optional full `AssetItem`을 검증하고 전용 `elementCatalog`에 ID upsert한 뒤 **같은 `mutateTray` 호출**에서 tray item을 만든다. resolution 순서는 valid snapshot → catalog → `state.assets`다. `syncElementCatalogImpl(records)`는 full records를 replace하고 missing IDs를 재계산한다. 기존 add/remove dedupe는 유지한다. | +45 |
+| MODIFY | `ui/src/store/storeTypes.ts` | ID-only catalog를 폐기하고 `elementCatalog: AssetItem[] \| null`, `missingElementIds`, `syncElementCatalog(records)`, `addElementFromMention(asset): TrayItem \| null` 계약을 추가한다. `null`은 아직 catalog 검증 전이다. | +12 |
+| MODIFY | `ui/src/store/useAppStore.ts` | full catalog/missing 초기값, sync action, `addElementFromMention(asset) => addTrayElementImpl(asset.id, set, get, asset)` binding을 추가한다. 기존 `addElementId(id) => addTrayElementImpl(id, set, get)` binding은 호환을 위해 보존한다. | +9 |
 | MODIFY | `ui/src/store/storeGenerateEntryImpl.ts` | `generateImpl`의 prompt 확인 직후, image/video/multimode 분기 전에 `missingElementIds.length > 0`이면 early return한다. 버튼·Cmd/Ctrl+Enter·home에서 같은 진입 함수를 써도 provider 요청이 시작되지 않는다. | +5 |
 | MODIFY | `ui/src/components/GenerateButton.tsx` | missing selection이 있으면 primary generate button을 native `disabled` 처리한다. runtime entry guard는 별도로 유지해 programmatic/keyboard 호출도 차단한다. | +4 |
-| NEW | `tests/element-mention-ui-contract.test.js` | node:test 기반 EM-01..EM-12 계약. parser/helper는 TS source 직접 import, component/store/CSS는 `readFileSync` regex/source-order assertion. jsdom 없음. | +240~300 |
+| NEW | `tests/element-mention-ui-contract.test.js` | node:test 기반 EM-01..EM-12 계약. parser/helper와 actual selection writer/chip-model projection을 TS source에서 직접 import하고 나머지는 source assertion한다. fresh store(`assets=[]`) + full snapshot 선택을 실제 실행해 chip 1개와 selected ID를 검증한다. jsdom 없음. | +270~330 |
 
 ### 명시적 무변경 파일
 
@@ -204,8 +215,15 @@ const updateMentionAtCaret = (value: string, caret: number) => {
 
 - 현재 `insertTagAtMention`의 `slice(0, mention.start)` / `slice(mention.end)` 계약을
   유지한다. prompt 전체 replace나 caret 이후 text 손실을 허용하지 않는다.
-- element 선택은 `addElementId(element.id)`로 stable ID를 tray에 먼저 기록하고,
-  생성된 tray tag로 현재 `@query` range만 치환한다.
+- element option 선택 시 composer closure의 local `elements`에서 같은 ID의 full
+  `AssetItem`을 찾고 `addElementFromMention(asset)`로 전달한다. menu용 축약 option을
+  writer payload로 재구성하지 않는다. refs/name/kind/tags/metadata의 원본 snapshot을
+  그대로 사용한다.
+- writer는 snapshot의 `id === elementId`, `kind === "element"`를 검증한다. valid
+  snapshot을 전용 `elementCatalog`에 ID upsert하고 같은 mutation에서 stable ID를 tray에
+  기록한다. writer 반환값이 `null`이면 prompt를 치환하지 않고 menu를 유지하거나
+  명시적 오류를 표시한다. silent close/no-op은 허용하지 않는다.
+- writer가 반환한 tray item의 tag로만 현재 `@query` range를 치환한다.
 - ID state는 prompt string과 독립이다. chip 제거는 `removeElementId(id)`만 호출하며
   text에 `@name`을 다시 넣지 않는다.
 - 선택 후 `setMentionQuery(null)`로 menu를 닫는다.
@@ -213,18 +231,31 @@ const updateMentionAtCaret = (value: string, caret: number) => {
   `[data-element-id="..."]`의 chip body에 focus를 이동한다. store의 기존 dedupe도
   이중 안전장치로 유지한다.
 
+#### 선택안 결정 — (a) writer에 full snapshot 전달
+
+- 채택: `addTrayElementImpl(..., snapshot?)`가 record upsert와 tray mutation을 한 번에
+  수행하므로 fresh store에서도 반환 직후 chip/range 처리가 가능하다.
+- upsert 대상은 필터 가능한 `state.assets`가 아니라 전용 `elementCatalog`다. 전자는
+  image-only/폴더/tag 결과일 수 있어 mention 선택 record를 섞으면 안 된다.
+- 미채택 (b): `state.assets` 선 sync 후 ID writer 호출은 두 mutation의 순서 의존성과
+  Assets filter view 오염을 만든다.
+- 기존 `addElementId(id)`는 metadata/legacy 호환용으로 남기되 catalog/`state.assets`에
+  record가 있을 때만 성공한다. menu production path는 full snapshot action만 쓴다.
+
 ### 3. ordered/missing chip
 
 - source order는 `selectElementItems(trayItems)`이며 assets 배열 정렬로 다시 sort하지
   않는다.
-- live asset lookup 성공 시 현재 `name`, `metadata.elementKind`, `elementPreviewPath`를
-  사용한다.
+- live `elementCatalog` lookup 성공 시 현재 `name`, `metadata.elementKind`,
+  `elementPreviewPath`를 사용한다. writer가 방금 받은 snapshot을 catalog에 upsert하므로
+  fresh selection 직후에도 이 lookup이 성공한다.
 - lookup 실패 시 tray snapshot의 `nameAtInsertion`을 표시하고 `missing=true`를 넘긴다.
   선택 ID는 보존한다.
 - remove button의 accessible name은 기존 `Remove ${name} element`를 그대로 사용해
   각 chip마다 독립 이름을 갖는다.
-- catalog load 전 `elementCatalogIds === null`은 missing이 아니다. full load 성공 후
-  존재하지 않는 selected ID만 missing으로 전환한다.
+- catalog load 전 `elementCatalog === null`은 missing이 아니다. full load 성공 후
+  존재하지 않는 selected ID만 missing으로 전환한다. fresh selection snapshot은 먼저
+  upsert되므로 full sync가 해당 ID를 포함하는 동안 missing으로 오판하지 않는다.
 
 ### 4. generation block
 
@@ -246,9 +277,13 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { findMentionAtCaret } from "../ui/src/lib/elementMention.ts";
 import { selectMissingElementIds } from "../ui/src/lib/referenceTray.ts";
+import { buildElementMentionChipModels } from "../ui/src/components/composer/ElementMentionChips.tsx";
+import { addTrayElementImpl, syncElementCatalogImpl } from "../ui/src/store/storeReferenceImpl.ts";
 ```
 
-- `findMentionAtCaret`와 missing selector만 직접 실행한다.
+- parser/missing selector뿐 아니라 actual `addTrayElementImpl`과 chip-model projection도
+  직접 실행한다. test-local `createReferenceStoreHarness`는 functional `set`과 `get`을
+  제공하고 초기 `assets=[]`, `elementCatalog=null`, `trayItems=[]`를 명시한다.
 - TSX는 렌더하지 않는다. `PromptComposer`, menu, chip row/chip, generate entry/button,
   CSS, assets store를 `readFileSync`로 읽고 regex와 source-order assertion을 쓴다.
 - `composer-mention-parity-contract.test.js`의 tray-first 계약과 중복되는 assertion은
@@ -294,10 +329,37 @@ import { selectMissingElementIds } from "../ui/src/lib/referenceTray.ts";
 
 - menu source에서 ArrowDown/ArrowUp modulo wrap, Home=0, End=last,
   Enter/Tab=`selectActive`, Escape=`onClose`를 확인한다.
-- selection source에서 stable `element.id`를 add하고, `insertTagAtMention`이
+- selection source에서 local full `AssetItem`을 `addElementFromMention`에 전달하고,
+  writer 반환 item이 있을 때만 `insertTagAtMention`이
   `mention.start/end`만 치환하며, ID state가 prompt text와 별도 tray에 저장되는지
   확인한다.
 - 선택 뒤 menu가 null로 닫히는지 확인한다.
+
+#### Fresh-store executable regression (B1)
+
+```js
+test("fresh Create selection registers the ID and produces a chip", () => {
+  const hero = elementAsset({ id: "el_hero", name: "Hero", refs: ["hero.png"] });
+  const store = createReferenceStoreHarness({ assets: [], elementCatalog: null });
+
+  const item = addTrayElementImpl(hero.id, store.set, store.get, hero);
+
+  assert.equal(item?.source.elementId, hero.id);
+  assert.deepEqual(store.get().selectedElementIds, [hero.id]);
+  assert.equal(store.get().elementCatalog?.find((asset) => asset.id === hero.id)?.name, "Hero");
+  const chips = buildElementMentionChipModels(
+    store.get().trayItems,
+    store.get().elementCatalog,
+    store.get().missingElementIds,
+  );
+  assert.equal(chips.length, 1);
+  assert.equal(chips[0].elementId, hero.id);
+  assert.equal(chips[0].missing, false);
+});
+```
+
+추가 negative assertion: snapshot ID 불일치 또는 `kind !== "element"`이면 writer가
+`null`을 반환하고 catalog/tray/selected IDs를 변경하지 않는다.
 
 ### EM-07 — Escape sticky-close
 
@@ -313,10 +375,13 @@ import { selectMissingElementIds } from "../ui/src/lib/referenceTray.ts";
 
 ### EM-09 — missing chip / generation block
 
-- `selectMissingElementIds`가 catalog에 없는 selected ID를 선택 순서대로 반환하고,
+- `selectMissingElementIds`가 full catalog에 없는 selected ID를 선택 순서대로 반환하고,
   catalog 미검증(null)에서는 빈 목록을 반환하는지 직접 검증한다.
 - chip row가 lookup 실패 시 `nameAtInsertion`, `missing=true`로
   `ElementMentionChip`을 렌더하는지 확인한다.
+- fresh-store test와 같은 harness에서 `syncElementCatalogImpl([], set, get)`을 실행해
+  tray/selected ID는 보존되고 `missingElementIds=["el_hero"]`, chip model의
+  `missing=true`로 전환되는지 직접 검증한다.
 - chip primitive에 `is-missing`, warning accessible label, thumbnail/name/kind가 있고
   generate entry가 provider 분기 전에 early return하는지 확인한다.
 - GenerateButton의 native disabled가 같은 missing state를 소비하는지 확인한다.
@@ -324,8 +389,8 @@ import { selectMissingElementIds } from "../ui/src/lib/referenceTray.ts";
 ### EM-10 — duplicate selection
 
 - `storeReferenceImpl.ts`의 existing element ID predicate와 no-patch return을 확인한다.
-- 동일 ID를 두 번 selector/helper에 넣어도 missing ID와 rendered key가 중복되지 않는
-  계약을 직접 검증한다.
+- 같은 full snapshot으로 actual writer를 두 번 실행해 두 번째 반환이 `null`이고
+  tray/selected IDs/catalog/chip model이 각각 하나인지 직접 검증한다.
 - composer가 중복 선택 시 기존 `[data-element-id]` chip으로 focus하고 menu를 닫는지
   확인한다.
 
@@ -362,10 +427,24 @@ import { selectMissingElementIds } from "../ui/src/lib/referenceTray.ts";
 수용: EM-04/05 focused assertions 통과. 조합 중 menu flicker나 option reset을 만드는
 source path가 없다.
 
-### B. missing element
+### B. fresh Create selection
+
+1. Create workspace를 처음 열어 global `state.assets=[]`, `elementCatalog=null`인 상태에서
+   local `loadAllElementAssets()` 결과에는 element A가 존재한다.
+2. menu에서 A를 선택하면 composer가 full `AssetItem` snapshot을 writer로 전달한다.
+3. writer는 snapshot을 `elementCatalog`에 upsert하고 같은 mutation에서 tray item과
+   `selectedElementIds=[A.id]`를 만든다.
+4. 반환 item의 tag로 현재 mention range를 치환하고 chip model은 A 하나를
+   `missing=false`로 만든다.
+
+수용: actual writer + chip model executable test가 통과한다. `state.assets=[]` 조건을
+fixture에서 생략하거나 source regex만으로 대체할 수 없다.
+
+### C. missing element
 
 1. element를 선택해 stable ID가 tray에 들어가고 chip이 렌더된다.
-2. catalog sync 결과 해당 ID가 없으면 chip은 삭제되지 않고 missing warning으로 바뀐다.
+2. 이후 full catalog sync가 해당 ID를 제외하면 writer가 저장한 tray snapshot과 ID는
+   삭제되지 않고 missing warning으로 바뀐다.
 3. GenerateButton은 disabled이며 `generate()`를 직접 호출해도 image/video/multimode
    request entry가 실행되지 않는다.
 4. missing chip을 제거하면 ID와 missing 목록이 함께 사라지고 generation이 다시
@@ -373,7 +452,7 @@ source path가 없다.
 
 수용: EM-09/11 assertions 통과. provider request 함수보다 앞선 runtime guard가 있다.
 
-### C. duplicate select
+### D. duplicate select
 
 1. `@hero`로 element A를 선택한다.
 2. 다시 element A를 선택한다.
@@ -395,7 +474,9 @@ source path가 없다.
 - positioning 계약에는 caret mirror, above/below, viewport clamp, rAF scroll/resize,
   portal, mobile bottom sheet가 포함된다.
 - selection 계약에는 stable ID, 현재 `@query` range만 치환, text와 ID 상태 분리,
-  menu close, dedupe, remove가 포함된다.
+  menu close, dedupe, remove가 포함된다. 특히 `state.assets=[]`에서 full `AssetItem`
+  snapshot으로 actual writer를 실행해 selected ID와 non-missing chip model이 각각 하나
+  생기는 테스트가 필수다.
 - chip은 textarea 밖에서 ordered render되고 thumbnail/name/kind, 독립 remove name,
   missing 상태를 제공한다. missing selection은 UI와 runtime 양쪽에서 generation을 막는다.
 - `PromptComposer.tsx`는 구현 후에도 500줄 미만이다. 넘으면 inline 렌더/해석 코드를
@@ -415,4 +496,3 @@ focused test가 green이어도 전체 suite 회귀 가능성이 있으므로 pha
 `npm test`를 추가 실행한다. `test:inventory`가 새 파일 때문에 generated inventory
 drift를 보고하면 `scripts/classify-tests.mjs`가 소유한 문서를 생성 명령으로 갱신하며,
 수동 편집하지 않는다.
-

@@ -22,28 +22,14 @@ status: ready
 
 OPTION 2+는 현재 구조에서 가능하다.
 
-- `routes/videoExtended.ts:191-216`의 `/api/video/extend`는 `prompt`와 `videoUrl`을
-  요구하고 `/v1/videos/extensions`를 sync poll한 뒤 200 JSON을 반환한다.
-- 같은 파일의 `saveVideoResult()`는 MP4를 먼저 쓰고 sidecar 실패 시 MP4를
-  rollback하며(`:70-120`), `requestSignal()`은 response `close`에서 abort한다
-  (`:128-135`). 따라서 202를 보낸 뒤 계속 실행할 새 route에는 재사용할 수 없다.
-- `lib/videoFrameExtract.ts:16-77`은 generated-root path 검증, MP4 header/size 검증,
-  `ffmpeg -sseof -3` last-frame 추출, temp PNG cleanup을 이미 제공한다.
-- `routes/video.ts:231-255`는 `continueFromVideo` sidecar를 읽고 last frame을 base64로
-  추출한다. `:340-360`은 inflight 중복/용량/AbortController/202, `:396-412`는
-  `generateVideoViaGrok()` I2V, `:424-479`는 sidecar 저장 후 history invalidation,
-  `:483-498`은 그 뒤 terminal `done` 순서를 보여준다.
-- `lib/videoContinuity.ts:21-28`은 prompt continuity의 bounded lineage를 소유한다.
-  `lineageId/parentFilename/sourceFrame/최대 4 prompt` 계약이지 durable clip graph의
-  `id/parentId/rootId/seriesId/sequenceIndex` 계약은 아니다.
-- `lib/inflight.ts`, `lib/eventBus.ts`, `routes/events.ts`, `lib/ssePublish.ts:8-15`로
-  async lifecycle, multiplexed replay SSE, cancel 후 done 억제가 이미 가능하다.
-- `tests/videoExtendedRoute.test.ts`는 현재 **8건**이다. 실제 구성은 edit 2,
-  provider-native extend 2, frame 2, analyze 2다.
-- `ResultActions.tsx:312-329`는 Extend 버튼에서 `actionImage.url || actionImage.image`를
-  `videoUrl`로 보낸다. 일반값 `/generated/foo.mp4`는
-  `safeGeneratedFilePath()`에서 generated root 밖 absolute path로 해석되어 거부된다.
-- 로컬 환경의 `ffmpeg`와 `ffprobe`는 모두 8.0.1이다. 새 npm dependency는 없다.
+| 앵커 | 확인 결과 |
+|---|---|
+| `videoExtended.ts:191-216` | prompt/videoUrl → `/v1/videos/extensions` sync poll → 200 |
+| `videoExtended.ts:70-135` | pair rollback은 있으나 response-close signal은 202 job에 부적합 |
+| `videoFrameExtract.ts:16-77` | safe path, MP4 검사, `-sseof -3`, temp cleanup 존재 |
+| `video.ts:231-498` | frame→I2V, inflight/202, persist→invalidate→done 패턴 존재 |
+| continuity/SSE | bounded prompt continuity와 durable graph는 별개; cancel-done guard 존재 |
+| tests/UI/tooling | route test 8건(2/2/2/2), UI는 URL을 잘못 전송, ffmpeg/ffprobe 8.0.1 |
 
 ### 정밀 보정
 
@@ -110,7 +96,17 @@ type ExtendDone = {
   requestId: string;
   filename: string;
   url: string;
+  providerUrl: string | null;
   mediaType: "video";
+  provider: "grok" | "grok-api";
+  model: string;
+  prompt: string;
+  userPrompt: string;
+  revisedPrompt: string | null;
+  createdAt: number;
+  elapsed: number;
+  usage: Record<string, unknown> | null;
+  webSearchCalls: number;
   video: {
     operation: "extend";
     mode: "image-to-video";
@@ -149,22 +145,13 @@ branch는 `parentId`로 보존한다.
 ## Event order
 
 ```text
-phase:queued
-  → phase:extracting-frame
-  → planning
-  → submitted
-  → progress (0..n)
-  → phase:persisting
-  → done
+phase:queued → phase:extracting-frame → planning → submitted/progress
+             → phase:persisting → done
 ```
 
-- `startJob()` 직후 `phase { phase: "queued" }`를 publish한다.
-- extraction 시작 전에 inflight phase와 SSE phase를 `extracting-frame`으로 바꾼다.
-- adapter의 `planning/submitted/progress`를 같은 requestId로 전달한다.
-- provider buffer를 받은 뒤 `persisting`을 publish한다.
-- `done`은 MP4 write, atomic sidecar rename, history index invalidation이 모두 끝난
-  뒤 `publishJobEvent()`로 단 한 번 publish한다.
-- cancel이 먼저 terminal 상태를 만들면 `publishJobEvent()`가 늦은 `done`을 억제한다.
+각 phase는 inflight와 같은 requestId로 publish한다. `done`은 MP4 write → atomic
+sidecar rename → history invalidation 뒤 한 번만 보내며, cancel이 먼저 terminal이면
+`publishJobEvent()`가 늦은 done을 억제한다.
 
 ## 정확한 파일 맵
 
@@ -181,32 +168,31 @@ phase:queued
 | MODIFY | `ui/src/store/storeHelpers.ts` | history → `GenerateItem` mapping에서 lineage 보존 |
 | MODIFY | `ui/src/lib/api-generation.ts` | `postVideoExtendStream()` 202 + SSE client |
 | MODIFY | `ui/src/lib/api.ts` | extend client/types export |
+| NEW | `ui/src/lib/videoHistoryItem.ts` | `ExtendDone + actionImage`을 canonical immediate `GenerateItem`으로 변환 |
 | MODIFY | `ui/src/components/ResultActions.tsx` | filename 요청, pending/error/done UI와 history 삽입 |
 | MODIFY | `tests/videoExtendedRoute.test.ts` | native 경로 보존 + async I2V route matrix |
 | MODIFY | `tests/videoRoute.test.ts` | persistence helper import 경로 변경, rollback 회귀 유지 |
 | MODIFY | `tests/history-video-row.test.ts` | `videoLineage` sidecar → history round-trip |
+| NEW | `tests/video-history-item.test.ts` | immediate converter와 refreshed history item의 전체 안정 필드 equality |
 | NEW | `tests/video-extend-ui-contract.test.js` | filename payload, SSE subscription, pending/error/done 정적 계약 |
 
-생성된 `.js`, `ui/dist`는 직접 수정하지 않는다. `routes/videoExtended.ts`의 optional
-dependency seam은 테스트에서 extraction/generation/persistence 조건을 결정적으로
-활성화하기 위한 것이며 production default는 실제 helper다.
+생성된 `.js`, `ui/dist`는 손으로 수정하지 않는다. `npm run build:server`는
+server/lib/routes의 JS를 전부 재생성하지만 저장소는 약 13개의 curated runtime JS만
+선별 추적한다. main session은 source 변경 뒤 build를 실행하고 그 curated tracked
+pair만 sync 대상으로 판정한다. optional dependency seam은 테스트에서 조건을
+결정적으로 활성화하기 위한 것이며 production default는 실제 helper다.
+
+100/110/120의 새 test가 바꾸는 `docs/migration/runtime-test-inventory.md`는 main-session
+소유 generated artifact다. delegated writer는 수정하지 않고, main session이 세 phase
+test를 합친 뒤 `node scripts/classify-tests.mjs`로 재생성한다. 확대된 write scope는 이
+한 파일뿐이며 최종 확인은 `npm run test:inventory`다.
 
 ## Diff-level 설계
 
 ### 1. persistence helper만 추출
 
-Before — `routes/video.ts`가 pair write를 직접 소유한다.
-
-```ts
-export async function saveGeneratedVideoArtifact(ctx, filename, buffer, metadata) {
-  const filePath = join(ctx.config.storage.generatedDir, filename);
-  await writeFile(filePath, buffer);
-  try { await atomicWriteJson(`${filePath}.json`, metadata); }
-  catch (error) { await unlink(filePath).catch(() => {}); throw error; }
-}
-```
-
-After — 경로/쓰기 책임만 lib로 이동한다.
+Before는 `routes/video.ts`의 `saveGeneratedVideoArtifact(ctx, ...)`가 pair write를 직접
+소유한다. After는 같은 rollback을 lib 함수로 옮긴다.
 
 ```ts
 // lib/videoArtifactPersistence.ts
@@ -219,9 +205,8 @@ export async function persistVideoArtifact(generatedDir, filename, buffer, metad
 ```
 
 `routes/video.ts`와 `routes/videoExtended.ts`는 이 함수만 import한다. download,
-planner, provider adapter, thumbnail, event emit은 각 route에 남는다. 기존
-`saveVideoResult()`도 download 후 이 helper를 호출해 native edit/extend의 sidecar를
-atomic rename으로 맞춘다.
+planner, adapter, thumbnail, event emit은 route에 남는다. `saveVideoResult()`도
+download 후 이 helper를 호출해 native sidecar를 atomic rename으로 맞춘다.
 
 ### 2. prompt continuity와 durable lineage 분리
 
@@ -253,24 +238,15 @@ normalize는 모든 ID가 non-empty `.mp4` filename인지, index가 0 이상 정
 
 ### 3. extraction을 cancel-aware로 확장
 
-Before:
-
-```ts
-extractVideoFrame(input, output, "last");
-```
-
-After:
+Before는 `extractVideoFrame(input, output, "last")`다. After:
 
 ```ts
 extractVideoFrame(input, output, "last", { signal: cancelController.signal, timeoutMs: 30_000 });
 ```
 
-- `execFile`에 `signal`, timeout, platform kill signal을 전달한다.
-- `ENOENT`는 `VIDEO_FRAME_EXTRACT_UNAVAILABLE`로 바꾼다.
-- timeout/kill은 `VIDEO_FRAME_EXTRACT_TIMEOUT`으로 바꾼다.
-- caller signal abort는 `GENERATION_CANCELED`로 보존한다.
-- 그 외 ffmpeg decode 실패는 `VIDEO_FRAME_EXTRACT_FAILED`다.
-- temp PNG cleanup은 성공/실패/cancel 모두 `finally`에서 수행한다.
+`execFile`에 signal/timeout/kill signal을 전달한다. `ENOENT`→`UNAVAILABLE`,
+timeout/kill→`TIMEOUT`, caller abort→`GENERATION_CANCELED`, 나머지 decode 실패→
+`VIDEO_FRAME_EXTRACT_FAILED`로 분류하고 temp PNG는 항상 `finally`에서 지운다.
 
 ### 4. `/api/video/extend`를 async I2V로 교체
 
@@ -360,7 +336,7 @@ const extend = async () => {
       provider: actionImage.provider === "grok-api" ? "grok-api" : "grok",
       model: actionImage.model ?? undefined,
     });
-    useAppStore.getState().addHistoryItem(toVideoHistoryItem(done));
+    useAppStore.getState().addHistoryItem(toVideoHistoryItem(done, actionImage));
     setExtendState("idle"); showToast(t("result.extendDone"));
   } catch (error) {
     setExtendState("error"); showToast(errorMessage(error), true);
@@ -374,7 +350,7 @@ client와 같은 timeout/cancel 규칙으로 처리한다. 버튼은 pending 동
 진행 label을 보이고, error 후 재시도 가능해야 한다. component unmount/abort 시
 `DELETE /api/inflight/:requestId` 경로를 사용한다.
 
-### 7. history round-trip
+### 7. immediate history converter + round-trip
 
 Before:
 
@@ -389,9 +365,51 @@ videoContinuity: meta?.videoContinuity || null,
 videoLineage: meta?.videoLineage || null,
 ```
 
-동일 필드를 `HistoryItem`, `GenerateItem`, `mapHistoryItem()`에 관통시킨다. terminal
-done으로 즉시 추가한 item과 새로고침 후 `/api/history`에서 복원한 item의
-`videoLineage`가 deep-equal이어야 한다.
+`toVideoHistoryItem()`의 owner는 새 순수 모듈 `ui/src/lib/videoHistoryItem.ts`다.
+`storeVideoImpl.ts:179-194`의 canonical video item shape를 따르며 임의의
+`Date.now()`를 만들지 않는다. persisted sidecar와 `done`은 같은 `createdAt`, prompt,
+provider/model/usage 값을 공유해야 한다.
+
+```ts
+export function toVideoHistoryItem(done: VideoExtendDone, actionImage: GenerateItem): GenerateItem {
+  const prompt = done.prompt || actionImage.prompt;
+  return {
+    image: done.url,                    // GenerateItem 필수 alias
+    url: done.url,
+    providerUrl: done.providerUrl,
+    filename: done.filename,
+    mediaType: "video",
+    prompt,
+    userPrompt: done.userPrompt || prompt || null,
+    revisedPrompt: done.revisedPrompt,
+    provider: done.provider || actionImage.provider || "grok",
+    model: done.model || actionImage.model || null,
+    format: "mp4",
+    elapsed: done.elapsed,
+    usage: done.usage ?? undefined,
+    webSearchCalls: done.webSearchCalls,
+    video: done.video,
+    videoSeries: null,
+    videoContinuity: done.videoContinuity ?? null,
+    videoLineage: done.videoLineage,
+    requestId: done.requestId,
+    createdAt: done.createdAt,
+    sessionId: null,
+  };
+}
+```
+
+done이 서버 권위값이고 `actionImage`는 prompt/provider/model의 defensive fallback만
+제공한다. `image = done.url`이며 source의 URL/createdAt/usage/lineage를 child에 복사하지
+않는다. `lib/historyList.ts`, `HistoryItem`, `mapHistoryItem()`에도 `videoLineage`를
+관통시킨다.
+
+`tests/video-history-item.test.ts`는 persisted child sidecar → `listHistoryRows()` →
+`mapHistoryItem()`으로 refreshed item을 만들고, converter가 만든 immediate item과
+다음 **전체 안정 필드 projection**을 deep-equal한다: `image/url/providerUrl/filename/
+mediaType/prompt/userPrompt/revisedPrompt/provider/model/format/elapsed/usage/
+webSearchCalls/video/videoSeries/videoContinuity/videoLineage/requestId/createdAt/sessionId`.
+thumbnail처럼 비동기 파생되는 표시 필드는 비교에서 제외한다.
 
 ## 테스트 명세
 
@@ -423,8 +441,10 @@ done으로 즉시 추가한 item과 새로고침 후 `/api/history`에서 복원
 
 - `tests/videoRoute.test.ts`: helper import를 새 lib로 바꾸고 sidecar commit 실패 시
   known filename MP4가 삭제되는 기존 회귀 테스트를 유지한다.
-- `tests/history-video-row.test.ts`: sidecar에 `videoLineage`를 넣고
-  `listHistoryRows()` 결과 deep-equal을 검증한다.
+- `tests/history-video-row.test.ts`: sidecar의 full video metadata와 `videoLineage`가
+  `listHistoryRows()`에 보존되는지 검증한다.
+- `tests/video-history-item.test.ts`: converter immediate item과 sidecar를 다시 읽은
+  refreshed item의 22개 안정 필드 shape를 deep-equal한다.
 - `tests/video-extend-ui-contract.test.js`: `ResultActions`가 `.url`이 아니라
   `.filename`을 `sourceVideoId`로 전달하는지, `postVideoExtendStream`이 singleton SSE를
   구독하는지, pending disabled/error retry/done history 삽입 경로가 있는지 고정한다.
@@ -433,38 +453,14 @@ done으로 즉시 추가한 item과 새로고침 후 `/api/history`에서 복원
 
 ## ACTIVATION SCENARIOS — C에서 조건부 경로를 켜는 법
 
-조건부 코드는 단순 mock 존재만으로 커버했다고 보지 않는다. C 검증에서 다음처럼
-실제 branch를 활성화한다.
+단순 mock 존재가 아니라 아래 실제 branch와 부작용을 함께 켠다.
 
-### C1 — extraction failure
-
-1. generated root에 MP4 header는 통과하지만 ffmpeg decode가 실패하는 fixture를 둔다.
-2. 202를 받은 뒤 bus terminal error를 기다린다.
-3. provider proxy의 generations/extensions call counter가 모두 0인지 확인한다.
-4. `frame_tmp_*.png`와 child MP4가 남지 않았는지 확인한다.
-
-### C2 — cancel
-
-1. extraction 또는 generation dependency를 signal 대기 promise로 멈춘다.
-2. 202와 `extracting-frame` 또는 `submitted`를 관찰한 뒤 `abortJob(requestId)`를 호출한다.
-3. dependency가 AbortError/normalized cancel로 빠지는지 확인한다.
-4. terminal error는 1회, done은 0회인지 eventBus에서 센다.
-
-### C3 — duplicate requestId
-
-1. 첫 job을 extraction gate에서 멈춰 inflight 상태를 유지한다.
-2. 같은 `requestId/sourceVideoId`로 두 번째 POST를 보낸다.
-3. 두 번째가 409 `REQUEST_ID_IN_USE`이고 첫 job의 provider call count가 증가하지
-   않았는지 확인한다.
-4. gate를 해제하거나 cancel해 test-owned inflight를 정리한다.
-
-### C4 — sidecar failure
-
-1. route dependency seam의 `persistVideoArtifact`를 MP4 write 뒤 sidecar commit에서
-   throw하는 실제 helper fixture로 교체한다.
-2. known child filename을 사용해 MP4가 rollback됐는지 filesystem으로 확인한다.
-3. history row가 생기지 않고 error 1회/done 0회인지 확인한다.
-4. direct helper 회귀 테스트와 route terminal-event 테스트를 둘 다 통과시킨다.
+| C | 활성화 방법 | 반드시 관찰할 결과 |
+|---|---|---|
+| extraction failure | MP4 header는 통과하지만 ffmpeg decode가 실패하는 fixture로 202 뒤 terminal을 기다림 | generations/extensions 0회, temp PNG/child MP4 없음, typed error |
+| cancel | extraction/generation을 signal 대기 promise로 멈추고 phase 관찰 뒤 `abortJob(requestId)` | AbortError 정규화, error 1회, done 0회 |
+| duplicate requestId | 첫 job을 extraction gate에 유지한 채 같은 ID로 두 번째 POST | 두 번째 409, provider count 불변, 끝에서 gate 해제/cancel |
+| sidecar failure | real persistence fixture를 sidecar commit에서 throw하고 known child ID 사용 | MP4 rollback, history 없음, error 1회/done 0회; direct helper/route 모두 검증 |
 
 ## 수용 기준
 
@@ -484,8 +480,10 @@ done으로 즉시 추가한 item과 새로고침 후 `/api/history`에서 복원
   보이고 terminal child를 history에 추가한다.
 - history reload 후 `videoLineage`가 손실되지 않는다.
 - legacy `/api/video/extend/native`의 기존 edit/extension validation 테스트가 green이다.
-- `npm run typecheck`, `npm run typecheck:tests`, focused tests, `npm test`,
-  `npm run test:inventory`, `cd ui && npm run build`가 모두 green이다.
+- `npm run typecheck`, `npm run typecheck:tests`, focused tests,
+  `npm run build:server`, `npm test`, `npm run test:inventory`,
+  `cd ui && npm run build`가 모두 green이다. build 후 curated tracked runtime JS가
+  대응 TS와 sync인지 main session이 판정한다.
 
 ## 중단 조건
 
