@@ -4,7 +4,12 @@
 node_modules
 generated/
 .DS_Store
-devlog/
+# Keep ad-hoc devlog output ignored, except the reviewed subscription-MCP plan.
+devlog/*
+!devlog/_plan/
+devlog/_plan/*
+!devlog/_plan/260715_subscription-mcp-providers/
+!devlog/_plan/260715_subscription-mcp-providers/**
 ui/dist/
 ui/tsconfig.app.tsbuildinfo
 ui/tsconfig.node.tsbuildinfo
