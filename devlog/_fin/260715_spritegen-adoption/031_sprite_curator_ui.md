@@ -277,6 +277,22 @@ CSS/a11y 계약:
 
 ## 전체 변경 목록
 
+### 2026-07-18 구현 후 테스트 매핑 정정
+
+`asset-gen-sprite-playback-contract.test.js`, `asset-gen-sprite-rail-contract.test.js`,
+`asset-gen-sprite-curator-contract.test.js`, `asset-gen-media-lightbox-contract.test.js`는
+diff-level 계획 원문으로 위와 아래 목록에 보존한다. 구현에서는 curator UI source-contract를
+단일 파일로 통합했다.
+
+| 실제 파일 | 통합한 계약 |
+|---|---|
+| `tests/sprite-curator-ui-contract.test.js` | playback timing/rAF lifecycle, atlas rect + shared affine transform, sequence/candidate 의미, keyboard/pointer rail a11y, Lightbox metadata gate와 target-only store state |
+| `tests/sprite-transform-contract.test.ts` | Python golden transform matrix/point parity |
+
+특히 `sprite-curator-ui-contract.test.js`는 rect/transform(21행), rail a11y(38행),
+Lightbox gate(47행)를 함께 고정한다. 따라서 원문에 적힌 분리 curator/playback/rail/lightbox
+계약 파일은 추가로 만들지 않는다.
+
 NEW:
 
 - `ui/src/types/spriteAtlas.ts`
@@ -326,6 +342,8 @@ node --test tests/asset-gen-sprite-playback-contract.test.js tests/asset-gen-spr
 node --test tests/asset-gen-sprite-curator-contract.test.js tests/asset-gen-media-lightbox-contract.test.js
 npm run test:inventory
 ```
+
+> **2026-07-18 구현 후 정정 (test matrix):** 위 분리 파일명은 계획 원문이다. 실제 focused curator 검증은 `node --test tests/sprite-transform-contract.test.ts tests/sprite-curator-ui-contract.test.js`로 실행한다.
 
 완료 조건은 Python golden transform parity, rAF state-update 제한, `order`/`selected`
 왕복 분리, dirty-close 보호, Lightbox 조건부 진입, keyboard rail 조작, production UI build 통과다.

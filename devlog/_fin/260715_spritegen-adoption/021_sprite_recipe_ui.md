@@ -15,6 +15,8 @@ AssetGen 안에 `일반 생성 | 스프라이트` 하위 탭과 recipe 작성 �
 - 모든 사용자 문자열은 en/ko/ja i18n에 존재하고 tab/dialog/alert/progress semantics를 가진다.
 - 신규 component/store 파일은 500줄 미만, async action은 `try/catch/finally`로 loading/error를 복구한다.
 
+> **2026-07-18 구현 후 정정 (i18n):** 위 `en/ko/ja`는 WP5 설계 당시의 가정으로 원문 보존한다. 실제 앱의 `ui/src/i18n/`에는 `en.json`, `ko.json`, `index.ts`만 있고 일본어 locale은 어디에도 없다. 이 lane의 완료 기준은 **en/ko key parity**와 기존 semantics이며, 일본어 locale 추가는 별도 제품 결정으로 이 범위 밖이다.
+
 현재 workspace는 form/results/project rail 구조다(`ui/src/components/assetgen/AssetGenWorkspace.tsx:51-128`, `ui/src/components/assetgen/AssetGenWorkspace.tsx:129-218`). 일반 생성 action은 별도 impl에 두고 store에서 wiring한다(`ui/src/store/storeAssetGenImpl.ts:124-199`, `ui/src/store/useAppStore.ts:193-200`).
 
 ## 2. 정보 구조와 진입점
@@ -226,6 +228,8 @@ ui/src/i18n/ko.json
 ui/src/i18n/ja.json
 ```
 
+> **2026-07-18 구현 후 정정 (i18n):** 위 `ja.json` 항목은 설계 원문으로 남긴다. 구현 대상은 존재하는 `en.json`과 `ko.json`뿐이다. Sprite 및 curator key는 두 locale에 추가됐으며, 새 ja locale 도입은 이 lane에서 수행하지 않는다.
+
 추가 key 목록:
 
 ```text
@@ -361,6 +365,8 @@ ui/src/i18n/ko.json
 ui/src/i18n/ja.json
 ```
 
+> **2026-07-18 구현 후 정정 (i18n):** 이 MODIFY 목록의 `ja.json`도 위와 같은 계획 시점 가정이다. 실제 변경 대상은 `en.json`, `ko.json`이다.
+
 조건부 NEW/MODIFY:
 
 ```text
@@ -369,6 +375,18 @@ ui/src/main.tsx                  # 위 stylesheet를 분리할 때 import만 추
 ```
 
 ## 10. 테스트와 구현 순서
+
+### 2026-07-18 구현 후 테스트 매핑 정정
+
+아래의 분리 component/store/API test 경로는 diff-level 계획 원문으로 보존한다. 구현에서는 실제 `tests/` 계약으로 통합·배치됐다.
+
+| 실제 파일 | 계획 항목에 대한 구현상 책임 |
+|---|---|
+| `tests/sprite-recipe-store.test.ts` | recipe schema/store 정규화, row transaction, list/delete |
+| `tests/sprite-recipe-routes.test.ts` | recipe CRUD와 shared validation error envelope |
+| `tests/sprite-recipe-ui-contract.test.js` | workspace tab semantics/lazy load, API async 계약, loading/error/anchor/row semantics, generation 전 subscription |
+
+따라서 `ui/src/**/__tests__/Sprite*.test.tsx`, `storeSpriteRecipeImpl.test.ts`, `api-sprite-recipes.test.ts`라는 원문 경로를 새 파일로 만들지 않는다. UI 계약은 `sprite-recipe-ui-contract.test.js`가 단일 source-contract 파일로 소유한다.
 
 테스트:
 
@@ -380,6 +398,8 @@ ui/src/main.tsx                  # 위 stylesheet를 분리할 때 import만 추
 - API: encoded paths, async body, error envelope, AbortSignal.
 - i18n: en/ko/ja key parity.
 - responsive: desktop 3영역과 mobile 단일 column에서 overflow 없음.
+
+> **2026-07-18 구현 후 정정 (i18n):** 원문의 `en/ko/ja` parity는 en/ko parity로 해석한다. ja locale 자체의 도입/검증은 별도 제품 결정이다.
 
 WP5 구현 순서:
 
