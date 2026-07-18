@@ -24,6 +24,34 @@ const MODEL_ID_MAP: Record<string, string> = {
 
 const GEMINI_TIMEOUT_MS = 120_000;
 
+// Public v1beta ImageResponseFormat uses enums (ASPECT_RATIO_*/IMAGE_SIZE_*),
+// while Vertex imageConfig takes plain strings ("1:1"/"1K") — mixing them got
+// every public-API request rejected with invalid aspect_ratio (070 QA).
+const V1BETA_ASPECT_ENUM: Record<string, string> = {
+  "1:1": "ASPECT_RATIO_ONE_BY_ONE", "2:3": "ASPECT_RATIO_TWO_BY_THREE",
+  "3:2": "ASPECT_RATIO_THREE_BY_TWO", "3:4": "ASPECT_RATIO_THREE_BY_FOUR",
+  "4:3": "ASPECT_RATIO_FOUR_BY_THREE", "4:5": "ASPECT_RATIO_FOUR_BY_FIVE",
+  "5:4": "ASPECT_RATIO_FIVE_BY_FOUR", "9:16": "ASPECT_RATIO_NINE_BY_SIXTEEN",
+  "16:9": "ASPECT_RATIO_SIXTEEN_BY_NINE", "21:9": "ASPECT_RATIO_TWENTY_ONE_BY_NINE",
+  "1:8": "ASPECT_RATIO_ONE_BY_EIGHT", "8:1": "ASPECT_RATIO_EIGHT_BY_ONE",
+  "1:4": "ASPECT_RATIO_ONE_BY_FOUR", "4:1": "ASPECT_RATIO_FOUR_BY_ONE",
+};
+
+const V1BETA_SIZE_ENUM: Record<string, string> = {
+  "512": "IMAGE_SIZE_FIVE_TWELVE",
+  "1K": "IMAGE_SIZE_ONE_K",
+  "2K": "IMAGE_SIZE_TWO_K",
+  "4K": "IMAGE_SIZE_FOUR_K",
+};
+
+function toV1BetaImageFormat(params: { aspectRatio: string; imageSize: string }): { aspect_ratio: string; image_size: string } {
+  const aspect = V1BETA_ASPECT_ENUM[params.aspectRatio];
+  const size = V1BETA_SIZE_ENUM[params.imageSize];
+  if (!aspect) throw new Error(`gemini-api: no v1beta aspect enum for ${params.aspectRatio}`);
+  if (!size) throw new Error(`gemini-api: no v1beta image-size enum for ${params.imageSize}`);
+  return { aspect_ratio: aspect, image_size: size };
+}
+
 function parseGeminiImageParams(size?: string): { aspectRatio: string; imageSize: string } {
   if (!size || size === "auto" || size === "1024x1024") return { aspectRatio: "1:1", imageSize: "1K" };
   const match = size.match(/^(\d+)x(\d+)$/);
@@ -132,7 +160,7 @@ export async function generateViaGeminiApi(
     : {
         response_modalities: ["TEXT", "IMAGE"],
         ...(imageParams
-          ? { response_format: { image: { aspect_ratio: imageParams.aspectRatio, image_size: imageParams.imageSize } } }
+          ? { response_format: { image: toV1BetaImageFormat(imageParams) } }
           : {}),
       };
   const configKey = useVertex ? "generationConfig" : "generation_config";

@@ -285,6 +285,7 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
           references: grokRefs,
           directApiKey: grokDirectApiKey,
           backgroundConstraint: backgroundPreset ? backgroundPlannerConstraint(backgroundPreset) : undefined,
+          webSearchEnabled,
         })
         : null;
       const generateOne = async () => {

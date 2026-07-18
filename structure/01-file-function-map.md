@@ -172,7 +172,7 @@ routes/
 | `lib/oauthProxy/index.ts` | 29 | Public surface — re-exports generators, streams, prompts, references, runtime, and shared types |
 | `lib/oauthProxy/generators.ts` | 229 | OAuth Responses single-image generation and stable generator exports |
 | `lib/oauthProxy/multimodeGenerators.ts` | 304 | OAuth Responses multimode and edit generators, masked-edit guard |
-| `lib/generatePipeline.ts` | 580 | Classic generation pipeline, provider retry, persistence, background-preset prompt shaping, and event publication |
+| `lib/generatePipeline.ts` | 592 | Classic generation pipeline, provider retry, persistence, background-preset prompt shaping, and event publication |
 | `lib/backgroundPresets.ts` | 47 | Background preset contract for asset generation: enum parse, prompt suffixes, planner constraint |
 | `lib/multimodePipeline.ts` | 535 | Multimode streaming pipeline, persistence, cancellation, and partial timeout |
 | `lib/nodeGeneration.ts` | 485 | Node provider routing, retry, persistence, and SSE publication |
@@ -185,7 +185,7 @@ routes/
 | `lib/oauthProxy/types.ts` | 10 | Shared OAuth proxy types (re-exported from `index`) |
 | `lib/promptSafetyPolicy.ts` | 3 | `SAFETY_INTENT_POLICY` constant: 3-line intent policy injected by oauthProxy/prompts and the API-key Responses adapter |
 | `lib/responsesImageAdapter.ts` | 478 | API-key provider Responses adapter — parity with OAuth path for generate/edit/multimode/node, including multimode final-image callbacks |
-| `lib/providerOptions.ts` | 93 | Per-provider option assembly (provider, model, size, reasoning effort, web search) |
+| `lib/providerOptions.ts` | 95 | Per-provider option assembly (provider, model, size, reasoning effort, web search) |
 | `lib/runtimeContext.ts` | 178 | Per-request runtime context plumbing for routes and lib helpers |
 | `lib/errInfo.ts` | 44 | Error info shape and helpers shared across routes/lib |
 | `lib/oauthNormalize.ts` | 31 | Upstream OAuth response field normalization |
@@ -216,8 +216,8 @@ routes/
 | `lib/capabilities.ts` | 138 | Runtime provider and feature capability resolution |
 | `lib/composerSnapshot.ts` | 34 | Composer state snapshot normalization |
 | `lib/configKeys.ts` | 69 | Runtime configuration key definitions and validation |
-| `lib/elementCompiler.ts` | 196 | Structured element prompt compilation and validation |
-| `lib/geminiApiImageAdapter.ts` | 236 | Gemini API image-generation provider adapter |
+| `lib/elementCompiler.ts` | 199 | Structured element prompt compilation and validation |
+| `lib/geminiApiImageAdapter.ts` | 264 | Gemini API image-generation provider adapter |
 | `lib/generationCancel.ts` | 29 | Shared generation cancellation helpers |
 | `lib/generationInputValidation.ts` | 46 | Shared generation request input validation |
 | `lib/grokImageCore.ts` | 237 | Shared Grok image request and response handling |

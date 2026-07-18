@@ -297,13 +297,20 @@ export async function planGrokImage(
     directApiKey?: string;
     plannerModel?: string;
     backgroundConstraint?: string;
+    webSearchEnabled?: boolean;
   } = {},
 ): Promise<GrokImagePlan> {
   const imageModel = options.model || (ctx.config as any).grokProvider?.defaultImageModel || "grok-imagine-image-quality";
   const planner = getPlannerConfig(ctx);
   const plannerModel = options.plannerModel || planner.model;
   const sizeParams = mapSizeToGrokImageParams(options.size);
-  const search = await searchGrokVisualContext(prompt, ctx, { signal: options.signal, requestId: options.requestId, directApiKey: options.directApiKey, plannerModel });
+  // Honor the web-search toggle end to end: skip the forced search call and
+  // record calls actually made (070 QA: search ran even with
+  // webSearchEnabled:false, and webSearchCalls was hardcoded to 1).
+  const searchEnabled = options.webSearchEnabled !== false;
+  const search = searchEnabled
+    ? await searchGrokVisualContext(prompt, ctx, { signal: options.signal, requestId: options.requestId, directApiKey: options.directApiKey, plannerModel })
+    : { summary: "", skipped: true } as Awaited<ReturnType<typeof searchGrokVisualContext>>;
   const payload = buildGrokPlannerPayload(
     prompt,
     imageModel,
@@ -335,7 +342,8 @@ export async function planGrokImage(
       throw grokStageError("planner", msg, res.status);
     }
 
-    const plan = parseGrokImagePlan(await res.json() as GrokChatResponse, imageModel);
+    const parsed = parseGrokImagePlan(await res.json() as GrokChatResponse, imageModel);
+    const plan = { ...parsed, webSearchCalls: searchEnabled ? 1 : 0 };
     logEvent("grok", "planner:done", {
       requestId: options.requestId,
       plannerModel,

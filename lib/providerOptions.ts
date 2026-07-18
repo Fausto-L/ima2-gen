@@ -41,7 +41,9 @@ export function resolveProviderOptions(ctx: RuntimeContext | null | undefined, {
       model: grokModelCheck.model,
       reasoningEffort: "none",
       size: rawSize,
-      webSearchEnabled: true,
+      // Honor the caller's toggle (070 QA: forced true ran a real web search
+      // on every grok generation, ignoring webSearchEnabled:false).
+      webSearchEnabled: rawWebSearchEnabled !== false && searchMode !== "off",
     };
   }
 
@@ -55,7 +57,7 @@ export function resolveProviderOptions(ctx: RuntimeContext | null | undefined, {
       model: grokModelCheck.model,
       reasoningEffort: "none",
       size: rawSize,
-      webSearchEnabled: true,
+      webSearchEnabled: rawWebSearchEnabled !== false && searchMode !== "off",
     };
   }
 

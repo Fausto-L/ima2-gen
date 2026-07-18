@@ -688,3 +688,46 @@ describe("API provider parity", () => {
     });
   });
 });
+
+describe("grok web-search toggle (070 QA regression)", () => {
+  it("generate provider=grok honors webSearchEnabled:false — zero search calls and zero webSearchCalls", async () => {
+    const calls = [];
+    globalThis.fetch = async (url, init) => {
+      if (String(url).startsWith("http://127.0.0.1:") && !String(url).includes("/v1/")) {
+        return originalFetch(url, init);
+      }
+      const body = JSON.parse(String(init?.body || "{}"));
+      calls.push({ url: String(url), body });
+      if (String(url).endsWith("/v1/chat/completions")) {
+        return Response.json({
+          choices: [{
+            message: {
+              tool_calls: [{
+                type: "function",
+                function: { name: "generate_image", arguments: JSON.stringify({ prompt: "planned grok prompt" }) },
+              }],
+            },
+          }],
+        });
+      }
+      if (String(url).startsWith("https://cdn.x.ai/")) {
+        return new Response(Buffer.from(FINAL_B64, "base64"), { headers: { "Content-Type": "image/png" } });
+      }
+      return Response.json({ data: [{ url: "https://cdn.x.ai/test-toggle.png" }], usage: { cost_in_usd_ticks: 1 } });
+    };
+
+    await withApp(async ({ baseUrl }) => {
+      const res = await fetch(`${baseUrl}/api/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: "grok no search please", provider: "grok", webSearchEnabled: false }),
+      });
+      const body = await res.json();
+      assert.equal(res.status, 200);
+      assert.equal(body.webSearchEnabled, false);
+      assert.equal(body.webSearchCalls, 0);
+      assert.equal(calls.filter((c) => c.url.endsWith("/v1/responses")).length, 0, "no forced web search when disabled");
+      assert.equal(calls.filter((c) => c.url.endsWith("/v1/chat/completions")).length, 1, "planner still runs without search");
+    });
+  });
+});
