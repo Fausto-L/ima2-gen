@@ -1,4 +1,5 @@
-export type UIMode = "classic" | "node" | "card-news" | "agent" | "assets" | "home";
+export type UIMode = "classic" | "node" | "card-news" | "agent" | "assets" | "asset-gen" | "home";
+export type AssetGenBackgroundPreset = "chroma-green" | "white" | "black";
 export type SettingsSection = "providers" | "workspace" | "general";
 export type HistoryStripLayout = "rail" | "horizontal" | "sidebar";
 export type Provider = "oauth" | "api" | "grok" | "grok-api" | "agy" | "gemini-api";
@@ -213,6 +214,7 @@ export type GenerateRequest = {
   composerPrompt?: string;
   composerInsertedPrompts?: ComposerInsertedPromptSnapshot[];
   providerUrl?: string;
+  backgroundPreset?: AssetGenBackgroundPreset;
 };
 
 export type MultimodeGenerateRequest = Omit<GenerateRequest, "n"> & {

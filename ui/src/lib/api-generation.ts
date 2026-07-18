@@ -263,6 +263,7 @@ export type VideoGenerateRequest = {
   clientRequestId?: string;
   requestId?: string;
   storyboard?: boolean;
+  backgroundPreset?: import("../types").AssetGenBackgroundPreset;
 };
 
 export type VideoGenerateDone = {

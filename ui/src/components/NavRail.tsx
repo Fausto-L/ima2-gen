@@ -14,6 +14,7 @@ const HASH_TO_MODE: Record<string, UIMode | "settings"> = {
   "#node": "node",
   "#agent": "agent",
   "#assets": "assets",
+  "#asset-gen": "asset-gen",
 };
 
 const MODE_TO_HASH: Record<string, string> = {
@@ -22,6 +23,7 @@ const MODE_TO_HASH: Record<string, string> = {
   node: "#node",
   agent: "#agent",
   assets: "#assets",
+  "asset-gen": "#asset-gen",
 };
 
 function resolveHash(): { mode: UIMode; settings: boolean } | null {
@@ -92,6 +94,17 @@ function IconAssets() {
   );
 }
 
+function IconAssetGen() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="13" height="13" rx="2" />
+      <path d="M3 12l3.5-3.5a1.4 1.4 0 0 1 2 0L13 13" />
+      <path d="M19 14v6" />
+      <path d="M16 17h6" />
+    </svg>
+  );
+}
+
 /* ── Rail items ── */
 
 type RailItem = {
@@ -110,6 +123,7 @@ const RAIL_ITEMS: RailItem[] = [
   { id: "node", mode: "node", icon: IconNode, labelKey: "nav.node", enabled: ENABLE_NODE_MODE },
   { id: "agent", mode: "agent", icon: IconAgent, labelKey: "nav.agent", enabled: ENABLE_AGENT_MODE },
   { id: "assets", mode: "assets", icon: IconAssets, labelKey: "nav.assets", enabled: true },
+  { id: "asset-gen", mode: "asset-gen", icon: IconAssetGen, labelKey: "nav.assetGen", enabled: true },
   { id: "settings", settingsAction: true, icon: IconSettings, labelKey: "nav.settings", enabled: true, bottom: true },
 ];
 

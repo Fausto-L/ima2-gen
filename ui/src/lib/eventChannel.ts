@@ -24,7 +24,7 @@ export type ConnectionState = "connected" | "reconnecting" | "failed";
 const FAILED_THRESHOLD = 3;
 let connectionStateCallback: ((state: ConnectionState) => void) | null = null;
 
-const EVENT_TYPES = ["phase", "partial", "image", "done", "error", "submitted", "progress", "planning"];
+const EVENT_TYPES = ["phase", "partial", "image", "done", "error", "submitted", "progress", "planning", "keying-start", "keying-progress", "keying-done", "keying-error"];
 
 function buildEventsUrl(): string {
   if (!lastEventId) return "/api/events";

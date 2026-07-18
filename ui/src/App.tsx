@@ -40,6 +40,9 @@ const LazyAgentWorkspace = lazy(() =>
 const LazyAssetsWorkspace = lazy(() =>
   import("./components/assets/AssetsWorkspace").then((module) => ({ default: module.AssetsWorkspace })),
 );
+const LazyAssetGenWorkspace = lazy(() =>
+  import("./components/assetgen/AssetGenWorkspace").then((module) => ({ default: module.AssetGenWorkspace })),
+);
 const HomeWorkspace = lazy(() =>
   import("./components/home/HomeWorkspace").then((module) => ({ default: module.HomeWorkspace })),
 );
@@ -71,9 +74,11 @@ export default function App() {
       uiModeRaw === "node" && ENABLE_NODE_MODE ? "node" :
       uiModeRaw === "home" ? "home" :
       uiModeRaw === "assets" ? "assets" :
+      uiModeRaw === "asset-gen" ? "asset-gen" :
         "classic";
   const isAgentMode = uiMode === "agent";
   const isAssetsMode = uiMode === "assets";
+  const isAssetGenMode = uiMode === "asset-gen";
   const isHomeMode = uiMode === "home";
   const isMobile = useIsMobile();
   const workspaceSettings = resolveWorkspaceSettings(workspaceProfile);
@@ -82,7 +87,7 @@ export default function App() {
     uiMode === "classic" &&
     workspaceSettings.composerPlacement === "bottom" &&
     workspaceSettings.multimodeHistoryGrouping === "sequence";
-  const showHistoryStrip = !promptStudioClassic && !isAgentMode && !isAssetsMode && !isHomeMode;
+  const showHistoryStrip = !promptStudioClassic && !isAgentMode && !isAssetsMode && !isAssetGenMode && !isHomeMode;
 
   useBrowserAttentionBadge(unseenGeneratedCount);
 
@@ -149,13 +154,15 @@ export default function App() {
             <LazyAgentWorkspace />
           ) : uiMode === "assets" ? (
             <LazyAssetsWorkspace />
+          ) : uiMode === "asset-gen" ? (
+            <LazyAssetGenWorkspace />
           ) : uiMode === "home" ? (
             <HomeWorkspace />
           ) : (
             <Canvas />
           )}
         </Suspense>
-        {uiMode === "agent" ? null : uiMode === "card-news" ? null : uiMode === "assets" ? null : uiMode === "home" ? null : <RightPanel />}
+        {uiMode === "agent" ? null : uiMode === "card-news" ? null : uiMode === "assets" ? null : uiMode === "asset-gen" ? null : uiMode === "home" ? null : <RightPanel />}
       </div>
       <CustomSizeConfirmModal />
       <TrashUndoToast />

@@ -35,7 +35,7 @@ describe("Card News frontend dev MVP contract", () => {
 
     assert.match(app, /CardNewsWorkspace/);
     assert.match(app, /uiMode === "card-news"/);
-    assert.match(app, /uiMode === "card-news" \? null : uiMode === "assets" \? null : uiMode === "home" \? null : <RightPanel \/>/);
+    assert.match(app, /uiMode === "card-news" \? null : uiMode === "assets" \? null : uiMode === "asset-gen" \? null : uiMode === "home" \? null : <RightPanel \/>/);
     assert.match(sidebar, /CardNewsComposer/);
     assert.match(sidebar, /uiMode === "card-news"/);
     assert.match(sidebar, /<CardNewsComposer \/>/);
