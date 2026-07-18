@@ -1,4 +1,5 @@
 import { registerCapabilitiesRoutes } from "./capabilities.js";
+import { registerModelsRoutes } from "./models.js";
 import { registerEventsRoute } from "./events.js";
 import { registerHealthRoutes } from "./health.js";
 import { registerHistoryRoutes } from "./history.js";
@@ -32,6 +33,7 @@ import { registerQuotaRoutes } from "./quota.js";
 import { registerAuthRoutes } from "./auth.js";
 import { registerMcpConnectionRoutes } from "./mcpConnections.js";
 import { registerMcpMediaRoutes } from "./mcpMedia.js";
+import { registerMcpTempReferenceRoutes } from "./mcpTempReferences.js";
 import { registerContractRoutes } from "./contracts.js";
 import { mountKeyRoutes } from "./keys.js";
 import { registerGenerationRequestLogRoutes } from "./generationRequestLog.js";
@@ -72,7 +74,9 @@ export function configureRoutes(app, ctxRaw) {
     registerQuotaRoutes(app, ctx);
     registerAuthRoutes(app);
     registerMcpConnectionRoutes(app, ctx);
+    registerModelsRoutes(app, ctx);
     registerMcpMediaRoutes(app, ctx);
+    registerMcpTempReferenceRoutes(app, ctx);
     registerContractRoutes(app, ctx);
     mountKeyRoutes(app, ctx);
     registerGenerationRequestLogRoutes(app, ctx);
