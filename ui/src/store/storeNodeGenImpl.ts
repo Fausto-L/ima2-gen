@@ -21,6 +21,11 @@ import {
 } from "./storeHelpers";
 import type { AppState } from "./storeTypes";
 import { clearFlightAbort, registerFlightAbort } from "./flightAbortRegistry";
+import { getAssetById } from "../lib/api-assets";
+import { assetMediaUrl } from "../lib/assetPreview";
+import { elementReferenceFilenames, upsertElementCatalog } from "../lib/elementCatalog";
+import { collectElementInputs, type ElementInputNode } from "../lib/nodeElementInputs";
+import { fetchAsDataUrl } from "../lib/image";
 
 type StoreSet = (p: Partial<AppState>) => void;
 type StoreGet = () => AppState;
@@ -28,24 +33,45 @@ type StoreGet = () => AppState;
 const nodeGenerationLocks = new Set<string>();
 
 /**
- * Find an element reference node feeding any of the given targets whose
- * element is missing (data.missing, or unresolved against a synced catalog).
- * Returns the element display name for the toast, or null.
+ * Resolve every upstream element input before a run (higgsfield 120 EN,
+ * Socrates B3): missing/deleted elements block; existing elements are
+ * re-fetched so the run uses the LATEST refs/notes and records a revision
+ * snapshot on the element node. Returns ref dataURLs to merge into the
+ * request, or the blocking element's display name.
  */
-function findMissingElementInput(state: AppState, targetIds: string[]): string | null {
-  const targets = new Set(targetIds);
-  const catalog = state.elementCatalog;
-  for (const edge of state.graphEdges) {
-    if (!targets.has(edge.target)) continue;
-    const source = state.graphNodes.find((n) => n.id === edge.source);
-    if (!source || source.type !== "elementReferenceNode") continue;
-    const data = source.data as Record<string, unknown>;
-    const name = (typeof data.elementName === "string" && data.elementName) || (typeof data.elementId === "string" && data.elementId) || "element";
-    if (data.missing === true) return name;
-    const elementId = typeof data.elementId === "string" ? data.elementId : null;
-    if (elementId && Array.isArray(catalog) && !catalog.some((record) => record.id === elementId)) return name;
+async function resolveElementInputsForRun(
+  inputs: ElementInputNode[],
+  set: StoreSet,
+  get: StoreGet,
+): Promise<{ ok: true; referenceDataUrls: string[] } | { ok: false; name: string }> {
+  const dataUrls: string[] = [];
+  for (const input of inputs) {
+    if (input.missing || !input.elementId) {
+      if (input.missing) return { ok: false, name: input.name };
+      continue;
+    }
+    let asset;
+    try {
+      asset = (await getAssetById(input.elementId)).asset;
+    } catch {
+      return { ok: false, name: input.name };
+    }
+    // Keep the catalog fresh and snapshot the resolved revision on the node.
+    const catalog = upsertElementCatalog(get().elementCatalog, asset);
+    set({
+      elementCatalog: catalog,
+      graphNodes: get().graphNodes.map((n) => n.id === input.nodeId
+        ? { ...n, data: { ...n.data, resolvedRevision: (asset as unknown as Record<string, unknown>).updatedAt ?? asset.createdAt, missing: false } as typeof n.data }
+        : n),
+    });
+    for (const file of elementReferenceFilenames(asset)) {
+      try {
+        const dataUrl = await fetchAsDataUrl(assetMediaUrl(file));
+        if (!dataUrls.includes(dataUrl)) dataUrls.push(dataUrl);
+      } catch { /* an unreadable ref is dropped, not fatal */ }
+    }
   }
-  return null;
+  return { ok: true, referenceDataUrls: dataUrls };
 }
 
 export async function runGenerateNodeInPlaceImpl(
@@ -71,11 +97,12 @@ export async function runGenerateNodeInPlaceImpl(
     nodeGenerationLocks.delete(clientId);
     return null;
   }
-  // Missing element inputs block execution (higgsfield 120 EN-08): any
-  // element reference node feeding this target must resolve.
-  const missingElement = findMissingElementInput(get(), [clientId]);
-  if (missingElement) {
-    get().showToast(t("node.elementMissing", { name: missingElement }), true);
+  // Element inputs (upstream traversal): missing/deleted blocks; existing
+  // elements are re-fetched and their latest refs merge into the request.
+  const elementInputs = collectElementInputs(get().graphNodes, get().graphEdges, [clientId]);
+  const elementResolution = await resolveElementInputsForRun(elementInputs, set, get);
+  if (!elementResolution.ok) {
+    get().showToast(t("node.elementMissing", { name: elementResolution.name }), true);
     nodeGenerationLocks.delete(clientId);
     return null;
   }
@@ -85,7 +112,7 @@ export async function runGenerateNodeInPlaceImpl(
     nodeGenerationLocks.delete(clientId);
     return null;
   }
-  const nodeRefs = node.data.referenceImages ?? [];
+  const nodeRefs = [...(node.data.referenceImages ?? []), ...elementResolution.referenceDataUrls];
   const s = get();
   // Branch variants carry per-node provider/model/size (settingsPatch) —
   // prefer them over global settings (higgsfield 120 NB).
@@ -314,7 +341,9 @@ export async function runNodeBatchImpl(
   get: StoreGet,
 ): Promise<void> {
   if (get().nodeBatchRunning) return;
-  const selectedIds = getSelectedNodeIds(get().graphNodes);
+  // Element reference nodes are inputs, never generation targets (Socrates B4).
+  const selectedIds = getSelectedNodeIds(get().graphNodes)
+    .filter((id) => get().graphNodes.find((n) => n.id === id)?.type !== "elementReferenceNode");
   if (selectedIds.length === 0) {
     get().showToast(t("nodeBatch.noneSelected"), true);
     return;
@@ -335,10 +364,12 @@ export async function runNodeBatchImpl(
     get().showToast(t("nodeBatch.nothingToRun"));
     return;
   }
-  // Missing element inputs block the whole batch (higgsfield 120 EN-08).
-  const missingElement = findMissingElementInput(get(), candidates);
-  if (missingElement) {
-    get().showToast(t("node.elementMissing", { name: missingElement }), true);
+  // Missing element inputs block the whole batch (upstream traversal —
+  // per-candidate re-fetch happens inside each runGenerateNodeInPlace).
+  const batchElementInputs = collectElementInputs(get().graphNodes, get().graphEdges, candidates);
+  const batchMissing = batchElementInputs.find((input) => input.missing);
+  if (batchMissing) {
+    get().showToast(t("node.elementMissing", { name: batchMissing.name }), true);
     return;
   }
 

@@ -24,7 +24,9 @@ export function NodeBatchBar() {
   const selectedIds = nodes.filter((n) => n.selected).map((n) => n.id);
   const selectedEdgeIds = edges.filter((edge) => edge.selected).map((edge) => edge.id);
   const selectedSet = new Set(selectedIds);
-  const missingCount = nodes.filter((n) => selectedSet.has(n.id) && !nodeHasImage(n)).length;
+  // Element reference nodes are inputs, not generation targets — exclude from
+  // the missing-image count (Socrates B4).
+  const missingCount = nodes.filter((n) => selectedSet.has(n.id) && n.type !== "elementReferenceNode" && !nodeHasImage(n)).length;
   const staleImpact = getUnselectedDownstreamIds(edges, selectedIds).length;
 
   const run = (mode: NodeBatchMode) => {

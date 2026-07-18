@@ -105,6 +105,15 @@ export default function App() {
   }, [hydrateHistory, loadSessions, reconcileInflight, startInFlightPolling, syncCapabilities]);
 
   useEffect(() => {
+    const onOpenAssetDetail = (event: Event) => {
+      const assetId = (event as CustomEvent<{ assetId?: string }>).detail?.assetId;
+      if (assetId) useAppStore.getState().openAssetDetail(assetId);
+    };
+    window.addEventListener("ima2:open-assets-detail", onOpenAssetDetail);
+    return () => window.removeEventListener("ima2:open-assets-detail", onOpenAssetDetail);
+  }, []);
+
+  useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (!e.key) return;
       if (e.key === "ima2.inFlight" || e.key === "ima2.selectedFilename") {

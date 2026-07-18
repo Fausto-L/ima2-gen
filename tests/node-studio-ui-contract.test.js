@@ -220,16 +220,65 @@ describe("EN — element node lifecycle", () => {
 
   it("restores the renderer and blocks single and batch runs for missing inputs", () => {
     assert.match(graphSave, /nodeType === "element-reference" \? "elementReferenceNode" : "imageNode"/);
-    const missing = section(nodeRun, "function findMissingElementInput", "export async function runGenerateNodeInPlaceImpl");
-    assert.match(missing, /source\.type !== "elementReferenceNode"/);
-    assert.match(missing, /data\.missing === true/);
-    assert.match(missing, /Array\.isArray\(catalog\) && !catalog\.some\(\(record\) => record\.id === elementId\)/);
+    // Reload preserves unmanaged element/branch fields (spread-first mapper).
+    assert.match(graphSave, /\.\.\.\(d as unknown as ImageNodeData\),/);
+    // Traversal lives in the pure module; the run resolves through it.
+    const traversal = read("ui/src/lib/nodeElementInputs.ts");
+    assert.match(traversal, /source\.type === "elementReferenceNode"/);
+    assert.match(traversal, /queue\.push\(source\.id\)/);
     const single = section(nodeRun, "export async function runGenerateNodeInPlaceImpl", "export async function runNodeBatchImpl");
-    assert.ok(single.indexOf("findMissingElementInput(get(), [clientId])") < single.indexOf("postNodeGenerateStream({"));
-    assert.match(single, /if \(missingElement\)[\s\S]*showToast[\s\S]*return null/);
+    assert.ok(single.indexOf("collectElementInputs(get().graphNodes, get().graphEdges, [clientId])") < single.indexOf("postNodeGenerateStream({"));
+    assert.match(single, /resolveElementInputsForRun\(elementInputs, set, get\)/);
+    assert.match(single, /if \(!elementResolution\.ok\)[\s\S]*showToast[\s\S]*return null/);
+    assert.match(single, /\.\.\.elementResolution\.referenceDataUrls/);
     const batch = section(nodeRun, "export async function runNodeBatchImpl", "\n}");
-    assert.ok(batch.indexOf("findMissingElementInput(get(), candidates)") < batch.indexOf("set({ nodeBatchRunning: true"));
-    assert.match(batch, /if \(missingElement\)[\s\S]*showToast[\s\S]*return/);
+    assert.ok(batch.indexOf("collectElementInputs(get().graphNodes, get().graphEdges, candidates)") < batch.indexOf("set({ nodeBatchRunning: true"));
+    assert.match(batch, /batchElementInputs\.find\(\(input\) => input\.missing\)/);
+    assert.match(batch, /type !== "elementReferenceNode"/);
+  });
+
+  it("executable — collectElementInputs walks upstream chains and dedupes", async () => {
+    const { collectElementInputs } = await import("../ui/src/lib/nodeElementInputs.ts");
+    const elementNode = { id: "el1", type: "elementReferenceNode", position: { x: 0, y: 0 }, data: { elementId: "a_1", elementName: "Hero", missing: false } };
+    const missingNode = { id: "el2", type: "elementReferenceNode", position: { x: 0, y: 0 }, data: { elementId: "a_2", elementName: "Lost", missing: true } };
+    const imageA = { id: "a", type: "imageNode", position: { x: 0, y: 0 }, data: {} };
+    const imageB = { id: "b", type: "imageNode", position: { x: 0, y: 0 }, data: {} };
+    const nodes = [elementNode, missingNode, imageA, imageB];
+    const edges = [
+      { id: "e1", source: "el1", target: "a" },
+      { id: "e2", source: "a", target: "b" },
+      { id: "e3", source: "el2", target: "b" },
+    ];
+    const inputs = collectElementInputs(nodes, edges, ["b"]);
+    assert.deepEqual(inputs.map((i) => i.elementId).sort(), ["a_1", "a_2"]);
+    assert.equal(inputs.find((i) => i.elementId === "a_2")?.missing, true);
+    assert.deepEqual(collectElementInputs(nodes, edges, ["a"]).map((i) => i.elementId), ["a_1"]);
+    assert.equal(collectElementInputs(nodes, edges, ["a", "b"]).filter((i) => i.elementId === "a_1").length, 1);
+  });
+
+  it("pre-run element resolution re-fetches, snapshots revision, and merges refs", () => {
+    assert.match(nodeRun, /await getAssetById\(input\.elementId\)/);
+    assert.match(nodeRun, /upsertElementCatalog\(get\(\)\.elementCatalog, asset\)/);
+    assert.match(nodeRun, /resolvedRevision: .*updatedAt \?\? asset\.createdAt/);
+    assert.match(nodeRun, /elementReferenceFilenames\(asset\)/);
+    assert.match(nodeRun, /if \(!dataUrls\.includes\(dataUrl\)\) dataUrls\.push\(dataUrl\)/);
+    assert.match(nodeRun, /return \{ ok: false, name: input\.name \}/);
+  });
+
+  it("open-assets-detail listener wires canvas double-click to the assets detail", () => {
+    const app = read("ui/src/App.tsx");
+    const workspace = read("ui/src/components/assets/AssetsWorkspace.tsx");
+    const storeTypes = read("ui/src/store/storeTypes.ts");
+    assert.match(app, /addEventListener\("ima2:open-assets-detail"/);
+    assert.match(app, /openAssetDetail\(assetId\)/);
+    assert.match(storeTypes, /pendingAssetDetailId: string \| null/);
+    assert.match(workspace, /setSelectedAssetId\(pendingAssetDetailId\)/);
+    assert.match(workspace, /pendingAssetDetailId: null \}\)/);
+  });
+
+  it("palette clamps into the viewport", () => {
+    assert.match(palette, /Math\.min\(anchor\.clientX, window\.innerWidth - 372\)/);
+    assert.match(palette, /Math\.min\(anchor\.clientY, window\.innerHeight - 220\)/);
   });
 });
 

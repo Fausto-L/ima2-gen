@@ -93,7 +93,11 @@ export function NodeCommandPalette({ open, anchor, sourcePort, commands, recentC
     else if ((event.metaKey || event.ctrlKey) && event.key === "Backspace") { event.preventDefault(); setQuery(""); }
   };
   const sourcePortLabel = sourcePort ? portTypeLabel(t, sourcePort.type) : null;
-  return <section className="node-command-palette" style={{ left: anchor.clientX, top: anchor.clientY }} aria-label={t("nodeStudio.palette.ariaLabel")}>
+  // Clamp into the viewport — raw pointer coordinates overflow on right/bottom
+  // edge drops, especially narrow screens (Socrates note).
+  const paletteLeft = Math.max(8, Math.min(anchor.clientX, window.innerWidth - 372));
+  const paletteTop = Math.max(8, Math.min(anchor.clientY, window.innerHeight - 220));
+  return <section className="node-command-palette" style={{ left: paletteLeft, top: paletteTop }} aria-label={t("nodeStudio.palette.ariaLabel")}>
     <input ref={inputRef} className="node-command-palette__search" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={onKeyDown} placeholder={sourcePortLabel ? t("nodeStudio.palette.compatiblePlaceholder", { portType: sourcePortLabel }) : t("nodeStudio.palette.searchPlaceholder")} aria-controls={listId} aria-activedescendant={ordered[activeIndex] ? `${listId}-${ordered[activeIndex].type}` : undefined} />
     {sourcePortLabel ? <p className="node-command-palette__filter">{t("nodeStudio.palette.filter", { portType: sourcePortLabel })}</p> : null}
     {ordered.length === 0 ? <p className="node-command-palette__empty">{sourcePortLabel ? t("nodeStudio.palette.emptyCompatible", { portType: sourcePortLabel }) : t("nodeStudio.palette.emptySearch")}</p> : <div className="node-command-palette__list" id={listId} role="listbox" aria-label={t("nodeStudio.palette.commandsAria")}>{CATEGORY_ORDER.map((category) => { const group = ordered.filter((command) => command.category === category); if (!group.length) return null; return <section key={category}><h3>{t(CATEGORY_LABEL_KEYS[category])}</h3>{group.map((command) => { const commandIndex = ordered.indexOf(command); return <button key={command.type} id={`${listId}-${command.type}`} type="button" role="option" aria-selected={commandIndex === activeIndex} className={commandIndex === activeIndex ? "is-active" : ""} onPointerEnter={() => setActiveIndex(commandIndex)} onClick={() => onInsert(command)}><span>{commandText(t, command, "label")}</span><small>{commandText(t, command, "description")}</small></button>; })}</section>; })}</div>}

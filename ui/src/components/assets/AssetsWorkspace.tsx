@@ -77,6 +77,12 @@ export function AssetsWorkspace() {
   const [previewItem, setPreviewItem] = useState<GenerateItem | null>(null);
   const isMobile = useIsMobile();
   const keyingTarget = useAppStore((s) => s.keyingTarget);
+  const pendingAssetDetailId = useAppStore((s) => s.pendingAssetDetailId);
+  useEffect(() => {
+    if (!pendingAssetDetailId) return;
+    setSelectedAssetId(pendingAssetDetailId);
+    useAppStore.setState({ pendingAssetDetailId: null });
+  }, [pendingAssetDetailId]);
   const hadKeyingRef = useRef(false);
   useEffect(() => {
     if (keyingTarget) { hadKeyingRef.current = true; return; }

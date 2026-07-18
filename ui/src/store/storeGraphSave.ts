@@ -44,7 +44,11 @@ export function mapSessionToGraph(session: SessionFull): {
         ? `/generated/${d.serverNodeId}.png`
         : null;
     const imageUrl = explicitImageUrl ?? fallbackImageUrl;
+    // Spread first so element/branch fields the mapper does not manage
+    // (nodeType, elementId, elementName, thumbnailUrl, refCount, notesPreview,
+    // missing, provider, resolvedRevision) survive save→reload (Socrates B2).
     const data: ImageNodeData = {
+      ...(d as unknown as ImageNodeData),
       clientId: n.id as ClientNodeId,
       serverNodeId: (d.serverNodeId ?? null) as string | null,
       parentServerNodeId: (d.parentServerNodeId ?? null) as string | null,

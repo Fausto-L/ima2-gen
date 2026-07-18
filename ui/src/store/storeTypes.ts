@@ -234,6 +234,10 @@ export type AppState = PresetState & ReferenceTraySlice & {
   missingElementIds: string[];
   addElementFromMention: (asset: AssetItem) => TrayItem | null;
   syncElementCatalog: (records: AssetItem[]) => void;
+  /** Cross-surface "open this asset's detail" request (e.g. element node
+   * double-click on the canvas). AssetsWorkspace consumes and clears it. */
+  pendingAssetDetailId: string | null;
+  openAssetDetail: (assetId: string) => void;
   assetGenWorkflow: AssetGenWorkflow;
   setAssetGenWorkflow: (value: AssetGenWorkflow) => void;
   spriteRecipes: SpriteRecipeSummary[];

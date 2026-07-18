@@ -44,6 +44,20 @@ function validGraph(graph: NodeTemplateGraph): void {
   if (graph.nodes.some((node) => !node || typeof node.id !== "string" || !node.id)) throw error(400, "INVALID_TEMPLATE_GRAPH", "every node needs an id");
 }
 
+/** Strict input validation for create/update boundaries (Socrates medium).
+ * stripGraphForTemplate itself stays tolerant: it drops dangling edges with
+ * diagnostics instead of rejecting (NT-05 contract). */
+function assertStrictGraph(graph: NodeTemplateGraph): void {
+  validGraph(graph);
+  const nodeIds = graph.nodes.map((node) => node.id);
+  if (new Set(nodeIds).size !== nodeIds.length) throw error(400, "INVALID_TEMPLATE_GRAPH", "node ids must be unique");
+  const idSet = new Set(nodeIds);
+  for (const edge of graph.edges) {
+    if (!edge || typeof edge.source !== "string" || typeof edge.target !== "string") throw error(400, "INVALID_TEMPLATE_GRAPH", "every edge needs string source and target");
+    if (!idSet.has(edge.source) || !idSet.has(edge.target)) throw error(400, "INVALID_TEMPLATE_GRAPH", `dangling edge: ${edge.id ?? `${edge.source}->${edge.target}`}`);
+  }
+}
+
 export function stripGraphForTemplate(graph: NodeTemplateGraph, options: StripTemplateOptions): NodeTemplateGraph {
   validGraph(graph);
   const input = clone(graph);
@@ -91,6 +105,7 @@ export class SqliteNodeTemplateStore implements NodeTemplateStore {
   async get(id: string): Promise<NodeTemplateRecord | null> { return nodeTemplateSeeds.find((seed) => seed.id === id) ?? findUser(id); }
   async create(input: CreateNodeTemplateInput): Promise<NodeTemplateRecord> {
     const name = text(input.name); if (name.length < 1 || name.length > 80) throw error(400, "INVALID_TEMPLATE_NAME", "template name must be 1-80 characters");
+    assertStrictGraph(input.graph);
     const record: NodeTemplateRecord = { id: `template_${ulid()}`, name, description: text(input.description), source: "user", graph: stripGraphForTemplate(input.graph, input.stripOptions ?? { preservePrompt: true, preserveProvider: true }), thumbnail: typeof input.thumbnail === "string" ? input.thumbnail : undefined, tags: tags(input.tags), version: 1, createdAt: Date.now(), updatedAt: Date.now() };
     getDb().prepare("INSERT INTO assets (id, kind, name, file_path, folder_id, notes, metadata, created_at, updated_at) VALUES (?, 'template', ?, NULL, NULL, ?, ?, ?, ?)").run(record.id, record.name, record.description || null, JSON.stringify({ graph: record.graph, thumbnail: record.thumbnail, tags: record.tags }), record.createdAt, record.updatedAt);
     return record;
@@ -99,6 +114,7 @@ export class SqliteNodeTemplateStore implements NodeTemplateStore {
     if (nodeTemplateSeeds.some((seed) => seed.id === id)) throw error(403, "SEED_TEMPLATE_READ_ONLY", "seed templates cannot be changed");
     const current = findUser(id); if (!current) throw error(404, "TEMPLATE_NOT_FOUND", "template not found");
     const name = patch.name === undefined ? current.name : text(patch.name); if (name.length < 1 || name.length > 80) throw error(400, "INVALID_TEMPLATE_NAME", "template name must be 1-80 characters");
+    if (patch.graph !== undefined) assertStrictGraph(patch.graph);
     const next = { ...current, name, description: patch.description === undefined ? current.description : text(patch.description), graph: patch.graph === undefined ? current.graph : stripGraphForTemplate(patch.graph, patch.stripOptions ?? { preservePrompt: true, preserveProvider: true }), thumbnail: patch.thumbnail === undefined ? current.thumbnail : typeof patch.thumbnail === "string" ? patch.thumbnail : undefined, tags: patch.tags === undefined ? current.tags : tags(patch.tags), updatedAt: Date.now() };
     getDb().prepare("UPDATE assets SET name = ?, notes = ?, metadata = ?, updated_at = ? WHERE id = ? AND kind = 'template'").run(next.name, next.description || null, JSON.stringify({ graph: next.graph, thumbnail: next.thumbnail, tags: next.tags }), next.updatedAt, id);
     return next;
