@@ -27,6 +27,7 @@ done을 선언하지 않는다.
 같은 checkout, 같은 dependency tree에서 아래 순서로 fresh 실행한다.
 
 ```bash
+npm run build:server
 npm run typecheck
 npm run typecheck:tests
 npm run test:inventory
@@ -41,6 +42,7 @@ failure는 product regression과 분리한다.
 
 | gate | PASS 기준 | terminal 실패 기록 |
 |---|---|---|
+| `npm run build:server` | exit 0, production JS가 현재 TS와 동기화 | 첫 diagnostic + 전체 log |
 | `npm run typecheck` | exit 0 | 첫 diagnostic + 전체 log |
 | `npm run typecheck:tests` | exit 0 | 첫 diagnostic + 전체 log |
 | `npm run test:inventory` | exit 0, 누락 0 | 누락/중복 test 목록 |
@@ -84,7 +86,7 @@ failure는 product regression과 분리한다.
   곧바로 구현 실패를 숨기는 근거가 아니라 후속 결정의 입력이다.
 - Gemini image `gemini-api`와 Gemini video 지원 여부를 구분한다. provider 이름이
   같다는 이유로 video DONE을 추정하지 않는다.
-- Runway MCP smoke는 credit cost가 응답에 없으면 `UNVERIFIED`로 유지한다.
+- Runway MCP smoke는 credit cost/usage가 응답에 없으면 130 계약대로 `BLOCKED/FAIL`로 기록한다 (`UNVERIFIED`로 낮추지 않는다). 현재 MCP 결과 경로는 usage를 영속화하지 않으므로(routes/mcpMedia.ts:454) 이 브랜치가 실제로 발생할 수 있으며, lane을 닫을 때는 이 기록을 그대로 인용한다.
 
 ## 3. 미결정 원장 정리
 
@@ -182,10 +184,9 @@ Assets 저장 형식처럼 resolved evidence가 있는 항목은 미결정 표�
 
 ## Phase 140 완료 기준
 
-- fresh full gates 5종의 원문 로그와 총계가 있다.
+- fresh full gates 6종의 원문 로그와 총계가 있다.
 - `090_closeout.md`가 010~140의 실제 상태와 terminal/verdict를 반영한다.
 - 미결정 원장의 모든 행이 resolved/future/blocks lane 중 하나로 이동했다.
 - phase별 commit sequence가 보존되거나 예외가 명시됐다.
 - `_fin` 이동 여부가 체크리스트로 결정됐고 final report의 모든 item이
   `DONE`, `BLOCKED`, `NEEDS_HUMAN` 중 하나로 끝난다.
-
