@@ -1,8 +1,12 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  canConnectPortTypes,
+  type NodePortType,
+  type PortDescriptor,
+} from "../../lib/nodeCompatibility";
 
 export type NodeCommandCategory = "input" | "generate" | "transform" | "reference" | "output";
-export type NodePortDefinition = { id: string; type: string };
-export type NodePortDescriptor = NodePortDefinition & { direction: "source" | "target" };
+export type NodePortDefinition = { id: string; type: NodePortType };
 
 export interface NodeCommandDescriptor {
   type: string;
@@ -18,7 +22,7 @@ export interface NodeCommandDescriptor {
 export interface NodeCommandPaletteProps {
   open: boolean;
   anchor: { clientX: number; clientY: number };
-  sourcePort?: NodePortDescriptor;
+  sourcePort?: PortDescriptor;
   commands: readonly NodeCommandDescriptor[];
   recentCommandTypes?: readonly string[];
   onInsert(command: NodeCommandDescriptor): void;
@@ -37,9 +41,11 @@ function score(command: NodeCommandDescriptor, query: string) {
   return command.description.toLocaleLowerCase().includes(value) ? 3 : -1;
 }
 
-function acceptsPort(command: NodeCommandDescriptor, sourcePort?: NodePortDescriptor) {
+function acceptsPort(command: NodeCommandDescriptor, sourcePort?: PortDescriptor) {
   if (!sourcePort) return true;
-  return command.inputPorts.some((port) => port.type === sourcePort.type);
+  return sourcePort.direction === "output" && command.inputPorts.some(
+    (port) => canConnectPortTypes(sourcePort.type, port.type),
+  );
 }
 
 export function NodeCommandPalette({ open, anchor, sourcePort, commands, recentCommandTypes = [], onInsert, onClose }: NodeCommandPaletteProps) {

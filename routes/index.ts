@@ -13,6 +13,7 @@ import { registerVideoKeyingRoutes } from "./videoKeying.js";
 import { registerSessionRoutes } from "./sessions.js";
 import { registerEditRoutes } from "./edit.js";
 import { registerNodeRoutes } from "./nodes.js";
+import { registerNodeTemplateRoutes } from "./nodeTemplates.js";
 import { registerGenerateRoutes } from "./generate.js";
 import { registerMultimodeRoutes } from "./multimode.js";
 import { registerStorageRoutes } from "./storage.js";
@@ -62,6 +63,7 @@ export function configureRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
   registerSessionRoutes(app, ctx);
   registerEditRoutes(app, ctx);
   registerNodeRoutes(app, ctx);
+  registerNodeTemplateRoutes(app);
   if (ctx.config.features.cardNews) registerCardNewsRoutes(app, ctx);
   registerMultimodeRoutes(app, ctx);
   registerGenerateRoutes(app, ctx);

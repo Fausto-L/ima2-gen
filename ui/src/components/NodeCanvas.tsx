@@ -7,13 +7,10 @@ import {
   MiniMap,
   applyNodeChanges,
   applyEdgeChanges,
-  useReactFlow,
   ReactFlowProvider,
   ConnectionMode,
   type NodeChange,
   type EdgeChange,
-  type Connection,
-  type OnConnectEnd,
   type NodeMouseHandler,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -22,6 +19,10 @@ import { ImageNode } from "./ImageNode";
 import { NodeBatchBar } from "./NodeBatchBar";
 import { useI18n } from "../i18n";
 import { useIsMobile } from "../hooks/useIsMobile";
+import { ElementReferenceNode } from "./node-canvas/ElementReferenceNode";
+import { NodeCanvasEmptyState } from "./node-canvas/NodeCanvasEmptyState";
+import { NodeStudioOverlays } from "./node-canvas/NodeStudioOverlays";
+import { useNodeStudioController } from "./node-canvas/useNodeStudioController";
 
 function NodeCanvasInner() {
   const { t } = useI18n();
@@ -32,17 +33,18 @@ function NodeCanvasInner() {
   const setGraphEdges = useAppStore((s) => s.setGraphEdges);
   const disconnectEdges = useAppStore((s) => s.disconnectEdges);
   const addRootNode = useAppStore((s) => s.addRootNode);
-  const addChildNodeAt = useAppStore((s) => s.addChildNodeAt);
-  const connectNodes = useAppStore((s) => s.connectNodes);
   const deleteNodes = useAppStore((s) => s.deleteNodes);
   const nodeSelectionMode = useAppStore((s) => s.nodeSelectionMode);
   const selectNodeGraph = useAppStore((s) => s.selectNodeGraph);
   const sessionLoading = useAppStore((s) => s.sessionLoading);
 
-  const { screenToFlowPosition } = useReactFlow();
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const studio = useNodeStudioController(wrapperRef);
 
-  const nodeTypes = useMemo(() => ({ imageNode: ImageNode }), []);
+  const nodeTypes = useMemo(() => ({
+    imageNode: ImageNode,
+    elementReferenceNode: ElementReferenceNode,
+  }), []);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) =>
@@ -64,31 +66,6 @@ function NodeCanvasInner() {
     [disconnectEdges, edges, nodeSelectionMode, setGraphEdges],
   );
 
-  const onConnect = useCallback(
-    (params: Connection) => {
-      if (params.source && params.target) {
-        connectNodes(params.source, params.target, params.sourceHandle, params.targetHandle);
-      }
-    },
-    [connectNodes],
-  );
-
-  const onConnectEnd: OnConnectEnd = useCallback(
-    (event, connectionState) => {
-      if (connectionState.isValid) return;
-      const fromNodeId = connectionState.fromNode?.id;
-      if (!fromNodeId) return;
-      if (connectionState.toNode || connectionState.toHandle) return;
-      const clientX =
-        "touches" in event ? event.changedTouches[0].clientX : (event as MouseEvent).clientX;
-      const clientY =
-        "touches" in event ? event.changedTouches[0].clientY : (event as MouseEvent).clientY;
-      const pos = screenToFlowPosition({ x: clientX, y: clientY });
-      addChildNodeAt(fromNodeId, pos, connectionState.fromHandle?.id ?? null);
-    },
-    [addChildNodeAt, screenToFlowPosition],
-  );
-
   const onNodesDelete = useCallback(
     (deleted: GraphNode[]) => deleteNodes(deleted.map((n) => n.id)),
     [deleteNodes],
@@ -106,21 +83,19 @@ function NodeCanvasInner() {
     <main
       className={`node-canvas${nodes.length === 0 ? " node-canvas--empty" : ""}`}
       ref={wrapperRef}
+      tabIndex={0}
+      onKeyDown={studio.onKeyDown}
     >
       {sessionLoading && <div className="node-canvas__loading">{t("nodeCanvas.loading")}</div>}
-      {nodes.length === 0 ? (
-        <button type="button" className="node-canvas__plus" onClick={() => addRootNode()}>
-          {t("nodeCanvas.addFirst")}
-        </button>
-      ) : (
-        <>
-          <ReactFlow
+      <ReactFlow
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onConnectEnd={onConnectEnd}
+            onConnect={studio.onConnect}
+            onConnectEnd={studio.onConnectEnd}
+            onDragOver={studio.onDragOver}
+            onDrop={studio.onDropElement}
             onNodesDelete={onNodesDelete}
             onNodeClick={onNodeClick}
             nodeTypes={nodeTypes}
@@ -133,7 +108,9 @@ function NodeCanvasInner() {
             deleteKeyCode={nodeSelectionMode ? null : ["Delete", "Backspace"]}
             proOptions={{ hideAttribution: true }}
           >
-            <NodeBatchBar />
+            {nodes.length === 0 ? <div className="node-studio-empty-overlay"><NodeCanvasEmptyState hasRecentGraph={studio.hasRecentGraph} onStartBlank={() => { if (!sessionLoading) addRootNode(); }} onOpenTemplates={studio.openTemplates} onResumeRecent={studio.resumeRecent} /></div> : null}
+            {nodes.length > 0 ? <NodeBatchBar /> : null}
+            <NodeStudioOverlays studio={studio} graphEmpty={nodes.length === 0} disabled={sessionLoading} onAddRoot={() => addRootNode()} />
             <Background
               gap={24}
               size={1.6}
@@ -155,6 +132,8 @@ function NodeCanvasInner() {
               />
             )}
           </ReactFlow>
+      {nodes.length > 0 ? (
+        <>
           <button
             type="button"
             className="node-canvas__add-root"
@@ -167,7 +146,7 @@ function NodeCanvasInner() {
             {t("nodeCanvas.hint")}
           </div>
         </>
-      )}
+      ) : null}
     </main>
   );
 }

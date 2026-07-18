@@ -14,6 +14,8 @@ export type NodePortType =
 export interface PortDescriptor {
   nodeId: string;
   handleId: string;
+  logicalPortId?: string;
+  equivalentHandleIds?: readonly string[];
   direction: "input" | "output";
   type: NodePortType;
   acceptsMany?: boolean;
@@ -41,17 +43,34 @@ const COMPATIBLE_INPUTS: Readonly<Record<NodePortType, readonly NodePortType[]>>
   "any-media": ["image", "images", "video", "mask", "any-media"],
 };
 
+function edgeUsesPort(
+  edgeHandle: string | null | undefined,
+  port: PortDescriptor,
+): boolean {
+  const handles = port.equivalentHandleIds ?? [port.handleId];
+  return typeof edgeHandle === "string" && handles.includes(edgeHandle);
+}
+
 function hasDuplicateEdge(source: PortDescriptor, target: PortDescriptor, edges: readonly GraphEdge[]): boolean {
   return edges.some((edge) =>
     edge.source === source.nodeId
     && edge.target === target.nodeId
-    && edge.sourceHandle === source.handleId
-    && edge.targetHandle === target.handleId,
+    && edgeUsesPort(edge.sourceHandle, source)
+    && edgeUsesPort(edge.targetHandle, target),
   );
 }
 
 function hasExistingInput(edgeTarget: PortDescriptor, edges: readonly GraphEdge[]): boolean {
-  return edges.some((edge) => edge.target === edgeTarget.nodeId && edge.targetHandle === edgeTarget.handleId);
+  return edges.some((edge) =>
+    edge.target === edgeTarget.nodeId && edgeUsesPort(edge.targetHandle, edgeTarget),
+  );
+}
+
+export function canConnectPortTypes(
+  outputType: NodePortType,
+  inputType: NodePortType,
+): boolean {
+  return COMPATIBLE_INPUTS[outputType].includes(inputType);
 }
 
 export function canConnectPorts(
@@ -64,7 +83,7 @@ export function canConnectPorts(
   }
   if (source.nodeId === target.nodeId) return { allowed: false, reason: "SELF_EDGE" };
   if (hasDuplicateEdge(source, target, graph.edges)) return { allowed: false, reason: "DUPLICATE_EDGE" };
-  if (!COMPATIBLE_INPUTS[source.type].includes(target.type)) {
+  if (!canConnectPortTypes(source.type, target.type)) {
     return { allowed: false, reason: "TYPE_MISMATCH" };
   }
   if (!target.acceptsMany && hasExistingInput(target, graph.edges)) {
