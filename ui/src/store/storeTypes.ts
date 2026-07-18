@@ -139,6 +139,8 @@ export type ImageNodeData = {
   webSearchCalls?: number;
   model?: string | null;
   size?: string | null;
+  /** Per-node provider override written by branch variants (settingsPatch). */
+  provider?: string | null;
   referenceImages?: string[];
   video?: { duration?: number; resolution?: string; aspectRatio?: string; topic?: string } | null;
   videoContinuity?: VideoContinuityLineage | null;

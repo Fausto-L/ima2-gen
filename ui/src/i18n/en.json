@@ -565,6 +565,7 @@
   },
   "node": {
     "empty": "Empty",
+    "elementMissing": "Element \"{name}\" was deleted. Reconnect it before running.",
     "pending": "Generating",
     "reconciling": "Syncing",
     "reconcilingPhase": "Syncing · {phase}",

@@ -68,7 +68,9 @@ export function mapSessionToGraph(session: SessionFull): {
     };
     return {
       id: n.id,
-      type: "imageNode",
+      // Restore the renderer discriminator from data (element nodes save with
+      // data.nodeType = "element-reference"; image nodes have none).
+      type: (d as Record<string, unknown>).nodeType === "element-reference" ? "elementReferenceNode" : "imageNode",
       position: { x: n.x, y: n.y },
       data,
     };

@@ -27,6 +27,27 @@ type StoreGet = () => AppState;
 
 const nodeGenerationLocks = new Set<string>();
 
+/**
+ * Find an element reference node feeding any of the given targets whose
+ * element is missing (data.missing, or unresolved against a synced catalog).
+ * Returns the element display name for the toast, or null.
+ */
+function findMissingElementInput(state: AppState, targetIds: string[]): string | null {
+  const targets = new Set(targetIds);
+  const catalog = state.elementCatalog;
+  for (const edge of state.graphEdges) {
+    if (!targets.has(edge.target)) continue;
+    const source = state.graphNodes.find((n) => n.id === edge.source);
+    if (!source || source.type !== "elementReferenceNode") continue;
+    const data = source.data as Record<string, unknown>;
+    const name = (typeof data.elementName === "string" && data.elementName) || (typeof data.elementId === "string" && data.elementId) || "element";
+    if (data.missing === true) return name;
+    const elementId = typeof data.elementId === "string" ? data.elementId : null;
+    if (elementId && Array.isArray(catalog) && !catalog.some((record) => record.id === elementId)) return name;
+  }
+  return null;
+}
+
 export async function runGenerateNodeInPlaceImpl(
   clientId: ClientNodeId,
   options: {
@@ -50,6 +71,14 @@ export async function runGenerateNodeInPlaceImpl(
     nodeGenerationLocks.delete(clientId);
     return null;
   }
+  // Missing element inputs block execution (higgsfield 120 EN-08): any
+  // element reference node feeding this target must resolve.
+  const missingElement = findMissingElementInput(get(), [clientId]);
+  if (missingElement) {
+    get().showToast(t("node.elementMissing", { name: missingElement }), true);
+    nodeGenerationLocks.delete(clientId);
+    return null;
+  }
   const { prompt, parentServerNodeId } = node.data;
   if (!prompt.trim()) {
     get().showToast(t("toast.promptRequired"), true);
@@ -58,7 +87,11 @@ export async function runGenerateNodeInPlaceImpl(
   }
   const nodeRefs = node.data.referenceImages ?? [];
   const s = get();
-  const size = options.sizeOverride ?? s.getResolvedSize();
+  // Branch variants carry per-node provider/model/size (settingsPatch) —
+  // prefer them over global settings (higgsfield 120 NB).
+  const nodeProvider = (typeof node.data.provider === "string" && node.data.provider ? node.data.provider : s.provider) as AppState["provider"];
+  const nodeModel = (typeof node.data.model === "string" && node.data.model ? node.data.model : s.imageModel) as AppState["imageModel"];
+  const size = options.sizeOverride ?? (typeof node.data.size === "string" && node.data.size ? node.data.size : s.getResolvedSize());
   const effectiveParentServerNodeId =
     options.parentServerNodeIdOverride !== undefined
       ? options.parentServerNodeIdOverride
@@ -122,8 +155,8 @@ export async function runGenerateNodeInPlaceImpl(
       size,
       format: s.format,
       moderation: s.moderation,
-      provider: s.provider,
-      model: s.imageModel,
+      provider: nodeProvider,
+      model: nodeModel,
       reasoningEffort: s.reasoningEffort,
       storyboard: s.storyboardActive || undefined,
       requestId: flightId,
@@ -300,6 +333,12 @@ export async function runNodeBatchImpl(
   });
   if (candidates.length === 0) {
     get().showToast(t("nodeBatch.nothingToRun"));
+    return;
+  }
+  // Missing element inputs block the whole batch (higgsfield 120 EN-08).
+  const missingElement = findMissingElementInput(get(), candidates);
+  if (missingElement) {
+    get().showToast(t("node.elementMissing", { name: missingElement }), true);
     return;
   }
 
