@@ -1,7 +1,7 @@
 ---
 created: 2026-07-18
 tags: [ima2-gen, assetgen, keying, acceptance, evidence, needs-human]
-status: NEEDS_HUMAN (사람 시각 판정 대기)
+status: ACCEPTED (2026-07-18 사용자 시각 수용)
 ---
 
 # 033 — 020/030 수용 증거 패키지
@@ -70,14 +70,21 @@ alpha>0 픽셀의 green-dominant(`g > max(r,b)+24`) 비율은 despill 단계에�
 재현: `node assets-acceptance/capture-020-flow.mjs` (멱등 — 소스 타일만
 선택). 콘솔 로그: `capture-020-console.log`.
 
-### GAP (020 수용 기준 2번 미충족 — 구현 후속 필요)
+### GAP 해소 기록 (2026-07-18 수정 완료)
 
-`020:31-32`는 "assets 탭에서 미리보기 → 동일 동작"을 요구하지만, `#assets`
-의 일반 이미지 미리보기에는 배경 제거 버튼이 **렌더되지 않는다**
-(`flow-5`, 버튼 count 0). 버튼은 `AssetMediaLightbox.tsx:139-146`의
-`canKey` 경로에만 있고 `#assets`의 미리보기는 이를 쓰지 않는다. Element
-상세 패널에서는 노출된다. 이 갭은 이번 실행 범위(증거 수집) 밖의 구현
-후속이며, 다음 사이클의 입력으로 남긴다.
+초기 실측(`flow-5`)에서 `#assets` 미리보기에 버튼이 없어 020:31-32 미충족으로
+기록했으나, 정밀 검증에서 두 사실이 분리됐다.
+
+1. **일반 image 에셋의 assets 탭 미리보기는 원래 정상**이다. 버튼이 안 뜬
+   캡처는 선택자가 ELEMENT 타일을 집은 artifact였다. 정상 증거:
+   `flow-5a-assets-tab-button.png` (keybtn 렌더 확인).
+2. **진짜 버그는 element 에셋 미리보기 붕괴**: promote-to-element로 만든
+   element는 `filePath: null`이라 `assetToPreviewItem`이 빈 경로를 만들어
+   `/generated/`(깨진 이미지) + `canKey` false가 됐다.
+   `ui/src/lib/assetPreview.ts`가 `elementPreviewPath`(metadata.refs[0])로
+   폴백하도록 수정(그리드 썸네일 수정과 동일 규칙). 검증:
+   `flow-5b-element-preview-fixed.png`(이미지+버튼 렌더),
+   `tests/asset-preview-element-fallback.test.ts` 3/3.
 
 ## 5. 전후 비교 캡처 (030, 같은 크롭 340×340)
 
@@ -96,12 +103,14 @@ alpha>0 픽셀의 green-dominant(`g > max(r,b)+24`) 비율은 despill 단계에�
 - focused 54/54 (asset-derived/background-presets/color-key/wand-erase/
   video-chroma-key/keying-preview/media-lightbox)
 
-## 7. 사람 체크리스트 — 판정 대기 (NEEDS_HUMAN)
+## 7. 사람 체크리스트 — **ACCEPTED (2026-07-18, 사용자 시각 수용)**
 
 - [x] `npm test`(color-key 포함), typecheck, UI build clean — §6 로그
-- [ ] 실제 모에화 에셋 재키잉에서 머리 경계의 초록 프린지가 **육안으로** 감소 — `zoom-hair` 등 쌍을 사람이 확인
-- [ ] alpha>0 green-dominant 비율 감소 — 정량은 §3에 있으나 ablation 프레이밍 수용 여부는 사람 판단
-- [ ] 초록 눈동자/보석 보존이 스크린샷으로 확인 — `zoom-eyes` 쌍을 사람이 확인
+- [x] 실제 모에화 에셋 재키잉에서 머리 경계의 초록 프린지가 **육안으로** 감소 — 사용자가 `zoom-hair` 등 쌍을 확인하고 수용 (2026-07-18 "거의 패스해도 될 듯")
+- [x] alpha>0 green-dominant 비율 감소 — §3 정량 + ablation 프레이밍 사용자 수용 (2026-07-18)
+- [x] 초록 눈동자/보석 보존이 스크린샷으로 확인 — 사용자가 `zoom-eyes` 쌍을 확인하고 수용 (2026-07-18)
+
+사용자 수용은 이 스레드의 구두 확인(2026-07-18)을 근거로 기록한다.
 
 부수 효과 기록: 동선 검증 중 "Save to project"가 실제 실행되어 `(keyed)`
 파생 에셋이 프로젝트에 2건 저장되어 있다. 수용 판정 후 삭제필 여부를

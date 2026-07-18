@@ -2,26 +2,26 @@
 created: 2026-07-18
 updated: 2026-07-18
 tags: [ima2-gen, assetgen, keying, closeout, needs-human]
-status: NEEDS_HUMAN
+status: ACCEPTED (020/030, 2026-07-18) — P1-1/P2 범위 정의만 남음
 ---
 
 # Asset-gen UX overhaul — 현재 상태 + 재개 가이드
 
 ## 현재 상태
 
-레인은 코드·자동 검증 관점에서는 keying/click-erase까지 반영되어 있지만, 전체
-closeout은 아직 할 수 없다. `030`의 실제 모에화 에셋 시각 수용과 `020`의
-라이트박스 진입·저장 후 갱신 수용 증거가 사람 판단으로 남아 있다. 또한 `010`이
-DONE으로 표기되어도 P1-1과 P2는 구현 백로그가 아니다. `010` 본문이 P1-1(폼
-2단계 재구성)과 P2 전체를 다음 사이클로 미뤘고(`010_beginner_ux_fixes.md:3-6`),
-이 레인의 다섯 문서에는 P2 항목 정의가 없다. 두 범위는 인터뷰/사용자 결정으로
-정의한 뒤에만 구현한다.
+레인의 020/030은 2026-07-18 사용자 시각 수용으로 닫혔다
+(`033_acceptance_evidence.md`). 남은 것은 `010`의 후속 범위뿐이다: P1-1(폼
+2단계 재구성)과 P2 전체를 `010` 본문이 다음 사이클로 미뤘고
+(`010_beginner_ux_fixes.md:3-6`), 이 레인의 다섯 문서에는 P2 항목 정의가 없다.
+두 범위는 인터뷰/사용자 결정으로 정의한 뒤에만 구현한다. verify-chroma 배경
+균일성 FAIL 3/4(어두운 비네트 코너)는 생성 프롬프트/프리셋 후속 주제로
+`033` §2에 기록되어 있다.
 
 | 문서 | 상태 | 증거 | 커밋/자동 검증 |
 |---|---|---|---|
 | `010_beginner_ux_fixes.md` | 문서상 **DONE**, 후속 범위 **미정** | B1/B2와 B3 P0·P1 퀵윈은 완료로 기록됐지만 P1-1·P2 전체를 명시적으로 이연 (`010:3-6`) | base UI `57245b2c` (AssetGenWorkspace), asset-gen 배선 `730e61c`; P1-1/P2는 범위 정의 전 구현 금지 |
-| `020_lightbox_remove_bg_trigger.md` | 구현 완료, **NEEDS_HUMAN** | 라이트박스→KeyingPanel 및 저장 후 목록 갱신의 스크린샷이 수용 기준 (`020:28-33`) | base UI `8b37abb3` (AssetMediaLightbox), keying/asset-gen 배선 `730e61c`; media-lightbox 계약 7건 green |
-| `030_chroma_despill_hardening.md` | 구현·자동 검증 완료, **NEEDS_HUMAN** | 실제 모에화 에셋에서 프린지 감소, alpha>0의 green-dominant 비율 감소, 눈/보석 보존이 수용 기준 (`030:50-56`) | `730e61c`; color-key 13건, background-presets 10건 green |
+| `020_lightbox_remove_bg_trigger.md` | **ACCEPTED** (2026-07-18) | 동선 캡처 flow-1..4 + assets 탭 정상(`flow-5a`), element 미리보기 폴백 수정(`flow-5b`) | `033_acceptance_evidence.md` §4; media-lightbox 계약 7건 + element-fallback 3건 green |
+| `030_chroma_despill_hardening.md` | **ACCEPTED** (2026-07-18) | 사용자 시각 수용: 프린지 육안 감소, green-dominant 비율 감소(1.65→0.00/1.07→0.01/1.29→0.07/2.53→0.20), 초록 눈동자·보석 보존 | `033_acceptance_evidence.md` §3/§5/§7; color-key 13건, background-presets 10건 green |
 | `031_achromatic_key_hardening.md` | 기술 완료 | 흰/검 키에서 피부·내부 하이라이트·유색 피사체 보존 회귀 3건과 64×64 시뮬레이션 기록 (`031:31-38`) | `730e61c`의 `colorKey.ts`; color-key 13건 green |
 | `032_keying_click_to_erase.md` | 기술 완료 | SOURCE 기준 flood-fill, 시드 누적/취소, 이미지 저장·다운로드 반영 (`032:10-27`) | `730e61c`의 `wandErase.ts` 및 KeyingPanel 배선; wand-erase 5건, keying-preview 계약 7건 green |
 
