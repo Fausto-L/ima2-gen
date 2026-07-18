@@ -11,7 +11,9 @@ export function readFileAsDataURL(file: File): Promise<string> {
  * generation requests). Lives here so store files stay free of raw
  * FileReader plumbing (node-child-refs-payload contract). */
 export async function fetchAsDataUrl(url: string): Promise<string> {
-  const blob = await (await fetch(url)).blob();
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`reference fetch failed: ${response.status}`);
+  const blob = await response.blob();
   return readFileAsDataURL(new File([blob], "reference.png", { type: blob.type || "image/png" }));
 }
 

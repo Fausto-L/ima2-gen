@@ -107,6 +107,13 @@ export async function runNodeGeneration(req: Request, res: Response, ctx: Runtim
         });
       }
       const prompt = validation.prompt;
+      // Element inputs (higgsfield 120): ids/revisions recorded into the
+      // sidecar; notes appended only for the upstream generation call so the
+      // stored prompt stays raw.
+      const elementIds = Array.isArray(body.elementIds) ? body.elementIds.filter((id: unknown) => typeof id === "string" && id) : [];
+      const elementRevisions = body.elementRevisions && typeof body.elementRevisions === "object" ? body.elementRevisions : null;
+      const elementNotes = Array.isArray(body.elementNotes) ? body.elementNotes.filter((note: unknown) => typeof note === "string" && note.trim()) : [];
+      const generationPrompt = elementNotes.length ? `${prompt}\n\nElement notes:\n${elementNotes.join("\n")}` : prompt;
       const refCheck = validation.refCheck;
       const startTime = Date.now();
       let parentB64: string | null = null;
@@ -232,7 +239,7 @@ export async function runNodeGeneration(req: Request, res: Response, ctx: Runtim
             webSearchEnabled,
           });
           const r = activeProvider === "gemini-api"
-            ? await generateViaGeminiApi(parentB64 ? `Edit this image: ${prompt}` : prompt, requireRuntimeContext(ctx), {
+            ? await generateViaGeminiApi(parentB64 ? `Edit this image: ${generationPrompt}` : generationPrompt, requireRuntimeContext(ctx), {
                 model: effectiveImageModel,
                 size: effectiveSize,
                 signal: cancelController.signal,
@@ -242,7 +249,7 @@ export async function runNodeGeneration(req: Request, res: Response, ctx: Runtim
                   : refCheck.refDetails,
               })
             : activeProvider === "agy"
-            ? await generateViaAgy(parentB64 ? `Edit this image: ${prompt}` : prompt, {
+            ? await generateViaAgy(parentB64 ? `Edit this image: ${generationPrompt}` : generationPrompt, {
                 references: parentB64
                   ? [{ b64: parentB64, declaredMime: null, detectedMime: null }]
                   : undefined,
@@ -250,7 +257,7 @@ export async function runNodeGeneration(req: Request, res: Response, ctx: Runtim
                 requestId,
               })
             : activeProvider === "grok" || activeProvider === "grok-api"
-            ? await generateViaGrok(prompt, ctx, {
+            ? await generateViaGrok(generationPrompt, ctx, {
                 model: effectiveImageModel,
                 size: effectiveSize,
                 requestId,
@@ -259,7 +266,7 @@ export async function runNodeGeneration(req: Request, res: Response, ctx: Runtim
                 directApiKey: grokDirectApiKey,
               })
             : parentB64
-              ? await editViaResponses(activeProvider, prompt, parentB64, quality, effectiveSize, moderation, normalizedPromptMode, ctx, requestId, {
+              ? await editViaResponses(activeProvider, generationPrompt, parentB64, quality, effectiveSize, moderation, normalizedPromptMode, ctx, requestId, {
                   model: effectiveImageModel,
                   references: refsForRequest,
                   searchMode,
@@ -374,6 +381,7 @@ export async function runNodeGeneration(req: Request, res: Response, ctx: Runtim
         usage: usage || null,
         webSearchCalls,
         webSearchEnabled,
+        ...(elementIds.length ? { elementIds, elementRevisions } : {}),
         contextMode,
         searchMode,
         provider: activeProvider,

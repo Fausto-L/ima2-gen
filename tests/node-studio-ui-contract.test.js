@@ -229,8 +229,8 @@ describe("EN — element node lifecycle", () => {
     const single = section(nodeRun, "export async function runGenerateNodeInPlaceImpl", "export async function runNodeBatchImpl");
     assert.ok(single.indexOf("collectElementInputs(get().graphNodes, get().graphEdges, [clientId])") < single.indexOf("postNodeGenerateStream({"));
     assert.match(single, /resolveElementInputsForRun\(elementInputs, set, get\)/);
-    assert.match(single, /if \(!elementResolution\.ok\)[\s\S]*showToast[\s\S]*return null/);
-    assert.match(single, /\.\.\.elementResolution\.referenceDataUrls/);
+    assert.match(single, /if \(elementResolution\.ok === false\)[\s\S]*showToast[\s\S]*return null/);
+    assert.match(single, /mergeRunReferences\(node\.data\.referenceImages \?\? \[\], elementResolution\.referenceDataUrls/);
     const batch = section(nodeRun, "export async function runNodeBatchImpl", "\n}");
     assert.ok(batch.indexOf("collectElementInputs(get().graphNodes, get().graphEdges, candidates)") < batch.indexOf("set({ nodeBatchRunning: true"));
     assert.match(batch, /batchElementInputs\.find\(\(input\) => input\.missing\)/);
@@ -259,10 +259,33 @@ describe("EN — element node lifecycle", () => {
   it("pre-run element resolution re-fetches, snapshots revision, and merges refs", () => {
     assert.match(nodeRun, /await getAssetById\(input\.elementId\)/);
     assert.match(nodeRun, /upsertElementCatalog\(get\(\)\.elementCatalog, asset\)/);
-    assert.match(nodeRun, /resolvedRevision: .*updatedAt \?\? asset\.createdAt/);
+    assert.match(nodeRun, /resolvedRevision: revision/);
     assert.match(nodeRun, /elementReferenceFilenames\(asset\)/);
     assert.match(nodeRun, /if \(!dataUrls\.includes\(dataUrl\)\) dataUrls\.push\(dataUrl\)/);
     assert.match(nodeRun, /return \{ ok: false, name: input\.name \}/);
+    // Notes, ids, revisions ride the request; server keeps the prompt raw.
+    assert.match(nodeRun, /elementIds: elementResolution\.elementIds, elementRevisions: elementResolution\.revisions, elementNotes: elementResolution\.notes/);
+    const nodeApi = read("ui/src/lib/nodeApi.ts");
+    assert.match(nodeApi, /elementIds\?: string\[\]/);
+    assert.match(nodeApi, /elementRevisions\?: Record<string, unknown>/);
+    assert.match(nodeApi, /elementNotes\?: string\[\]/);
+    const nodeServer = read("lib/nodeGeneration.ts");
+    assert.match(nodeServer, /const generationPrompt = elementNotes\.length/);
+    assert.match(nodeServer, /\.\.\.\(elementIds\.length \? \{ elementIds, elementRevisions \} : \{\}\)/);
+    // Merge dedupes across classic+element refs and caps at the active limit.
+    assert.match(nodeRun, /mergeRunReferences\(node\.data\.referenceImages \?\? \[\], elementResolution\.referenceDataUrls, get\(\)\.activeReferenceLimit\(\)\)/);
+    assert.match(nodeRun, /if \(!merged\.includes\(ref\)\) merged\.push\(ref\)/);
+    assert.match(nodeRun, /if \(merged\.length >= activeLimit\) break/);
+    // Ref fetches fail closed on non-200 instead of embedding error HTML.
+    const image = read("ui/src/lib/image.ts");
+    assert.match(image, /if \(!response\.ok\) throw new Error/);
+  });
+
+  it("assets detail opens even under active filters or a missing page", () => {
+    const workspace = read("ui/src/components/assets/AssetsWorkspace.tsx");
+    assert.match(workspace, /setFilters\(\{ kind: null, folderId: null, tag: null, q: "" \}\)/);
+    assert.match(workspace, /getAssetById\(id\)/);
+    assert.match(workspace, /assets: \[asset, \.\.\.state\.assets\.filter\(\(entry\) => entry\.id !== asset\.id\)\]/);
   });
 
   it("open-assets-detail listener wires canvas double-click to the assets detail", () => {
@@ -272,7 +295,7 @@ describe("EN — element node lifecycle", () => {
     assert.match(app, /addEventListener\("ima2:open-assets-detail"/);
     assert.match(app, /openAssetDetail\(assetId\)/);
     assert.match(storeTypes, /pendingAssetDetailId: string \| null/);
-    assert.match(workspace, /setSelectedAssetId\(pendingAssetDetailId\)/);
+    assert.match(workspace, /setSelectedAssetId\(id\)/);
     assert.match(workspace, /pendingAssetDetailId: null \}\)/);
   });
 

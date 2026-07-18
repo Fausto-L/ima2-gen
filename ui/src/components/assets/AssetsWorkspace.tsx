@@ -3,7 +3,7 @@ import { useI18n } from "../../i18n";
 import { useAppStore } from "../../store/useAppStore";
 import type { AssetItem } from "../../store/storeTypes";
 import type { GenerateItem } from "../../types";
-import { clearAllAssets as apiClearAll } from "../../lib/api-assets";
+import { clearAllAssets as apiClearAll, getAssetById } from "../../lib/api-assets";
 import { assetToPreviewItem } from "../../lib/assetPreview";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { Select, type SelectItem } from "../controls/Select";
@@ -80,9 +80,19 @@ export function AssetsWorkspace() {
   const pendingAssetDetailId = useAppStore((s) => s.pendingAssetDetailId);
   useEffect(() => {
     if (!pendingAssetDetailId) return;
-    setSelectedAssetId(pendingAssetDetailId);
+    const id = pendingAssetDetailId;
     useAppStore.setState({ pendingAssetDetailId: null });
-  }, [pendingAssetDetailId]);
+    // The target may be outside the current filter/page — reset filters so it
+    // becomes visible, then upsert it directly when the list lacks it
+    // (Socrates round 2: detail silently failed under active filters).
+    setFilters({ kind: null, folderId: null, tag: null, q: "" });
+    setSelectedAssetId(id);
+    if (!useAppStore.getState().assets.some((asset) => asset.id === id)) {
+      void getAssetById(id).then(({ asset }) => {
+        useAppStore.setState((state) => ({ assets: [asset, ...state.assets.filter((entry) => entry.id !== asset.id)] }));
+      }).catch(() => {});
+    }
+  }, [pendingAssetDetailId, setFilters]);
   const hadKeyingRef = useRef(false);
   useEffect(() => {
     if (keyingTarget) { hadKeyingRef.current = true; return; }

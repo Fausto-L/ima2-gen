@@ -10,6 +10,8 @@
   "scripts": {
     "start": "node bin/ima2.js serve",
     "dev": "node scripts/dev.mjs",
+    "predev": "npm run build:server",
+    "prestart": "npm run build:server",
     "dev:server": "tsx watch server.ts",
     "ui:install": "npm --prefix ui ci",
     "ui:dev": "cd ui && npm run dev",

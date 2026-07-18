@@ -175,7 +175,7 @@ routes/
 | `lib/generatePipeline.ts` | 580 | Classic generation pipeline, provider retry, persistence, background-preset prompt shaping, and event publication |
 | `lib/backgroundPresets.ts` | 47 | Background preset contract for asset generation: enum parse, prompt suffixes, planner constraint |
 | `lib/multimodePipeline.ts` | 535 | Multimode streaming pipeline, persistence, cancellation, and partial timeout |
-| `lib/nodeGeneration.ts` | 477 | Node provider routing, retry, persistence, and SSE publication |
+| `lib/nodeGeneration.ts` | 485 | Node provider routing, retry, persistence, and SSE publication |
 | `lib/nodeValidation.ts` | 44 | Node prompt, references, and moderation validation |
 | `lib/oauthProxy/streams.ts` | 233 | SSE/event-stream helpers and safe stream diagnostics |
 | `lib/oauthProxy/prompts.ts` | 158 | Prompt assembly with injected `SAFETY_INTENT_POLICY` from `lib/promptSafetyPolicy.ts` |
@@ -231,7 +231,7 @@ routes/
 | `lib/historyIndex.ts` | 57 | Generated-history index construction and lookup |
 | `lib/imageThumb.ts` | 44 | Image thumbnail generation helpers |
 | `lib/multimodeHelpers.ts` | 48 | Shared multimode generation helpers |
-| `lib/nodeHelpers.ts` | 97 | Node workflow graph and payload helpers |
+| `lib/nodeHelpers.ts` | 100 | Node workflow graph and payload helpers |
 | `lib/nodeTemplateSeeds.ts` | 84 | Built-in node workflow template seed definitions |
 | `lib/nodeTemplateStore.ts` | 127 | Node workflow template persistence and lookup |
 | `lib/presetCompiler.ts` | 67 | Named preset prompt compilation helpers |
@@ -294,7 +294,7 @@ Backed by `routes/agent.ts`; no CLI wrapper. Session/turn/queue persistence and 
 | Mode/dev gates | `ui/src/lib/devMode.ts` | 16 | `IS_DEV_UI`, `ENABLE_NODE_MODE`, `ENABLE_CARD_NEWS_MODE` build-time flags |
 | API client | `ui/src/lib/api.ts` | 110 | Browser-side REST barrel re-export (`api-core`, `api-capabilities`, `api-inflight`, `api-generate`, …) |
 | Card-news API client | `ui/src/lib/cardNewsApi.ts` | 276 | Card-news templates, draft, jobs, regenerate, set/manifest helpers |
-| Node API client | `ui/src/lib/nodeApi.ts` | 153 | Node generation JSON/SSE client and node error status propagation |
+| Node API client | `ui/src/lib/nodeApi.ts` | 159 | Node generation JSON/SSE client and node error status propagation |
 | Node graph helpers | `ui/src/lib/nodeGraph.ts` | 42 | Visual-edge parent derivation and incoming-edge conflict helpers |
 | Node selection | `ui/src/lib/nodeSelection.ts` | 65 | Component-based selection toggling utilities |
 | Node batch | `ui/src/lib/nodeBatch.ts` | 100 | Sequential batch generation queue and stale-downstream rewiring |
@@ -302,7 +302,7 @@ Backed by `routes/agent.ts`; no CLI wrapper. Session/turn/queue persistence and 
 | Node ref storage | `ui/src/lib/nodeRefStorage.ts` | 55 | Browser-local node reference persistence outside SQLite graph payloads |
 | Custom size slots | `ui/src/lib/customSizeSlots.ts` | 63 | User-defined custom size slot persistence |
 | Size helpers | `ui/src/lib/size.ts` | 281 | Preset/custom size validation, max-edge clamps |
-| Image helpers | `ui/src/lib/image.ts` | 40 | Browser image utilities |
+| Image helpers | `ui/src/lib/image.ts` | 42 | Browser image utilities |
 | Compression | `ui/src/lib/compress.ts` | 159 | Browser-side image compression for references and uploads |
 | Cost | `ui/src/lib/cost.ts` | 91 | Quality/size cost estimation |
 | Error codes | `ui/src/lib/errorCodes.ts` | 178 | Stable error code → translation key mapping |

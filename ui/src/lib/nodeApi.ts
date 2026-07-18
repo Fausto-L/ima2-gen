@@ -19,6 +19,12 @@ export type NodeGenerateRequest = {
   searchMode?: "off" | "auto" | "on";
   webSearchEnabled?: boolean;
   references?: string[];
+  /** Resolved element inputs for this run (higgsfield 120): server records
+   * ids/revisions into the sidecar and appends notes at generation time
+   * while keeping the stored prompt raw. */
+  elementIds?: string[];
+  elementRevisions?: Record<string, unknown>;
+  elementNotes?: string[];
   requestId?: string;
   sessionId?: string | null;
   clientNodeId?: string | null;

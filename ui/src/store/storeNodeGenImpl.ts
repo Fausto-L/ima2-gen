@@ -43,8 +43,11 @@ async function resolveElementInputsForRun(
   inputs: ElementInputNode[],
   set: StoreSet,
   get: StoreGet,
-): Promise<{ ok: true; referenceDataUrls: string[] } | { ok: false; name: string }> {
+): Promise<{ ok: true; referenceDataUrls: string[]; notes: string[]; elementIds: string[]; revisions: Record<string, unknown> } | { ok: false; name: string }> {
   const dataUrls: string[] = [];
+  const notes: string[] = [];
+  const elementIds: string[] = [];
+  const revisions: Record<string, unknown> = {};
   for (const input of inputs) {
     if (input.missing || !input.elementId) {
       if (input.missing) return { ok: false, name: input.name };
@@ -58,10 +61,14 @@ async function resolveElementInputsForRun(
     }
     // Keep the catalog fresh and snapshot the resolved revision on the node.
     const catalog = upsertElementCatalog(get().elementCatalog, asset);
+    const revision = (asset as unknown as Record<string, unknown>).updatedAt ?? asset.createdAt;
+    elementIds.push(asset.id);
+    revisions[asset.id] = revision;
+    if (typeof asset.notes === "string" && asset.notes.trim()) notes.push(`${asset.name}: ${asset.notes.trim()}`);
     set({
       elementCatalog: catalog,
       graphNodes: get().graphNodes.map((n) => n.id === input.nodeId
-        ? { ...n, data: { ...n.data, resolvedRevision: (asset as unknown as Record<string, unknown>).updatedAt ?? asset.createdAt, missing: false } as typeof n.data }
+        ? { ...n, data: { ...n.data, resolvedRevision: revision, missing: false } as typeof n.data }
         : n),
     });
     for (const file of elementReferenceFilenames(asset)) {
@@ -71,7 +78,16 @@ async function resolveElementInputsForRun(
       } catch { /* an unreadable ref is dropped, not fatal */ }
     }
   }
-  return { ok: true, referenceDataUrls: dataUrls };
+  return { ok: true, referenceDataUrls: dataUrls, notes, elementIds, revisions };
+}
+
+function mergeRunReferences(nodeRefs: string[], elementRefs: string[], activeLimit: number): string[] {
+  const merged: string[] = [];
+  for (const ref of [...nodeRefs, ...elementRefs]) {
+    if (!merged.includes(ref)) merged.push(ref);
+    if (merged.length >= activeLimit) break;
+  }
+  return merged;
 }
 
 export async function runGenerateNodeInPlaceImpl(
@@ -101,7 +117,7 @@ export async function runGenerateNodeInPlaceImpl(
   // elements are re-fetched and their latest refs merge into the request.
   const elementInputs = collectElementInputs(get().graphNodes, get().graphEdges, [clientId]);
   const elementResolution = await resolveElementInputsForRun(elementInputs, set, get);
-  if (!elementResolution.ok) {
+  if (elementResolution.ok === false) {
     get().showToast(t("node.elementMissing", { name: elementResolution.name }), true);
     nodeGenerationLocks.delete(clientId);
     return null;
@@ -112,7 +128,7 @@ export async function runGenerateNodeInPlaceImpl(
     nodeGenerationLocks.delete(clientId);
     return null;
   }
-  const nodeRefs = [...(node.data.referenceImages ?? []), ...elementResolution.referenceDataUrls];
+  const nodeRefs = mergeRunReferences(node.data.referenceImages ?? [], elementResolution.referenceDataUrls, get().activeReferenceLimit());
   const s = get();
   // Branch variants carry per-node provider/model/size (settingsPatch) —
   // prefer them over global settings (higgsfield 120 NB).
@@ -194,6 +210,9 @@ export async function runGenerateNodeInPlaceImpl(
       webSearchEnabled: s.webSearchEnabled,
       ...(nodeRefs.length
         ? { references: nodeRefs.map(stripDataUrlPrefix) }
+        : {}),
+      ...(elementResolution.elementIds.length
+        ? { elementIds: elementResolution.elementIds, elementRevisions: elementResolution.revisions, elementNotes: elementResolution.notes }
         : {}),
     }, {
         onPartial: (partial) => {

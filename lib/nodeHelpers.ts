@@ -27,6 +27,9 @@ export interface NodeGenerateBody {
   provider?: string;
   webSearchEnabled?: boolean;
   async?: boolean;
+  elementIds?: unknown;
+  elementRevisions?: unknown;
+  elementNotes?: unknown;
 }
 
 export function asUpstream(e: unknown): UpstreamErr {
