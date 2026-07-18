@@ -146,6 +146,89 @@ test("duplicate active requestId returns 409 and starts the provider once", asyn
   }
 });
 
+test("duplicate 409 publishes no error on the active job channel (terminal uniqueness)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ima2-extend-dup-stream-"));
+  await makeParent(dir);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const requestId = "i2v-dup-stream";
+  const seen: string[] = [];
+  const stopWatch = subscribe((event) => { if (event.jobId === requestId) seen.push(event.event); });
+  const { server, url } = await makeApp(dir, {
+    extractFrame: async () => { await gate; return "png"; },
+    generateVideo: successfulGenerator(),
+  });
+  try {
+    assert.equal((await postExtend(url, { sourceVideoId: "root.mp4", requestId, prompt: "continue" })).status, 202);
+    assert.equal((await postExtend(url, { sourceVideoId: "root.mp4", requestId, prompt: "continue" })).status, 409);
+    release();
+    await new Promise<void>((resolve) => {
+      const stop = subscribe((event) => { if (event.jobId === requestId && event.event === "done") { stop(); resolve(); } });
+    });
+    assert.ok(!seen.includes("error"), `duplicate must not publish error, saw: ${seen.join(",")}`);
+    assert.equal(seen.filter((e) => e === "done").length, 1);
+  } finally {
+    release();
+    stopWatch();
+    await close(server);
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("cancel during extraction ends with exactly one terminal event and zero provider calls", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ima2-extend-cancel-"));
+  await makeParent(dir);
+  const requestId = "i2v-cancel-one";
+  let providerCalls = 0;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const seen: BusEvent[] = [];
+  const stopWatch = subscribe((event) => { if (event.jobId === requestId && (event.event === "done" || event.event === "error")) seen.push(event); });
+  const generate = successfulGenerator();
+  const { server, url } = await makeApp(dir, {
+    extractFrame: async () => { await gate; return "png"; },
+    generateVideo: async (prompt, ctx, options) => { providerCalls += 1; return generate(prompt, ctx, options); },
+  });
+  try {
+    assert.equal((await postExtend(url, { sourceVideoId: "root.mp4", requestId, prompt: "continue" })).status, 202);
+    abortJob(requestId);
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(providerCalls, 0, "provider must not run after cancel");
+    assert.equal(seen.filter((e) => e.event === "done").length, 0, "no done after cancel");
+    assert.deepEqual(seen.map((e) => e.data?.code), ["GENERATION_CANCELED"], "exactly one canceled terminal event");
+  } finally {
+    release();
+    stopWatch();
+    await close(server);
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("unreadable parent sidecar fails closed with VIDEO_PARENT_METADATA_INVALID and zero provider calls", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ima2-extend-corrupt-"));
+  await writeFile(join(dir, "root.mp4"), fakeMp4());
+  await writeFile(join(dir, "root.mp4.json"), "{ not valid json");
+  let providerCalls = 0;
+  const requestId = "i2v-corrupt-parent";
+  const generate = successfulGenerator();
+  const { server, url } = await makeApp(dir, {
+    extractFrame: async () => "png",
+    generateVideo: async (prompt, ctx, options) => { providerCalls += 1; return generate(prompt, ctx, options); },
+  });
+  try {
+    const response = await postExtend(url, { sourceVideoId: "root.mp4", requestId, prompt: "continue" });
+    assert.equal(response.status, 500);
+    const payload = await response.json();
+    assert.equal(payload.code, "VIDEO_PARENT_METADATA_INVALID");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(providerCalls, 0);
+  } finally {
+    await close(server);
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("extraction failures are typed and never call the provider", async (t) => {
   const cases = [
     { name: "decode", error: new Error("decode failed"), code: "VIDEO_FRAME_EXTRACT_FAILED", retryable: undefined },

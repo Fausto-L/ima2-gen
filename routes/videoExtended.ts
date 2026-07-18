@@ -249,14 +249,38 @@ export function registerVideoExtendedRoutes(app: Express, ctxRaw: RouteRuntimeCo
   // --- Last-frame image-to-video extension ---
   app.post("/api/video/extend", async (req: Request, res: Response) => {
     const requestId = normalizeBodyRequestId(req.body?.requestId, req.id);
+    // Admit the job BEFORE any await so a client cancel (DELETE inflight) can
+    // never lose the race against preflight (audit blocker B2). Prompt/meta
+    // are provisional here; authoritative values are resolved below.
+    const startedEarly = startJob({ requestId, kind: "video", prompt: String(req.body?.prompt ?? ""), meta: { workflow: "last-frame-i2v", sourceVideoId: req.body?.sourceVideoId ?? null } });
+    if (startedEarly && isStartJobFailure(startedEarly)) {
+      // Duplicate/capacity: respond WITHOUT publishing — the requestId channel
+      // belongs to the ACTIVE job and an error event here would corrupt its
+      // terminal stream (audit blocker B1).
+      if (startedEarly.code === "TOO_MANY_JOBS") res.setHeader("Retry-After", String(INFLIGHT_RETRY_AFTER_SECONDS));
+      const status = startedEarly.code === "TOO_MANY_JOBS" ? 429 : 409;
+      res.status(status).json({ requestId, error: startedEarly.code === "TOO_MANY_JOBS" ? "Too many concurrent generation jobs" : "Request ID already in use", code: startedEarly.code, status });
+      return;
+    }
+    const cancelController = new AbortController();
+    registerJobAbortController(requestId, cancelController);
     const fail = (error: unknown) => {
       const info = errInfo(error);
       const status = info.status ?? 500;
       const code = info.code ?? "VIDEO_EXTEND_FAILED";
       const payload = { requestId, error: info.message, code, status, ...retryableData(error) };
       publish(requestId, "error", payload);
+      finishJob(requestId, { status: "error", httpStatus: status, errorCode: code, meta: { stage: "preflight" } });
       if (!res.headersSent) res.status(status).json(payload);
     };
+    // A cancel that arrived during admission/preflight must stop before any
+    // provider work (B2). Mirror the async catch's rule: a canceled job gets
+    // no error event (cancel is already the recorded terminal state).
+    if (isJobCanceled(requestId) || cancelController.signal.aborted) {
+      const canceled = makeGenerationCanceledError() as Error & { status?: number; code?: string };
+      if (!res.headersSent) res.status(canceled.status ?? 499).json({ requestId, error: canceled.message, code: canceled.code ?? "GENERATION_CANCELED", status: canceled.status ?? 499 });
+      return;
+    }
 
     let sourceVideoId: string;
     let parent: ParentMetadata | null;
@@ -300,14 +324,6 @@ export function registerVideoExtendedRoutes(app: Express, ctxRaw: RouteRuntimeCo
       return;
     }
 
-    const started = startJob({ requestId, kind: "video", prompt, meta: { workflow: "last-frame-i2v", sourceVideoId, provider, model } });
-    if (started && isStartJobFailure(started)) {
-      if (started.code === "TOO_MANY_JOBS") res.setHeader("Retry-After", String(INFLIGHT_RETRY_AFTER_SECONDS));
-      fail(codedError(started.code === "TOO_MANY_JOBS" ? "Too many concurrent generation jobs" : "Request ID already in use", started.code === "TOO_MANY_JOBS" ? 429 : 409, started.code));
-      return;
-    }
-    const cancelController = new AbortController();
-    registerJobAbortController(requestId, cancelController);
     emitPhase(requestId, "queued");
     res.status(202).json({ ok: true, requestId, sourceVideoId, workflow: "last-frame-i2v" });
 
@@ -357,8 +373,10 @@ export function registerVideoExtendedRoutes(app: Express, ctxRaw: RouteRuntimeCo
         }
         invalidateHistoryIndex();
         const done = { requestId, filename, url: `/generated/${encodeURIComponent(filename)}`, providerUrl: result.url, mediaType: "video", provider, model: result.effectiveModel, prompt, userPrompt: prompt, revisedPrompt: result.revisedPrompt, createdAt, elapsed, usage: result.usage, webSearchCalls: result.webSearchCalls, video, videoLineage, videoContinuity };
-        publishJobEvent(requestId, "done", done);
+        // finishJob BEFORE done (audit blocker B4): a done event must never be
+        // followed by an error from a failing inflight-completion write.
         finishJob(requestId, { status: "completed", meta: { filename, xaiVideoRequestId: result.xaiVideoRequestId } });
+        publishJobEvent(requestId, "done", done);
       } catch (error) {
         if (!isJobCanceled(requestId)) {
           const info = errInfo(error);

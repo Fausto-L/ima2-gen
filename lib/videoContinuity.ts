@@ -51,10 +51,18 @@ export function safeGeneratedVideoFilename(value: unknown): string {
 
 export async function readVideoSidecar(generatedDir: string, filename: string): Promise<VideoMeta | null> {
   const safe = safeGeneratedVideoFilename(filename);
+  let raw: string;
   try {
-    return JSON.parse(await readFile(join(generatedDir, `${safe}.json`), "utf-8")) as VideoMeta;
+    raw = await readFile(join(generatedDir, `${safe}.json`), "utf-8");
   } catch {
-    return null;
+    return null; // no sidecar — legitimate for pre-lineage artifacts
+  }
+  try {
+    return JSON.parse(raw) as VideoMeta;
+  } catch {
+    // Present-but-unreadable sidecar must fail closed: silently treating it as
+    // "no sidecar" would reset lineage on explicit-prompt extension.
+    throw Object.assign(new Error("parent video metadata is unreadable"), { status: 500, code: "VIDEO_PARENT_METADATA_INVALID" });
   }
 }
 

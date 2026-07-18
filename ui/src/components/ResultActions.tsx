@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAppStore } from "../store/useAppStore";
 import { useI18n } from "../i18n";
 import { cancelInflight, exportImageToComfy } from "../lib/api";
-import { armStreamTimeout, ensureConnected, subscribe } from "../lib/eventChannel";
+import { armStreamTimeout, ensureConnected, subscribe, whenConnected } from "../lib/eventChannel";
 import { parseSseErrorPayload } from "../lib/sseStreamError";
 import { toVideoHistoryItem, type VideoExtendDone } from "../lib/videoHistoryItem";
 import { isVideoItem, extractFirstFrame, extractMidFrame, extractLastFrame } from "../lib/videoMedia";
@@ -69,7 +69,10 @@ function postVideoExtendStream(payload: VideoExtendRequest, signal: AbortSignal)
     }));
     if (signal.aborted) return onAbort();
     signal.addEventListener("abort", onAbort, { once: true });
-    const submission = submitVideoExtend(payload, signal);
+    // Await SSE transport open BEFORE submitting (audit blocker B3): on a fresh
+    // connection a terminal event emitted before the server-side subscription
+    // is installed would be lost, hanging the promise until timeout.
+    const submission = whenConnected().then(() => submitVideoExtend(payload, signal));
     submission.catch((error) => finish(() => reject(error)));
   });
 }
