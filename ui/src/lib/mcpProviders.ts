@@ -44,8 +44,10 @@ export type McpGenerateInput = {
   ratio?: string;
   parameters?: Record<string, McpPresetValue>;
   startFrameFilename?: string;
+  endFrameFilename?: string;
   /** Up to 3 tagged references; tag is the @alias usable in the prompt. */
   references?: Array<{ filename: string; tag?: string }>;
+  referenceVideoFilename?: string;
   requestId?: string;
 };
 
@@ -143,6 +145,14 @@ export async function getMcpModelOptions(
 }
 
 export type McpPresetValue = string | number | boolean;
+export type McpInputRole =
+  | "text"
+  | "image"
+  | "start_image"
+  | "end_image"
+  | "image_references"
+  | "video_references"
+  | (string & {});
 export type McpModelParameter = {
   name: string;
   type: "string" | "number" | "boolean" | "string_array";
@@ -157,7 +167,7 @@ export type McpModelCapabilities = {
   source: "provider-declared" | "verified-contract";
   aspectRatios: string[];
   parameters: McpModelParameter[];
-  inputRoles: string[];
+  inputRoles: McpInputRole[];
 };
 export type McpModelEntry = {
   id: string;

@@ -105,6 +105,7 @@ describe("getProviderModels", () => {
       name: "duration", type: "number", description: "Output duration in seconds.", min: 4, max: 15, default: 10,
     });
     assert.deepEqual(seedance?.capabilities.parameters.find((parameter) => parameter.name === "resolution")?.options, ["480p", "720p", "1080p"]);
+    assert.equal(seedance?.capabilities.inputRoles.includes("audio_references"), false);
   });
 
   it("rejects unknown providers with the canonical code", async () => {

@@ -314,7 +314,9 @@ function showHelp() {
     grok <sub>     Bundled Grok auth/status         (ima2 grok --help)
     config <sub>   Config get/set/ls/path/rm       (ima2 config --help)
     defaults <sub> Inspect/change model defaults   (ima2 defaults --help)
+    models         List available lane models      (ima2 models --help)
     capabilities   Agent capability metadata       (ima2 capabilities --help)
+    tools          Machine tool contracts for agents (ima2 tools --help)
     ping           Ping running server / check health
 
   Agent skills (SKILL.md + references/):
@@ -363,6 +365,7 @@ function showHelp() {
     ima2 skill install front --dir <path>  Install frontend skill only
     ima2 skill install --tmp          Install to temp dir
     ima2 capabilities --json         Inspect supported models/options
+    ima2 models --json               List image/video models by lane
     ima2 defaults --json             Inspect running server defaults
     ima2 ping                        Health check
 `);
@@ -375,7 +378,7 @@ if (args.includes("-v") || args.includes("--version")) {
     process.exit(0);
 }
 if ((!command || args.includes("-h") || args.includes("--help"))
-    && !["doctor", "gen", "video", "edit", "ls", "show", "ps", "cancel", "session", "history", "prompt", "multimode", "node", "annotate", "canvas-versions", "metadata", "comfy", "cardnews", "inflight", "storage", "billing", "providers", "oauth", "grok", "config", "defaults", "capabilities", "skill", "ping", "backfill-thumbs"].includes(command)) {
+    && !["doctor", "gen", "video", "edit", "ls", "show", "ps", "cancel", "session", "history", "prompt", "multimode", "node", "annotate", "canvas-versions", "metadata", "comfy", "cardnews", "inflight", "storage", "billing", "providers", "oauth", "grok", "config", "defaults", "models", "capabilities", "tools", "skill", "ping", "backfill-thumbs"].includes(command)) {
     showHelp();
     process.exit(command ? 0 : 1);
 }
@@ -439,7 +442,9 @@ switch (command) {
     case "cardnews":
     case "config":
     case "defaults":
+    case "models":
     case "capabilities":
+    case "tools":
     case "skill":
     case "grok":
     case "ping": {
