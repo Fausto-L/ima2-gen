@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useI18n } from "../../i18n";
 
 export type NodeTemplateSource = "seed" | "user";
 
@@ -29,14 +30,15 @@ function matches(template: NodeTemplateSummary, query: string) {
 }
 
 function MiniGraph({ template }: { template: NodeTemplateSummary }) {
+  const { t } = useI18n();
   const nodes = template.preview ?? [];
   return (
-    <div className="node-template-picker__preview" aria-label={`${template.name} graph preview`}>
+    <div className="node-template-picker__preview" aria-label={t("nodeStudio.templates.previewAria", { name: template.name })}>
       {nodes.length ? nodes.map((node) => (
         <span key={node.id} className="node-template-picker__preview-node" style={{ left: `${node.x}%`, top: `${node.y}%` }}>
           {node.label}
         </span>
-      )) : <span className="node-template-picker__preview-empty">{template.nodeCount} nodes</span>}
+      )) : <span className="node-template-picker__preview-empty">{t(template.nodeCount === 1 ? "nodeStudio.templates.nodeCountOne" : "nodeStudio.templates.nodeCount", { count: template.nodeCount })}</span>}
     </div>
   );
 }
@@ -48,6 +50,7 @@ function TemplateCard({ template, selected, onSelect, onRename, onDelete }: {
   onRename?: () => void;
   onDelete?: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <article className={`node-template-picker__card${selected ? " is-selected" : ""}`}>
       <button type="button" className="node-template-picker__card-main" onClick={onSelect} onKeyDown={(event) => {
@@ -57,19 +60,20 @@ function TemplateCard({ template, selected, onSelect, onRename, onDelete }: {
         <span className="node-template-picker__card-copy">
           <strong>{template.name}</strong>
           <span>{template.description}</span>
-          <small>{template.nodeCount} nodes · {template.terminalCount} outputs</small>
+          <small>{t(template.nodeCount === 1 ? "nodeStudio.templates.nodeCountOne" : "nodeStudio.templates.nodeCount", { count: template.nodeCount })} · {t(template.terminalCount === 1 ? "nodeStudio.templates.outputCountOne" : "nodeStudio.templates.outputCount", { count: template.terminalCount })}</small>
         </span>
       </button>
       <div className="node-template-picker__tags">{template.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>
       {template.source === "user" && (onRename || onDelete) ? <div className="node-template-picker__card-actions">
-        {onRename ? <button type="button" onClick={onRename}>Rename</button> : null}
-        {onDelete ? <button type="button" onClick={onDelete}>Delete</button> : null}
+        {onRename ? <button type="button" onClick={onRename}>{t("nodeStudio.templates.rename")}</button> : null}
+        {onDelete ? <button type="button" onClick={onDelete}>{t("nodeStudio.templates.delete")}</button> : null}
       </div> : null}
     </article>
   );
 }
 
 export function NodeTemplatePicker({ templates, loading = false, error = null, onCopy, onClose, onRename, onDelete }: NodeTemplatePickerProps) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const filtered = useMemo(() => templates.filter((template) => matches(template, query)), [query, templates]);
@@ -79,19 +83,19 @@ export function NodeTemplatePicker({ templates, loading = false, error = null, o
 
   const confirmCopy = () => { if (selected) void onCopy(selected); };
   const remove = (template: NodeTemplateSummary) => {
-    if (window.confirm(`Delete template “${template.name}”? This cannot be undone.`)) onDelete?.(template);
+    if (window.confirm(t("nodeStudio.templates.deleteConfirm", { name: template.name }))) onDelete?.(template);
   };
 
   return <section className="node-template-picker" role="dialog" aria-modal="true" aria-labelledby="node-template-picker-title">
-    <header><div><p className="node-template-picker__eyebrow">Node studio</p><h2 id="node-template-picker-title">Choose a template</h2></div><button type="button" aria-label="Close templates" onClick={onClose}>×</button></header>
-    <label className="node-template-picker__search"><span>Search templates</span><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name or tag" /></label>
-    {loading ? <p className="node-template-picker__state" role="status">Loading templates…</p> : null}
+    <header><div><p className="node-template-picker__eyebrow">{t("nodeStudio.name")}</p><h2 id="node-template-picker-title">{t("nodeStudio.templates.title")}</h2></div><button type="button" aria-label={t("nodeStudio.templates.close")} onClick={onClose}>×</button></header>
+    <label className="node-template-picker__search"><span>{t("nodeStudio.templates.searchLabel")}</span><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("nodeStudio.templates.searchPlaceholder")} /></label>
+    {loading ? <p className="node-template-picker__state" role="status">{t("nodeStudio.templates.loading")}</p> : null}
     {error ? <p className="node-template-picker__state is-error" role="alert">{error}</p> : null}
-    {!loading && !error && filtered.length === 0 ? <p className="node-template-picker__state">No templates match “{query}”.</p> : null}
+    {!loading && !error && filtered.length === 0 ? <p className="node-template-picker__state">{t("nodeStudio.templates.empty", { query })}</p> : null}
     {!loading && !error ? <div className="node-template-picker__sections">
-      {seed.length ? <section><h3>Starter templates</h3><div className="node-template-picker__grid">{seed.map((template) => <TemplateCard key={template.id} template={template} selected={template.id === selectedId} onSelect={() => setSelectedId(template.id)} />)}</div></section> : null}
-      {user.length ? <section><h3>Your templates</h3><div className="node-template-picker__grid">{user.map((template) => <TemplateCard key={template.id} template={template} selected={template.id === selectedId} onSelect={() => setSelectedId(template.id)} onRename={onRename ? () => onRename(template) : undefined} onDelete={onDelete ? () => remove(template) : undefined} />)}</div></section> : null}
+      {seed.length ? <section><h3>{t("nodeStudio.templates.starter")}</h3><div className="node-template-picker__grid">{seed.map((template) => <TemplateCard key={template.id} template={template} selected={template.id === selectedId} onSelect={() => setSelectedId(template.id)} />)}</div></section> : null}
+      {user.length ? <section><h3>{t("nodeStudio.templates.yours")}</h3><div className="node-template-picker__grid">{user.map((template) => <TemplateCard key={template.id} template={template} selected={template.id === selectedId} onSelect={() => setSelectedId(template.id)} onRename={onRename ? () => onRename(template) : undefined} onDelete={onDelete ? () => remove(template) : undefined} />)}</div></section> : null}
     </div> : null}
-    <footer><button type="button" onClick={onClose}>Cancel</button><button type="button" className="node-template-picker__copy" disabled={!selected} onClick={confirmCopy}>Make a copy</button></footer>
+    <footer><button type="button" onClick={onClose}>{t("nodeStudio.templates.cancel")}</button><button type="button" className="node-template-picker__copy" disabled={!selected} onClick={confirmCopy}>{t("nodeStudio.templates.copy")}</button></footer>
   </section>;
 }

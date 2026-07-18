@@ -1,24 +1,38 @@
 import { useCallback, useMemo, useState, type KeyboardEvent, type RefObject } from "react";
 import { useReactFlow } from "@xyflow/react";
-import { compatibilityReasonMessage, NODE_STUDIO_COMMANDS } from "../../lib/nodeStudioCatalog";
+import { NODE_STUDIO_COMMANDS } from "../../lib/nodeStudioCatalog";
+import type { CompatibilityResult } from "../../lib/nodeCompatibility";
 import { paletteAnchor, shouldOpenNodePalette } from "../../lib/nodeStudioKeyboard";
 import { useAppStore } from "../../store/useAppStore";
+import { useI18n } from "../../i18n";
 import type { NodeTemplateSummary } from "./NodeTemplatePicker";
 import { useNodeBranchController } from "./useNodeBranchController";
 import { useNodeConnectionController } from "./useNodeConnectionController";
 import { useNodeElementController } from "./useNodeElementController";
 import { useNodeTemplateMutations, useNodeTemplateState } from "./useNodeTemplateController";
 
+type CompatibilityReason = NonNullable<CompatibilityResult["reason"]> | "UNKNOWN_PORT";
+
+const COMPATIBILITY_REASON_KEYS: Record<CompatibilityReason, string> = {
+  SAME_DIRECTION: "nodeStudio.compatibility.sameDirection",
+  TYPE_MISMATCH: "nodeStudio.compatibility.typeMismatch",
+  CARDINALITY: "nodeStudio.compatibility.cardinality",
+  SELF_EDGE: "nodeStudio.compatibility.selfEdge",
+  DUPLICATE_EDGE: "nodeStudio.compatibility.duplicateEdge",
+  UNKNOWN_PORT: "nodeStudio.compatibility.unknownPort",
+};
+
 export function useNodeStudioController(wrapperRef: RefObject<HTMLElement | null>) {
+  const { t } = useI18n();
   const nodes = useAppStore((state) => state.graphNodes); const edges = useAppStore((state) => state.graphEdges);
   const sessions = useAppStore((state) => state.sessions); const activeSessionId = useAppStore((state) => state.activeSessionId);
   const switchSession = useAppStore((state) => state.switchSession); const connectNodes = useAppStore((state) => state.connectNodes);
   const showToast = useAppStore((state) => state.showToast); const { fitView, screenToFlowPosition } = useReactFlow();
   const [status, setStatus] = useState("");
   const restoreFocus = useCallback(() => requestAnimationFrame(() => wrapperRef.current?.focus()), [wrapperRef]);
-  const surfaceReason = useCallback((reason: Parameters<typeof compatibilityReasonMessage>[0]) => {
-    const message = compatibilityReasonMessage(reason); setStatus(message); showToast(message, true);
-  }, [showToast]);
+  const surfaceReason = useCallback((reason: CompatibilityReason) => {
+    const message = t(COMPATIBILITY_REASON_KEYS[reason]); setStatus(message); showToast(message, true);
+  }, [showToast, t]);
   const shared = { nodes, edges, fitView, restoreFocus, showToast };
   const template = useNodeTemplateState(shared); const templateMutations = useNodeTemplateMutations(shared, template.setters);
   const connection = useNodeConnectionController({ nodes, edges, connectNodes, screenToFlowPosition, surfaceReason, restoreFocus });
@@ -36,8 +50,8 @@ export function useNodeStudioController(wrapperRef: RefObject<HTMLElement | null
   }, [branch.branchOpen, closeOverlays, connection.palette, connection.setPalette, nodes.length, template.templateOpen, wrapperRef]);
   const resumeRecent = useCallback(async () => {
     if (!recent) return;
-    try { await switchSession(recent.id); } catch (error) { showToast(error instanceof Error ? error.message : String(error), true); }
-  }, [recent, showToast, switchSession]);
+    try { await switchSession(recent.id); } catch { showToast(t("nodeStudio.empty.resumeError"), true); }
+  }, [recent, showToast, switchSession, t]);
   return { commands: NODE_STUDIO_COMMANDS, ...connection, ...branch, ...element, ...template, status,
     hasRecentGraph: Boolean(recent), onKeyDown, resumeRecent, closeOverlays, closePalette: closeOverlays,
     openTemplates: () => void template.openTemplates(), saveTemplate: () => void templateMutations.saveTemplate(),

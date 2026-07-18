@@ -1,3 +1,5 @@
+import { useI18n } from "../../i18n";
+
 export interface NodeCanvasEmptyStateProps {
   hasRecentGraph: boolean;
   onStartBlank(): void;
@@ -35,30 +37,31 @@ export function NodeCanvasEmptyState({
   onOpenTemplates,
   onResumeRecent,
 }: NodeCanvasEmptyStateProps) {
+  const { t } = useI18n();
   return (
     <section className="node-empty-state" aria-labelledby="node-empty-state-title">
       <div className="node-empty-state__intro">
-        <p className="node-empty-state__eyebrow">Node studio</p>
-        <h2 id="node-empty-state-title">Build an image workflow</h2>
-        <p>Start with a prompt, reuse a proven graph, or continue your latest work.</p>
+        <p className="node-empty-state__eyebrow">{t("nodeStudio.name")}</p>
+        <h2 id="node-empty-state-title">{t("nodeStudio.empty.title")}</h2>
+        <p>{t("nodeStudio.empty.description")}</p>
       </div>
       <div className="node-empty-state__choices">
         <EmptyStateChoice
-          title="Start with a blank canvas"
-          description="Add one prompt node and shape the workflow yourself."
-          action="Start blank"
+          title={t("nodeStudio.empty.blankTitle")}
+          description={t("nodeStudio.empty.blankDescription")}
+          action={t("nodeStudio.empty.blankAction")}
           onClick={onStartBlank}
         />
         <EmptyStateChoice
-          title="Start from a template"
-          description="Copy a ready-made graph for a common generation workflow."
-          action="Browse templates"
+          title={t("nodeStudio.empty.templateTitle")}
+          description={t("nodeStudio.empty.templateDescription")}
+          action={t("nodeStudio.empty.templateAction")}
           onClick={onOpenTemplates}
         />
         <EmptyStateChoice
-          title="Resume recent graph"
-          description={hasRecentGraph ? "Continue the most recently saved valid graph." : "No recent graph is available yet."}
-          action="Resume recent"
+          title={t("nodeStudio.empty.recentTitle")}
+          description={t(hasRecentGraph ? "nodeStudio.empty.recentDescription" : "nodeStudio.empty.recentUnavailable")}
+          action={t("nodeStudio.empty.recentAction")}
           disabled={!hasRecentGraph}
           onClick={() => void onResumeRecent()}
         />

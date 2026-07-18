@@ -1,5 +1,6 @@
 import { useRef, type KeyboardEvent, type ReactNode } from "react";
 import { Panel } from "@xyflow/react";
+import { useI18n } from "../../i18n";
 import type { useNodeStudioController } from "./useNodeStudioController";
 import { NodeBranchDialog } from "./NodeBranchDialog";
 import { NodeCommandPalette } from "./NodeCommandPalette";
@@ -34,12 +35,13 @@ function DialogFrame({ children, onClose }: { children: ReactNode; onClose(): vo
 }
 
 export function NodeStudioOverlays({ studio, graphEmpty, disabled, onAddRoot }: NodeStudioOverlaysProps) {
+  const { t } = useI18n();
   return <>
     <Panel position="top-right" className="node-studio-toolbar">
-      <button type="button" disabled={disabled} onClick={onAddRoot}>Add image</button>
-      <button type="button" disabled={disabled} onClick={studio.openTemplates}>Templates</button>
-      <button type="button" disabled={disabled || graphEmpty} onClick={studio.saveTemplate}>Save template</button>
-      <button type="button" disabled={disabled || !studio.selectedSource} onClick={studio.openBranch}>Branch</button>
+      <button type="button" disabled={disabled} onClick={onAddRoot}>{t("nodeStudio.toolbar.addImage")}</button>
+      <button type="button" disabled={disabled} onClick={studio.openTemplates}>{t("nodeStudio.toolbar.templates")}</button>
+      <button type="button" disabled={disabled || graphEmpty} onClick={studio.saveTemplate}>{t("nodeStudio.toolbar.saveTemplate")}</button>
+      <button type="button" disabled={disabled || !studio.selectedSource} onClick={studio.openBranch}>{t("nodeStudio.toolbar.branch")}</button>
     </Panel>
     <Panel position="top-left" className="node-studio-element-panel">
       <NodeElementTray disabled={disabled} onAdd={studio.addElement} />
