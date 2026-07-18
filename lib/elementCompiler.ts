@@ -170,7 +170,10 @@ function appendElementSlots(
         droppedRefs.push({ path, reason: "reference_capacity_exceeded", elementId: element.id });
       } else {
         paths.add(canonical);
-        slots.push({ elementId: element.id, elementName: element.name, kind: element.kind, path: canonical, strength: element.defaultStrength, priority: elementIndex });
+        // Keep the raw (possibly generated-dir-relative) path — the caller
+        // resolves it against its own generated dir. Absolutizing here against
+        // process.cwd() silently broke every relative ref (070 QA refsCount:0).
+        slots.push({ elementId: element.id, elementName: element.name, kind: element.kind, path: path.trim(), strength: element.defaultStrength, priority: elementIndex });
       }
     }
   }

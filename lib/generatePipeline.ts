@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "fs/promises";
 import { safeWriteSidecar, atomicWriteJson } from "./atomicWrite.js";
-import { join } from "path";
+import { isAbsolute, join } from "path";
 import { randomBytes } from "crypto";
 import type { Request, Response } from "express";
 import { detectImageMimeFromB64, summarizeReferencePayload, validateAndNormalizeRefs } from "./refs.js";
@@ -119,6 +119,8 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
       let elementNotesFragment = "";
       let elementResolvedRefs: string[] = [];
       let appliedElementIds: string[] = [];
+      let elementDroppedRefs: Array<{ path: string; reason: string; elementId?: string }> = [];
+      let elementRefReadFailures: Array<{ path: string; elementId?: string }> = [];
       if (rawElementIds.length > 0) {
         try {
           const elementMap = new Map<string, ElementDefinition>();
@@ -154,12 +156,19 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
           });
           elementNotesFragment = compiled.notesFragment;
           appliedElementIds = compiled.elementIds;
+          elementDroppedRefs = compiled.droppedRefs;
+          elementRefReadFailures = [];
           for (const slot of compiled.referenceSlots) {
             try {
-              const buf = await readFile(slot.path);
+              // Element refs are generated-dir-relative filenames; only
+              // absolute paths bypass the join (070 QA: cwd-relative resolve
+              // in the compiler silently dropped every ref).
+              const refPath = isAbsolute(slot.path) ? slot.path : join(ctx.config.storage.generatedDir, slot.path);
+              const buf = await readFile(refPath);
               const mime = slot.path.endsWith(".png") ? "image/png" : "image/jpeg";
               elementResolvedRefs.push(`data:${mime};base64,${buf.toString("base64")}`);
             } catch {
+              elementRefReadFailures.push({ path: slot.path, elementId: slot.elementId });
               logEvent("generate", "element_ref_read_failed", { requestId, path: slot.path, elementId: slot.elementId });
             }
           }
@@ -428,6 +437,8 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
            ...(backgroundPreset ? { backgroundPreset } : {}),
             ...(Array.isArray(req.body?.presetIds) && req.body.presetIds.length > 0 ? { presetIds: req.body.presetIds } : {}),
             ...(appliedElementIds.length > 0 ? { elementIds: appliedElementIds } : {}),
+            ...(elementDroppedRefs.length > 0 ? { droppedRefs: elementDroppedRefs } : {}),
+            ...(elementRefReadFailures.length > 0 ? { refReadFailures: elementRefReadFailures } : {}),
           };
           const rawBuffer = Buffer.from(r.value.b64, "base64");
           const embedded: any = await embedImageMetadataBestEffort(rawBuffer, resultFormat, meta, {
