@@ -15,27 +15,26 @@ function readAdvertise() {
   }
 }
 
-async function probe(base: string, timeoutMs = 600) {
+export interface ServerHealth {
+  ok?: boolean;
+  version?: string;
+  pid?: number;
+  [key: string]: unknown;
+}
+
+async function probe(base: string, timeoutMs = 600): Promise<ServerHealth | null> {
   try {
     const r = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(timeoutMs) });
     if (!r.ok) return null;
-    return await r.json();
+    return (await r.json()) as ServerHealth;
   } catch {
     return null;
   }
 }
 
-export async function resolveServer({ serverFlag }: any = {}) {
-  if (serverFlag) {
-    const base = serverFlag.replace(/\/$/, "");
-    const health = await probe(base);
-    if (health) return { base, health };
-    const err: any = new Error(`server unreachable at ${base}`);
-    err.code = "SERVER_UNREACHABLE";
-    throw err;
-  }
+export async function findRunningServer({ includeEnv = true }: { includeEnv?: boolean } = {}) {
   const candidates: string[] = [];
-  if (process.env.IMA2_SERVER) candidates.push(process.env.IMA2_SERVER.replace(/\/$/, ""));
+  if (includeEnv && process.env.IMA2_SERVER) candidates.push(process.env.IMA2_SERVER.replace(/\/$/, ""));
   const adv = readAdvertise();
   if (adv?.backend?.url) candidates.push(String(adv.backend.url).replace(/\/$/, ""));
   if (adv?.url) candidates.push(String(adv.url).replace(/\/$/, ""));
@@ -49,6 +48,20 @@ export async function resolveServer({ serverFlag }: any = {}) {
     const health = await probe(base);
     if (health) return { base, health };
   }
+  return null;
+}
+
+export async function resolveServer({ serverFlag }: any = {}) {
+  if (serverFlag) {
+    const base = serverFlag.replace(/\/$/, "");
+    const health = await probe(base);
+    if (health) return { base, health };
+    const err: any = new Error(`server unreachable at ${base}`);
+    err.code = "SERVER_UNREACHABLE";
+    throw err;
+  }
+  const found = await findRunningServer();
+  if (found) return found;
   const err: any = new Error("server unreachable — is 'ima2 serve' running?");
   err.code = "SERVER_UNREACHABLE";
   throw err;

@@ -173,6 +173,27 @@ async function setup() {
 }
 
 async function serve(serveArgs: string[] = []) {
+  // Singleton guard: one ima2 server per machine unless --force is given.
+  // Probes the advertise file + default port only (IMA2_SERVER may point at a
+  // remote server and must not block starting a local one).
+  if (!serveArgs.includes("--force")) {
+    try {
+      const { findRunningServer } = await import("./lib/client.js");
+      const running = await findRunningServer({ includeEnv: false });
+      if (running?.health?.ok) {
+        const pid = running.health.pid ?? "?";
+        const version = running.health.version ?? "?";
+        console.log(`\n  ima2 server already running at ${running.base} (pid ${pid}, v${version}).`);
+        console.log("  Open it with 'ima2 open', or stop that process to restart.");
+        console.log("  To intentionally run a second instance: ima2 serve --force\n");
+        return;
+      }
+    } catch (e) {
+      const err = errInfo(e);
+      console.error(`[ima2] Running-server check skipped: ${err.message || err.raw}`);
+    }
+  }
+
   try {
     await maybePromptGithubStar();
   } catch (e) {
@@ -293,7 +314,7 @@ function showHelp() {
     use 'ima2 ps --json' to monitor requestIds and 'ima2 cancel <id>' to stop.
 
   Server commands:
-    serve [--dev]  Start the image generation server
+    serve [--dev] [--force]  Start the server (--force allows a second instance)
     setup, login   Configure API key or GPT OAuth (interactive)
     status         Show current configuration status
     doctor         Diagnose environment and setup
