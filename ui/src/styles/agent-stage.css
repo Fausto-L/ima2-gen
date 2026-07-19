@@ -75,12 +75,12 @@
 }
 
 .agent-stage__tools {
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--agent-r-sm, 8px);
   background: transparent;
   color: var(--text-dim);
   cursor: pointer;
@@ -89,6 +89,7 @@
 .agent-stage__tools:hover {
   color: var(--text);
   border-color: var(--border-strong);
+  background: var(--surface-2);
 }
 
 .agent-stage__tools:focus-visible {

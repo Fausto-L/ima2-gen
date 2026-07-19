@@ -99,8 +99,20 @@
 
 .agent-model-select .image-model-select__trigger--pill {
   min-height: 36px;
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
-  background: color-mix(in srgb, var(--accent) 9%, var(--control-bg));
+  border: 1px solid var(--border);
+  background: var(--control-bg);
+  border-radius: var(--agent-r-sm, 8px);
+}
+
+.agent-model-select .image-model-select__trigger--pill:hover,
+.agent-model-select .image-model-select__trigger--pill:focus-visible,
+.agent-model-select .image-model-select__trigger--pill[aria-expanded="true"] {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+
+.agent-model-select .image-model-select__trigger-effort {
+  color: var(--text-dim);
 }
 
 .agent-model-select__open-tab {

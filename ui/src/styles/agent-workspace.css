@@ -12,6 +12,9 @@
 }
 
 .agent-workspace {
+  --agent-r-lg: 12px;
+  --agent-r-md: 10px;
+  --agent-r-sm: 8px;
   grid-column: 2;
   grid-row: 1;
   min-width: 0;
@@ -456,7 +459,7 @@
 .agent-rail__sessions button {
   position: relative;
   overflow: hidden;
-  border-radius: 10px;
+  border-radius: var(--agent-r-md, 10px);
 }
 
 .agent-rail__sessions button.is-active {
