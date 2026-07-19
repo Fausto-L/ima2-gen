@@ -1,6 +1,6 @@
 import { parseArgs } from "../lib/args.js";
 import { resolveServer } from "../lib/client.js";
-import { out, die, color, json, exitCodeForError } from "../lib/output.js";
+import { out, die, color, json, exitCodeForError, exitFlushed } from "../lib/output.js";
 
 import { errInfo } from "../../lib/errInfo.js";
 const SPEC = {
@@ -25,7 +25,7 @@ export default async function pingCmd(argv: string[]) {
     }
   } catch (e) {
     const err = errInfo(e);
-    if (args.json) { json({ ok: false, error: err.message }); process.exit(exitCodeForError(e)); }
+    if (args.json) { json({ ok: false, error: err.message }); exitFlushed(exitCodeForError(e)); }
     die(exitCodeForError(e), err.message);
   }
 }

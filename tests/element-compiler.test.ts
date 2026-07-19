@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { resolve } from "node:path";
 import {
   compileElements,
   ELEMENT_CAPACITY_DEFAULTS,
@@ -59,7 +60,8 @@ describe("compileElements", () => {
       existingRefs: [{ source: "continuity", path: "/previous.png" }],
       provider: "gemini", mode: "video", capacity: ELEMENT_CAPACITY_DEFAULTS.gemini.video,
     });
-    assert.deepEqual(result.retainedExistingRefs, [{ source: "continuity", path: "/previous.png" }]);
+    // retainedExistingRefs are canonicalized via path.resolve — platform-aware (260719).
+    assert.deepEqual(result.retainedExistingRefs, [{ source: "continuity", path: resolve("/previous.png") }]);
     assert.equal(result.referenceSlots.length, 2);
   });
 
@@ -100,7 +102,7 @@ describe("compileElements", () => {
     const result = compile(["hero"], [element("hero", { refs: ["/same.png"] })], {
       existingRefs: [{ source: "composer", path: "/same.png" }],
     });
-    assert.deepEqual(result.retainedExistingRefs, [{ source: "composer", path: "/same.png" }]);
+    assert.deepEqual(result.retainedExistingRefs, [{ source: "composer", path: resolve("/same.png") }]);
     assert.deepEqual(result.referenceSlots, []);
     assert.deepEqual(result.droppedRefs, [{ path: "/same.png", reason: "duplicate_higher_priority_source", elementId: "hero" }]);
   });

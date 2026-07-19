@@ -30,7 +30,10 @@ function tempDir(t: TestContext): string {
 function assertCleanSecure(dir: string, provider = "runway"): void {
   const names = readdirSync(dir);
   assert.equal(names.some((name) => name.includes(".tmp-") || name.includes(".lock")), false);
-  assert.equal(statSync(join(dir, `${provider}.json`)).mode & 0o777, 0o600);
+  // POSIX-only contract: chmod is a no-op on Windows, where file ACLs apply.
+  if (process.platform !== "win32") {
+    assert.equal(statSync(join(dir, `${provider}.json`)).mode & 0o777, 0o600);
+  }
 }
 
 test("inspection classifies missing, corrupt, pending, usable, legacy, and mismatch without secrets", (t) => {

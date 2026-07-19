@@ -15,7 +15,9 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const rootDir = mkdtempSync(join(tmpdir(), "ima2-mcp-temp-references-"));
+// realpathSync: Windows tmpdir() can return 8.3 short names (RUNNER~1) while
+// the route resolves long ones — normalize the base before comparing (260719).
+const rootDir = realpathSync(mkdtempSync(join(tmpdir(), "ima2-mcp-temp-references-")));
 const generatedDir = join(rootDir, "generated");
 process.env.IMA2_CONFIG_DIR = rootDir;
 process.env.IMA2_GENERATED_DIR = generatedDir;

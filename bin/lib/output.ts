@@ -14,9 +14,59 @@ export const color = {
 export function out(msg = "") { process.stdout.write(msg + "\n"); }
 export function err(msg = "") { process.stderr.write(msg + "\n"); }
 
+/** Marker thrown by exitFlushed so callers keep true `never` semantics:
+ *  nothing after die/fail may continue to run. The installed guard swallows
+ *  exactly this marker; the scheduled exit fires first. */
+const EXIT_FLUSH_MARKER = Symbol("ima2-exit-flush");
+
+/** Install once at the CLI entry: swallow only the exit-flush marker. */
+let guardInstalled = false;
+export function installExitFlushGuard(): void {
+  if (guardInstalled) return;
+  guardInstalled = true;
+  const swallow = (reason: unknown) => {
+    if (reason === EXIT_FLUSH_MARKER) return;
+    throw reason;
+  };
+  process.on("unhandledRejection", swallow);
+  process.on("uncaughtException", swallow);
+}
+
+// Module-load install: any process importing this module (CLI entry OR a
+// spawned consumer of die/fail) can swallow the marker — the scheduled exit
+// fires first either way.
+installExitFlushGuard();
+
+/** Flush piped stdio before exiting. An immediate process.exit() right after
+ *  write() fast-fails with 0xC0000409 on Windows runners (260719 CI W1):
+ *  the empty-write callbacks fire once buffered data is flushed; a bounded
+ *  unref'd fallback guarantees the exit even with stalled/destroyed streams. */
+export function exitFlushed(code: number): never {
+  let settled = false;
+  const done = () => {
+    if (settled) return;
+    settled = true;
+    process.exit(code);
+  };
+  let pending = 0;
+  for (const stream of [process.stdout, process.stderr]) {
+    try {
+      pending += 1;
+      stream.write("", () => { pending -= 1; if (pending === 0) done(); });
+    } catch {
+      pending -= 1;
+    }
+  }
+  if (pending === 0) done();
+  // Referenced on purpose: this timer is the guaranteed exit path — unref'd,
+  // a stalled stream could let the process die naturally with code 0 first.
+  setTimeout(done, 250);
+  throw EXIT_FLUSH_MARKER;
+}
+
 export function die(code: number, msg?: string): never {
   if (msg) err(color.red("✗ ") + msg);
-  process.exit(code);
+  return exitFlushed(code);
 }
 
 export function fail(opts: {
@@ -28,7 +78,7 @@ export function fail(opts: {
 }): never {
   if (opts.json) {
     json({ ok: false, code: opts.code, message: opts.message, ...(opts.extra ?? {}) });
-    process.exit(opts.exitCode ?? 2);
+    return exitFlushed(opts.exitCode ?? 2);
   }
   return die(opts.exitCode ?? 2, opts.message);
 }

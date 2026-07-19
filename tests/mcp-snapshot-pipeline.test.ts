@@ -58,7 +58,10 @@ test("store precedence: local cache wins over bundled; local file is 0600", () =
   assert.equal(loadEffectiveSnapshot({ snapshotDir, packageRoot, provider: "runway" })?.tools.length, 1);
   saveLocalSnapshot(snapshotDir, makeArtifact());
   assert.equal(loadEffectiveSnapshot({ snapshotDir, packageRoot, provider: "runway" })?.tools.length, 2);
-  assert.equal(statSync(join(snapshotDir, "runway.json")).mode & 0o777, 0o600);
+  // POSIX-only contract: chmod is a no-op on Windows (ACLs instead).
+  if (process.platform !== "win32") {
+    assert.equal(statSync(join(snapshotDir, "runway.json")).mode & 0o777, 0o600);
+  }
 });
 
 test("ingestLiveTools carries listing metadata into provenance and persists locally", async () => {

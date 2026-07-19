@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { exitFlushed, installExitFlushGuard } from "./lib/output.js";
+installExitFlushGuard();
 import { createInterface } from "readline/promises";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
@@ -103,7 +105,7 @@ async function setup() {
     } catch {
       console.log("\n  Grok login failed or cancelled. You can retry with 'ima2 grok login'.\n");
       rl.close();
-      process.exit(1);
+      exitFlushed(1);
     }
     console.log("  Grok configured. Run 'ima2 serve' to start.\n");
   } else if (choice.trim() === "3") {
@@ -157,7 +159,7 @@ async function setup() {
       } catch {
         console.log("\n  Login failed or cancelled. You can retry with 'ima2 serve'.\n");
         rl.close();
-        process.exit(1);
+        exitFlushed(1);
       }
     } else {
       const how = auth.probe === "authed" ? "codex CLI" : "auth file";
@@ -215,7 +217,7 @@ async function serve(serveArgs: string[] = []) {
         ? "  This installation appears broken. Reinstall: npm i -g ima2-gen\n"
         : "",
     );
-    process.exit(1);
+    exitFlushed(1);
   }
 
   const env = { ...process.env };
@@ -238,9 +240,9 @@ async function serve(serveArgs: string[] = []) {
 
   child.on("error", (err) => {
     console.error(`[ima2] Failed to start server: ${err.message}`);
-    process.exit(1);
+    exitFlushed(1);
   });
-  child.on("exit", (code) => process.exit(code));
+  child.on("exit", (code) => exitFlushed(code ?? 0));
 
   process.on("SIGINT", () => killProcessTree(child.pid));
   process.on("SIGTERM", () => killProcessTree(child.pid));
@@ -411,13 +413,13 @@ const command = args[0];
 
 if (args.includes("-v") || args.includes("--version")) {
   console.log(pkg.version);
-  process.exit(0);
+  exitFlushed(0);
 }
 
 if ((!command || args.includes("-h") || args.includes("--help"))
     && !["doctor", "gen", "video", "edit", "ls", "show", "ps", "cancel", "session", "history", "prompt", "multimode", "node", "annotate", "canvas-versions", "metadata", "comfy", "cardnews", "inflight", "storage", "billing", "providers", "oauth", "grok", "config", "defaults", "models", "capabilities", "tools", "skill", "ping", "backfill-thumbs"].includes(command)) {
   showHelp();
-  process.exit(command ? 0 : 1);
+  exitFlushed(command ? 0 : 1);
 }
 
 switch (command) {
@@ -428,7 +430,7 @@ switch (command) {
   case "login":
     setup().then(() => console.log("  Done. Run 'ima2 serve' to start.")).catch((e) => {
       console.error(`Setup failed: ${e?.message || e}`);
-      process.exit(1);
+      exitFlushed(1);
     });
     break;
   case "status":
@@ -451,7 +453,7 @@ switch (command) {
         }
       } catch (err) {
         console.error(`  ${err instanceof Error ? err.message : String(err)}`);
-        process.exit(2);
+        exitFlushed(2);
       }
       writeFileSync(CONFIG_FILE, "{}");
       console.log("  Config reset. Run 'ima2 serve' to reconfigure.");
@@ -514,5 +516,5 @@ switch (command) {
   default:
     console.log(`  Unknown command: "${command}"`);
     console.log("  Run 'ima2 --help' for usage.\n");
-    process.exit(1);
+    exitFlushed(1);
 }

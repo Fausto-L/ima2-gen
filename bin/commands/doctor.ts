@@ -8,6 +8,7 @@ import { detectCodexAuth } from "../../lib/codexDetect.js";
 import { resolvePackageBin } from "../../lib/packageCli.js";
 import { runImageDoctorProbe } from "../../lib/responsesDoctor.js";
 import { config as runtimeConfig } from "../../config.js";
+import { exitFlushed } from "../lib/output.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "../..");
@@ -107,7 +108,7 @@ async function imageProbe(args: string[]) {
   });
   if (args.includes("--json")) {
     console.log(JSON.stringify(result, null, 2));
-    process.exit(result.summary.ok ? 0 : 1);
+    exitFlushed(result.summary.ok ? 0 : 1);
   }
   console.log(`\n  ${pkg.name} v${pkg.version} — Image Probe\n`);
   console.log(`  Provider: ${result.provider}`);
@@ -122,7 +123,7 @@ async function imageProbe(args: string[]) {
     );
   }
   console.log(`\n  ${result.summary.passed} passed, ${result.summary.failed} failed\n`);
-  process.exit(result.summary.ok ? 0 : 1);
+  exitFlushed(result.summary.ok ? 0 : 1);
 }
 
 async function standardDoctor() {
@@ -218,7 +219,7 @@ async function standardDoctor() {
   }
 
   console.log(`\n  ${ok} passed, ${fail} failed\n`);
-  process.exit(fail > 0 ? 1 : 0);
+  exitFlushed(fail > 0 ? 1 : 0);
 }
 
 export async function doctor(args: string[] = []) {

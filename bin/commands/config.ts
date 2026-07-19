@@ -1,7 +1,7 @@
 import { createInterface } from "readline/promises";
 import { parseArgs } from "../lib/args.js";
 import { confirmDestructiveAction } from "../lib/destructive-confirm.js";
-import { out, die, color, json } from "../lib/output.js";
+import { out, die, color, json, exitFlushed } from "../lib/output.js";
 import {
   CONFIG_FILE,
   KEY_TO_ENV,
@@ -121,7 +121,7 @@ async function setSub(argv: string[]) {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
     const ans = await rl.question(`warning: "${key}" is a sensitive credential. Write to config file? [y/N] `);
     rl.close();
-    if (!ans.trim().toLowerCase().startsWith("y")) { out("Aborted."); process.exit(0); }
+    if (!ans.trim().toLowerCase().startsWith("y")) { out("Aborted."); exitFlushed(0); }
   }
 
   const fileCfg = loadFileCfg();

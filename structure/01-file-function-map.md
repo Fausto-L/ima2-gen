@@ -104,7 +104,7 @@ routes/
 | `lib/ssePublish.ts` | 17 | `publishJobEvent` — terminal `done` suppression after cancel (cancel↔done race guard) |
 | `ui/src/lib/eventChannel.ts` | 156 | Browser singleton `EventSource` for `/api/events`; exponential backoff reconnect; `subscribe(jobId)` routing; connection state callbacks; `armStreamTimeout`; `ensureConnected` |
 | `ui/src/lib/sseStreamError.ts` | 25 | Shared `parseSseErrorPayload` — normalizes flat/nested SSE error shapes |
-| `bin/ima2.ts` | 519 | CLI setup, serve, status, doctor, open, reset, command dispatch (`serve --dev` enables verbose diagnostics) |
+| `bin/ima2.ts` | 521 | CLI setup, serve, status, doctor, open, reset, command dispatch (`serve --dev` enables verbose diagnostics) |
 | `bin/commands/gen.ts` | 299 | CLI image-generation client with references, provider override, model, mode, moderation, web-search, reasoning-effort, session, timeout recovery, background preset (`--bg`), and output-dir options |
 | `bin/commands/edit.ts` | 166 | CLI image-edit client with provider override, model, mode, moderation, web-search, reasoning-effort, session, timeout recovery, and output options |
 | `bin/commands/multimode.ts` | 210 | CLI multimode SSE client with provider override, references, prompt mode, incremental image save, timeout recovery, web-search, reasoning-effort, and session options |
@@ -119,7 +119,7 @@ routes/
 | `bin/commands/cardnews.ts` | 250 | CLI dev-gated card-news client |
 | `bin/commands/config.ts` | 187 | CLI config get/set client |
 | `bin/commands/observability.ts` | 177 | Shared CLI handler for `storage`, `billing`, `providers`, `oauth`, and `inflight` aliases (`ima2.ts` routes those commands here) |
-| `bin/commands/doctor.ts` | 236 | CLI diagnostics: storage, OAuth, providers, image probe |
+| `bin/commands/doctor.ts` | 237 | CLI diagnostics: storage, OAuth, providers, image probe |
 | `bin/commands/grok.ts` | 91 | Grok OAuth login and status helpers |
 | `bin/commands/defaults.ts` | 268 | CLI default provider/model/size/reasoning-effort get/set |
 | `bin/commands/capabilities.ts` | 111 | CLI wrapper for `GET /api/capabilities` |
@@ -135,7 +135,7 @@ routes/
 | `bin/lib/platform.ts` | 129 | Browser-open and binary-resolution helpers |
 | `bin/lib/args.ts` | 93 | Dependency-free argv parser |
 | `bin/lib/files.ts` | 40 | Data URI file conversion and output naming |
-| `bin/lib/output.ts` | 88 | Terminal output, JSON, exit-code mapping |
+| `bin/lib/output.ts` | 138 | Terminal output, JSON, exit-code mapping, flush-before-exit (Windows pipe safe) |
 | `bin/lib/error-hints.ts` | 24 | CLI error hint formatting |
 | `bin/lib/star-prompt.ts` | 98 | CLI GitHub star prompt helper |
 | `bin/lib/storage-doctor.ts` | 40 | CLI storage doctor formatting |
