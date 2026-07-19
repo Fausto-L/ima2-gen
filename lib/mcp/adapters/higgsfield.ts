@@ -1,6 +1,17 @@
 // Higgsfield adapter (050 WP5) — CATALOG ONLY. The user account is on a free
 // plan (011 judgment): execution stays locked until entitlement is confirmed,
 // and billing/purchase tools are default-denied at this layer regardless.
+//
+// Unlock preconditions (260719 audit, from the live 73-tool snapshot):
+// - Poll tool is `job_status({ jobId })` (uuid), NOT `get_task`.
+// - Non-terminal responses carry `poll_after_seconds`; the shared
+//   executeMediaPlan interval is client-fixed (5s+jitter) and must honor a
+//   server-provided delay before higgsfield is unlocked.
+// - `job_status` supports `sync: true` (~25s server-side wait) — candidate
+//   for lowering poll churn.
+// - `generate_video` takes `medias[].value` as media_id/job_id via
+//   `media_import_url` / `media_upload_widget`, never raw URLs — the upload
+//   path differs from Runway's init_upload/complete_upload.
 import type { MediaJobRequest, MediaProviderAdapter, ToolCallPlan } from "../providerAdapter.js";
 
 /** Media-relevant generation tools confirmed in the 73-tool snapshot (011). */

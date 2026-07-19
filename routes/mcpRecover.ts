@@ -91,6 +91,9 @@ export function registerMcpRecoverRoutes(app: Express, ctxRaw: RouteRuntimeConte
     const provider = typeof req.body?.provider === "string" ? req.body.provider : "runway";
     const adapter = ADAPTERS[provider];
     if (!adapter) return res.status(400).json({ error: { code: "MCP_PROVIDER_UNKNOWN", message: String(provider) } });
+    // Same contract as /api/mcp/generate: catalog-only providers reject
+    // synchronously instead of dying inside the async job.
+    if (!adapter.executable) return res.status(409).json({ error: { code: "MCP_EXECUTION_LOCKED", message: `${adapter.provider} is catalog-only` } });
     const kind = req.body?.kind === "image" ? "image" : "video";
     const manager = ctx.mcpConnectionManager;
     if (!manager || manager.status(adapter.provider).state !== "connected") {
