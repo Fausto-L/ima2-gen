@@ -121,6 +121,7 @@ export async function runVideoGenerateImpl(
     const payload = {
       prompt,
       requestId: flightId,
+      provider: (get().provider === "grok-api" ? "grok-api" : "grok") as "grok" | "grok-api",
       model: (typeof get().videoModelSelected === "string" && get().videoModelSelected) || undefined,
       referenceImages: refs.length >= 2 ? refs : undefined,
       sourceImage: refs.length === 1 ? refs[0] : parentVideoFrameRef,
@@ -281,6 +282,7 @@ export async function animateImageImpl(
       presetIds: compiled.appliedPresetIds,
       elementIds: selectedElementIds(get()),
       requestId: flightId,
+      provider: (get().provider === "grok-api" ? "grok-api" : "grok") as "grok" | "grok-api",
       mode: "image-to-video" as const,
       sourceFilename: filename,
       duration: 5,

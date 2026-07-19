@@ -439,7 +439,8 @@ export function selectVideoModelImpl(model: string | undefined, set: StoreSet, g
   const m = normalizeVideoModelValue(model) || GROK_VIDEO_MODEL_15;
   set({ videoModelSelected: m });
   saveVideoDefaults({ model: m });
-  if (get().provider !== "grok") get().setProvider("grok");
+  const provider = get().provider;
+  if (provider !== "grok" && provider !== "grok-api") get().setProvider("grok");
 }
 
 export function activeVideoRefCountImpl(get: StoreGet): number {

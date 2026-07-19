@@ -244,7 +244,7 @@ export function postPromptBuilderChat(
 
 export type VideoGenerateRequest = {
   prompt: string;
-  provider?: "grok";
+  provider?: "grok" | "grok-api";
   model?: string;
   mode?: "text-to-video" | "image-to-video" | "reference-to-video";
   sourceImage?: string;

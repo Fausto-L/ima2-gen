@@ -232,13 +232,24 @@ export function GenProviderModelSelect({ compact = false }: { compact?: boolean 
       })),
     });
   } else {
+    // Video-capable core providers list both kinds, mirroring the MCP lane.
+    const providerSupportsVideo = provider === "grok" || provider === "grok-api";
     modelGroups.push({
-      label: videoModel ? t("mcp.videoModels") : t("mcp.imageModels"),
-      items: (videoModel ? VIDEO_MODEL_OPTIONS : coreModels).map((option) => ({
-        value: videoModel ? `${VIDEO_PREFIX}${option.value}` : option.value,
+      label: t("mcp.imageModels"),
+      items: coreModels.map((option) => ({
+        value: option.value,
         label: option.shortLabel,
       })),
     });
+    if (providerSupportsVideo || videoModel) {
+      modelGroups.push({
+        label: t("mcp.videoModels"),
+        items: VIDEO_MODEL_OPTIONS.map((option) => ({
+          value: `${VIDEO_PREFIX}${option.value}`,
+          label: option.shortLabel,
+        })),
+      });
+    }
     if (isGptFamily) {
       modelGroups.push({
         label: t("sidebar.reasoningLabel"),
