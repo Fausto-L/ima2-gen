@@ -28,8 +28,9 @@ export function AgentSessionRail({ sessions, selectedId, imagesById, runSummaryB
       <div className="agent-rail__sessions">
         {sessions.map((session) => {
           const image = session.lastImageId ? imagesById[session.lastImageId] : null;
+          const label = `${session.title} — ${t("agent.imageCount", { count: session.imageCount })}`;
           return (
-            <button key={session.id} type="button" className={session.id === selectedId ? "is-active" : ""} onClick={() => onSelect(session.id)} title={session.title}>
+            <button key={session.id} type="button" className={session.id === selectedId ? "is-active" : ""} onClick={() => onSelect(session.id)} title={label} aria-label={label} aria-current={session.id === selectedId ? "true" : undefined}>
 	              {image ? <AgentSafeImage src={image.thumbUrl ?? image.url} alt="" iconSize={17} /> : <ImageIcon size={17} />}
 	              <AgentSessionSpinner summary={runSummaryBySession[session.id]} />
 	              {session.compacted ? <span aria-label={t("agent.compacted")} /> : null}

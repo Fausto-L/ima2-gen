@@ -27,6 +27,7 @@ export const PERSISTED_KEYS = [
   // video
   "ima2.videoDefaults",
   // agent
+  // retired 2607: agent pane preference — rail is the only desktop mode; key kept as historical registry member
   "ima2.agentPanePreference",
 ] as const;
 

@@ -13,16 +13,12 @@ import { withAgentGenerationDefaults } from "../../lib/agentGenerationSettings";
 import { useAppStore } from "../../store/useAppStore";
 import type { GenerateItem } from "../../types";
 import { useAgentWorkspaceLayout } from "../../hooks/useAgentWorkspaceLayout";
-import { useIsMobile } from "../../hooks/useIsMobile";
 import { AgentChatPane } from "./AgentChatPane";
 import { AgentImageSheet } from "./AgentImageSheet";
 import { AgentQueueSheet } from "./AgentQueueSheet";
 import { AgentRightSidebar } from "./AgentRightSidebar";
 import { AgentSessionDrawer } from "./AgentSessionDrawer";
-import { AgentSessionSidebar } from "./AgentSessionSidebar";
-import { AgentPanePreference } from "./AgentSessionSidebar";
 import { AgentSessionRail } from "./AgentSessionRail";
-import { AGENT_PANE_PREFERENCE_STORAGE_KEY } from "../../store/persistenceRegistry";
 import { AgentTopBar } from "./AgentTopBar";
 import { attachAgentImageFiles } from "./agentAttachFiles";
 import {
@@ -128,7 +124,6 @@ function mergeWorkspaceWithLocalTurns(
 export function AgentWorkspace() {
   const { t } = useI18n();
   const layoutMode = useAgentWorkspaceLayout();
-  const isMobile = useIsMobile();
   const currentGeneratedImage = useAppStore((s) => s.currentImage);
   const importLocalImageToHistory = useAppStore((s) => s.importLocalImageToHistory);
   const addHistoryItem = useAppStore((s) => s.addHistoryItem);
@@ -148,10 +143,6 @@ export function AgentWorkspace() {
   const [queueSheetOpen, setQueueSheetOpen] = useState(false);
   const [runtimeStatus, setRuntimeStatus] = useState<AgentRuntimeStatus>("reconnecting");
   const [bootError, setBootError] = useState<string | null>(null);
-  const [panePreference, setPanePreference] = useState<"expanded" | "rail">(() => {
-    if (typeof window === "undefined") return "expanded";
-    return window.localStorage.getItem(AGENT_PANE_PREFERENCE_STORAGE_KEY) === "rail" ? "rail" : "expanded";
-  });
 
   const errorMessage = useCallback((error: unknown) => error instanceof Error ? error.message : String(error), []);
   const reportMutationError = useCallback((error: unknown) => {
@@ -253,12 +244,8 @@ export function AgentWorkspace() {
         ? "generating"
         : "ready";
   const showRightSidebar = layoutMode !== "mobile-chat-image-sheet";
-  const showAgentTopBar = isMobile && layoutMode !== "desktop-three-pane";
-  const useSessionRail = layoutMode === "desktop-three-pane" && panePreference === "rail";
-  const changePanePreference = (preference: "expanded" | "rail") => {
-    setPanePreference(preference);
-    window.localStorage.setItem(AGENT_PANE_PREFERENCE_STORAGE_KEY, preference);
-  };
+  const showAgentTopBar = layoutMode === "tablet-stacked" || layoutMode === "mobile-chat-image-sheet";
+  const useSessionRail = layoutMode === "desktop-three-pane" || layoutMode === "desktop-rail";
 
   useEffect(() => {
     // Mirror freshly generated agent results into the main history store so
@@ -415,26 +402,12 @@ export function AgentWorkspace() {
   }
 
   return (
-    <main className={`agent-workspace agent-workspace--${layoutMode}${useSessionRail ? " agent-workspace--session-rail" : ""}`} data-layout={layoutMode} aria-label={t("agent.workspace")}>
+    <main className={`agent-workspace agent-workspace--${layoutMode}`} data-layout={layoutMode} aria-label={t("agent.workspace")}>
       {useSessionRail ? (
         <div className="agent-session-rail-wrap">
-          <AgentPanePreference preference={panePreference} onChange={changePanePreference} />
           <AgentSessionRail sessions={workspace.sessions} selectedId={selectedSessionId ?? ""} imagesById={workspace.imagesById} runSummaryBySession={workspace.runSummaryBySession} onCreate={createSession} onSelect={selectSession} onOpenDrawer={() => setDrawerOpen(true)} />
         </div>
-      ) : <AgentSessionSidebar
-        sessions={workspace.sessions}
-        selectedId={selectedSessionId ?? ""}
-        imagesById={workspace.imagesById}
-        runSummaryBySession={workspace.runSummaryBySession}
-        settings={selectedSettings}
-        onCreate={createSession}
-        onSelect={selectSession}
-        onRename={renameSession}
-        onDelete={deleteSession}
-        onSettingsChange={updateGenerationSettings}
-        panePreference={panePreference}
-        onPanePreferenceChange={changePanePreference}
-      />}
+      ) : null}
       {showAgentTopBar ? (
         <AgentTopBar
           layoutMode={layoutMode}

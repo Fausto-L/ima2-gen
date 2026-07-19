@@ -72,7 +72,8 @@ describe("Agent Mode frontend shell contract", () => {
     assert.match(app, /uiMode === "agent" \?/);
     assert.match(app, /isAgentMode = uiMode === "agent"/);
     assert.match(app, /showHistoryStrip = !promptStudioClassic && !isAgentMode/);
-    assert.match(workspace, /AgentSessionSidebar/);
+    assert.match(workspace, /AgentSessionRail/);
+    assert.doesNotMatch(workspace, /<AgentSessionSidebar/);
     assert.match(workspace, /AgentChatPane/);
     assert.match(workspace, /AgentRightSidebar/);
     assert.match(shellSidebar, /<SidebarChrome \/>/);
@@ -83,7 +84,7 @@ describe("Agent Mode frontend shell contract", () => {
     assert.doesNotMatch(sessionSidebar, /UIModeSwitch/);
     assert.doesNotMatch(sessionSidebar, /ima2-gen/);
     assert.match(css, /\.app\[data-ui-mode="agent"\]/);
-    assert.match(css, /grid-template-columns: 260px minmax\(0, 1fr\)/);
+    assert.match(css, /grid-template-columns: 64px minmax\(0, 1fr\)/);
     assert.match(css, /\.app\[data-ui-mode="agent"\] > \.sidebar\s*\{\s*display: none;/);
     assert.match(css, /\.agent-session-sidebar/);
     assert.match(css, /\.agent-session-sidebar \.agent-sessions/);

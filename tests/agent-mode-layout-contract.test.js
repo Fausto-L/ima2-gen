@@ -28,9 +28,10 @@ describe("Agent Mode layout contract", () => {
     assert.match(hook, /\.sidebar/);
     assert.match(hook, /window\.innerWidth - width/);
     assert.match(workspace, /useAgentWorkspaceLayout/);
-    assert.match(css, /grid-template-columns: 260px minmax\(0, 1fr\)/);
+    assert.match(workspace, /layoutMode === "tablet-stacked" \|\| layoutMode === "mobile-chat-image-sheet"/);
+    assert.doesNotMatch(workspace, /panePreference/);
+    assert.match(css, /grid-template-columns: 64px minmax\(0, 1fr\)/);
     assert.match(css, /\.agent-workspace\s*\{[\s\S]*?grid-column: 1;/);
-    assert.match(css, /\.agent-session-sidebar\s*\{[\s\S]*?grid-column: 1;/);
     assert.match(css, /\.agent-workspace__body\s*\{[\s\S]*?grid-column: 2;/);
     assert.match(css, /grid-template-columns: minmax\(420px, 0\.95fr\) minmax\(520px, 1\.05fr\)/);
     assert.match(css, /grid-template-columns: minmax\(420px, 1fr\) minmax\(440px, 1fr\)/);

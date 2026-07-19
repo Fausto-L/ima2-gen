@@ -29,7 +29,7 @@ describe("Agent Mode right sidebar contract", () => {
 
     assert.match(workspace, /AgentRightSidebar/);
     assert.match(workspace, /settings={selectedSettings}/);
-    assert.match(workspace, /<AgentSessionSidebar[\s\S]*?settings={selectedSettings}[\s\S]*?onSettingsChange={updateGenerationSettings}/);
+    assert.match(workspace, /<AgentSessionRail[\s\S]*?onOpenDrawer/);
     assert.match(workspace, /onSettingsChange={updateGenerationSettings}/);
     assert.match(sessionSidebar, /settings: AgentGenerationSettings/);
     assert.match(sessionSidebar, /<SidebarChrome agentSettings={props\.settings} onAgentSettingsChange={props\.onSettingsChange} \/>/);
