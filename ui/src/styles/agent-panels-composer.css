@@ -58,13 +58,18 @@
   max-height: 160px;
   resize: vertical;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--agent-r-md, 10px);
   background: var(--bg);
   color: var(--text);
   padding: 10px;
   font: inherit;
   font-size: 14px;
   line-height: 1.45;
+}
+
+.agent-composer textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
 }
 
 .slash-command-menu {
@@ -124,21 +129,26 @@
   justify-content: center;
   gap: 7px;
   padding: 0 10px;
+  border-radius: var(--agent-r-sm, 8px);
 }
 
 .agent-composer__actions button.is-active {
   border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
   color: var(--text);
 }
 
-.agent-composer__send {
+.agent-composer__actions .agent-composer__send {
   margin-left: auto;
-  color: var(--accent-ink) !important;
-  background: var(--accent) !important;
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
   font-weight: 700;
+  border-radius: var(--agent-r-sm, 8px);
+  padding: 0 16px;
 }
 
-.agent-composer__send:disabled {
+.agent-composer__actions .agent-composer__send:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }

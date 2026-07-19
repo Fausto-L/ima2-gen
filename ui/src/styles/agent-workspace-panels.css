@@ -128,13 +128,14 @@
   display: grid;
   gap: 6px;
   padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
+  border: 1px solid transparent;
+  border-radius: var(--agent-r-md, 10px);
+  background: transparent;
 }
 
 .agent-message--user {
   justify-self: end;
+  border-color: var(--border);
   background: var(--surface-2);
 }
 
@@ -163,10 +164,6 @@
 
 .agent-run__header-tool .agent-message--tool {
   max-width: none;
-}
-
-.agent-run__header-tool .agent-message__tool-toggle {
-  background: color-mix(in srgb, var(--surface-2) 52%, transparent);
 }
 
 .agent-run__steps {
@@ -297,9 +294,9 @@
   gap: 8px;
   height: 32px;
   padding: 4px 8px;
-  border: 1px dashed var(--border);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--agent-r-sm, 8px);
+  background: var(--control-bg);
   color: var(--text-dim);
   cursor: pointer;
   text-align: left;
@@ -311,9 +308,14 @@
 
 .agent-message__tool-toggle:hover,
 .agent-message__tool-toggle:focus-visible {
-  border-color: color-mix(in srgb, var(--green) 40%, var(--border));
-  background: var(--surface);
+  border-color: var(--border-strong);
+  background: var(--surface-2);
   color: var(--text);
+}
+
+.agent-message__tool-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .agent-message__tool-summary-line {
