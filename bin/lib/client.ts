@@ -24,7 +24,12 @@ export interface ServerHealth {
 
 async function probe(base: string, timeoutMs = 600): Promise<ServerHealth | null> {
   try {
-    const r = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(timeoutMs) });
+    const r = await fetch(`${base}/api/health`, {
+      signal: AbortSignal.timeout(timeoutMs),
+      // CLI is short-lived: close the socket so process.exit() never races a
+      // keep-alive handle (libuv UV_HANDLE_CLOSING assert on Windows, 260719).
+      headers: { connection: "close" },
+    });
     if (!r.ok) return null;
     return (await r.json()) as ServerHealth;
   } catch {
@@ -80,7 +85,8 @@ export async function request(base: string, path: string, {
   const finalHeaders = { ...baseHeaders, ...(extraHeaders || {}) };
   const res = await fetch(base + path, {
     method,
-    headers: finalHeaders,
+    // connection: close — see the health-check note above.
+    headers: { connection: "close", ...finalHeaders },
     body: body === undefined ? undefined
         : raw ? body
         : JSON.stringify(body),
