@@ -135,7 +135,7 @@ routes/
 | `bin/lib/platform.ts` | 129 | Browser-open and binary-resolution helpers |
 | `bin/lib/args.ts` | 93 | Dependency-free argv parser |
 | `bin/lib/files.ts` | 40 | Data URI file conversion and output naming |
-| `bin/lib/output.ts` | 138 | Terminal output, JSON, exit-code mapping, flush-before-exit (Windows pipe safe) |
+| `bin/lib/output.ts` | 120 | Terminal output, JSON, exit-code mapping, natural-exit (no process.exit — Windows safe) |
 | `bin/lib/error-hints.ts` | 24 | CLI error hint formatting |
 | `bin/lib/star-prompt.ts` | 98 | CLI GitHub star prompt helper |
 | `bin/lib/storage-doctor.ts` | 40 | CLI storage doctor formatting |

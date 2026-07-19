@@ -37,30 +37,13 @@ export function installExitFlushGuard(): void {
 // fires first either way.
 installExitFlushGuard();
 
-/** Flush piped stdio before exiting. An immediate process.exit() right after
- *  write() fast-fails with 0xC0000409 on Windows runners (260719 CI W1):
- *  the empty-write callbacks fire once buffered data is flushed; a bounded
- *  unref'd fallback guarantees the exit even with stalled/destroyed streams. */
+/** Exit WITHOUT process.exit(): on Windows (Node 24) an explicit
+ *  process.exit() after undici activity fast-fails with a libuv
+ *  UV_HANDLE_CLOSING assert / 0xC0000409 (260719 CI W1). Setting exitCode
+ *  and unwinding via the marker lets the event loop drain naturally —
+ *  stdio flushes and the process exits with the requested code. */
 export function exitFlushed(code: number): never {
-  let settled = false;
-  const done = () => {
-    if (settled) return;
-    settled = true;
-    process.exit(code);
-  };
-  let pending = 0;
-  for (const stream of [process.stdout, process.stderr]) {
-    try {
-      pending += 1;
-      stream.write("", () => { pending -= 1; if (pending === 0) done(); });
-    } catch {
-      pending -= 1;
-    }
-  }
-  if (pending === 0) done();
-  // Referenced on purpose: this timer is the guaranteed exit path — unref'd,
-  // a stalled stream could let the process die naturally with code 0 first.
-  setTimeout(done, 250);
+  process.exitCode = code;
   throw EXIT_FLUSH_MARKER;
 }
 
