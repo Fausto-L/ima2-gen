@@ -112,7 +112,8 @@ async function downloadMediaResultOnce(
   const tempPath = join(dir, "result");
   let bytes = 0;
   try {
-    const capped = Readable.toWeb(response.body).pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+    const webBody = Readable.toWeb(response.body) as unknown as ReadableStream<Uint8Array>;
+    const capped = webBody.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
       transform(chunk, controller) {
         bytes += chunk.byteLength;
         if (bytes > maxBytes) controller.error(new Error("MCP_DOWNLOAD_TOO_LARGE"));
