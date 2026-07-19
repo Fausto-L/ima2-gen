@@ -19,6 +19,7 @@ import { AgentQueueSheet } from "./AgentQueueSheet";
 import { AgentRightSidebar } from "./AgentRightSidebar";
 import { AgentSessionDrawer } from "./AgentSessionDrawer";
 import { AgentSessionRail } from "./AgentSessionRail";
+import { AgentStagePane } from "./AgentStagePane";
 import { AgentTopBar } from "./AgentTopBar";
 import { attachAgentImageFiles } from "./agentAttachFiles";
 import {
@@ -141,10 +142,12 @@ export function AgentWorkspace() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [imageSheetOpen, setImageSheetOpen] = useState(false);
   const [queueSheetOpen, setQueueSheetOpen] = useState(false);
+  const [toolsPanelOpen, setToolsPanelOpen] = useState(false);
   const [runtimeStatus, setRuntimeStatus] = useState<AgentRuntimeStatus>("reconnecting");
   const [bootError, setBootError] = useState<string | null>(null);
 
   const errorMessage = useCallback((error: unknown) => error instanceof Error ? error.message : String(error), []);
+  const closeToolsPanel = useCallback(() => setToolsPanelOpen(false), []);
   const reportMutationError = useCallback((error: unknown) => {
     showToast(t("agent.workspaceActionFailed", { reason: errorMessage(error) }), true);
   }, [errorMessage, showToast, t]);
@@ -244,6 +247,7 @@ export function AgentWorkspace() {
         ? "generating"
         : "ready";
   const showRightSidebar = layoutMode !== "mobile-chat-image-sheet";
+  const isDesktop = layoutMode === "desktop-three-pane" || layoutMode === "desktop-rail";
   const showAgentTopBar = layoutMode === "tablet-stacked" || layoutMode === "mobile-chat-image-sheet";
   const useSessionRail = layoutMode === "desktop-three-pane" || layoutMode === "desktop-rail";
 
@@ -430,13 +434,15 @@ export function AgentWorkspace() {
           settings={selectedSettings}
           insertedPrompt={insertedPrompt}
           onSettingsChange={updateGenerationSettings}
-          onOpenModelTab={() => setSidebarTab("model")}
+          onOpenModelTab={() => { setSidebarTab("model"); setToolsPanelOpen(true); }}
           onWebSearchChange={setSessionWebSearch}
           onAttachFiles={attachFiles}
           onImageSelect={selectImage}
           onSend={sendMessage}
         />
-        {showRightSidebar ? (
+        {isDesktop ? (
+          <AgentStagePane currentImage={currentImage} images={images} onImageSelect={selectImage} onOpenPanel={() => setToolsPanelOpen(true)} />
+        ) : showRightSidebar ? (
           <AgentRightSidebar
             currentImage={currentImage}
             images={images}
@@ -455,6 +461,26 @@ export function AgentWorkspace() {
           />
         ) : null}
       </div>
+      {isDesktop && toolsPanelOpen ? (
+        <AgentRightSidebar
+          overlay
+          onClose={closeToolsPanel}
+          currentImage={currentImage}
+          images={images}
+          contextTab={activeTab}
+          sidebarTab={sidebarTab}
+          queueItems={queueItems}
+          runSummary={selectedRunSummary}
+          settings={selectedSettings}
+          onContextTabChange={setActiveTab}
+          onSidebarTabChange={setSidebarTab}
+          onImageSelect={selectImage}
+          onSettingsChange={updateGenerationSettings}
+          onInsertPrompt={insertPrompt}
+          onCancelQueue={cancelQueue}
+          onRetryQueue={retryQueue}
+        />
+      ) : null}
       <AgentSessionDrawer open={drawerOpen} sessions={workspace.sessions} selectedId={selectedSessionId ?? ""} imagesById={workspace.imagesById} runSummaryBySession={workspace.runSummaryBySession} onClose={() => setDrawerOpen(false)} onCreate={createSession} onSelect={selectSession} onRename={renameSession} onDelete={deleteSession} />
       <AgentImageSheet open={imageSheetOpen} currentImage={currentImage} images={images} activeTab={activeTab} onTabChange={setActiveTab} onImageSelect={selectImage} onClose={() => setImageSheetOpen(false)} />
       <AgentQueueSheet open={queueSheetOpen} items={queueItems} summary={selectedRunSummary} onCancel={cancelQueue} onRetry={retryQueue} onClose={() => setQueueSheetOpen(false)} />

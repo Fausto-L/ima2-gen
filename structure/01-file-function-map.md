@@ -285,7 +285,7 @@ Backed by `routes/agent.ts`; no CLI wrapper. Session/turn/queue persistence and 
 | Area | File | Lines | Responsibility |
 |---|---|---:|---|
 | App shell | `ui/src/App.tsx` | 194 | Initial hydration, polling, classic/node/card-news canvas switch, Canvas Mode workspace mount, prompt library overlay, mobile shell (dark-only since Phase 010) |
-| Entry | `ui/src/main.tsx` | 45 | React mount |
+| Entry | `ui/src/main.tsx` | 46 | React mount |
 | Types | `ui/src/types.ts` | 265 | Provider, quality, size, image model, embedded metadata, response types, web-search, reasoning effort, multimode |
 | Canvas types | `ui/src/types/canvas.ts` | 98 | Canvas Mode shared types (annotations, versions, masks, brushes) |
 | Store | `ui/src/store/useAppStore.ts` | 605 | Zustand facade; classic/node/video/multimode/inflight/history/asset-gen logic split into `ui/src/store/store*Impl.ts` modules |

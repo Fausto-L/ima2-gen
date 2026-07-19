@@ -65,3 +65,7 @@ export function ChevronDownIcon(props: IconProps) {
 export function ChevronRightIcon(props: IconProps) {
   return <Svg {...props}><path d="M9 6l6 6-6 6" /></Svg>;
 }
+
+export function SlidersIcon(props: IconProps) {
+  return <Svg {...props}><path d="M4 8h16" /><circle cx="9" cy="8" r="2.5" /><path d="M4 16h16" /><circle cx="15" cy="16" r="2.5" /></Svg>;
+}

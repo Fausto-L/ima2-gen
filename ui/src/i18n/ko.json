@@ -983,7 +983,10 @@
     "memoryItemSubject": "피사체 잠금은 재개 후에도 복원됩니다.",
     "imageAlt": "에이전트 이미지",
     "filename": "파일",
-    "prompt": "프롬프트"
+    "prompt": "프롬프트",
+    "stageEmptyHint": "첫 요청을 보내면 여기에서 이미지를 확인할 수 있습니다",
+    "openTools": "도구 패널 열기",
+    "closeTools": "도구 패널 닫기"
   },
   "cardNews": {
     "workspace": "카드뉴스 작업공간",

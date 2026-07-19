@@ -983,7 +983,10 @@
     "memoryItemSubject": "Subject locks are restored after resume.",
     "imageAlt": "Agent image",
     "filename": "File",
-    "prompt": "Prompt"
+    "prompt": "Prompt",
+    "stageEmptyHint": "Send your first request to see the image here",
+    "openTools": "Open tools panel",
+    "closeTools": "Close tools panel"
   },
   "cardNews": {
     "workspace": "Card News workspace",

@@ -74,6 +74,8 @@ describe("Agent Mode frontend shell contract", () => {
     assert.match(app, /showHistoryStrip = !promptStudioClassic && !isAgentMode/);
     assert.match(workspace, /AgentSessionRail/);
     assert.doesNotMatch(workspace, /<AgentSessionSidebar/);
+    assert.match(workspace, /AgentStagePane/);
+    assert.match(workspace, /toolsPanelOpen/);
     assert.match(workspace, /AgentChatPane/);
     assert.match(workspace, /AgentRightSidebar/);
     assert.match(shellSidebar, /<SidebarChrome \/>/);
@@ -111,8 +113,8 @@ describe("Agent Mode frontend shell contract", () => {
     assert.match(layout, /width >= 960 && height >= 560/);
     assert.match(layout, /width >= 768 && height >= 700/);
     assert.match(layoutHook, /getWindowHeight/);
-    assert.match(css, /grid-template-columns: minmax\(420px, 0\.95fr\) minmax\(520px, 1\.05fr\)/);
-    assert.match(css, /grid-template-columns: minmax\(420px, 1fr\) minmax\(440px, 1fr\)/);
+    assert.match(css, /grid-template-columns: minmax\(360px, 0\.42fr\) minmax\(520px, 0\.58fr\)/);
+    assert.match(css, /grid-template-columns: minmax\(340px, 1fr\) minmax\(440px, 1\.2fr\)/);
     assert.match(css, /minmax\(280px, min\(46dvh, 420px\)\) minmax\(0, 1fr\)/);
     assert.match(css, /grid-template-areas: "image" "chat"/);
     assert.match(drawer, /role="dialog"/);

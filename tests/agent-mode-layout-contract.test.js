@@ -33,8 +33,8 @@ describe("Agent Mode layout contract", () => {
     assert.match(css, /grid-template-columns: 64px minmax\(0, 1fr\)/);
     assert.match(css, /\.agent-workspace\s*\{[\s\S]*?grid-column: 1;/);
     assert.match(css, /\.agent-workspace__body\s*\{[\s\S]*?grid-column: 2;/);
-    assert.match(css, /grid-template-columns: minmax\(420px, 0\.95fr\) minmax\(520px, 1\.05fr\)/);
-    assert.match(css, /grid-template-columns: minmax\(420px, 1fr\) minmax\(440px, 1fr\)/);
+    assert.match(css, /grid-template-columns: minmax\(360px, 0\.42fr\) minmax\(520px, 0\.58fr\)/);
+    assert.match(css, /grid-template-columns: minmax\(340px, 1fr\) minmax\(440px, 1\.2fr\)/);
   });
 
   it("does not have pane switcher or sidebar collapse toggle", () => {

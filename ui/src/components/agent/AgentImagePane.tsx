@@ -41,7 +41,7 @@ function formatDuration(seconds: number): string {
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
 }
 
-function AgentVideoPreview({ image }: { image: AgentImageHandle }) {
+export function AgentVideoPreview({ image }: { image: AgentImageHandle }) {
   const { t } = useI18n();
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [duration, setDuration] = useState<number | null>(null);

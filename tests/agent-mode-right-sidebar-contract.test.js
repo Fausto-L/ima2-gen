@@ -41,6 +41,9 @@ describe("Agent Mode right sidebar contract", () => {
     assert.doesNotMatch(chat, /agent-model-chip/);
     assert.doesNotMatch(chat, /formatModelSummary/);
     assert.match(sidebar, /AgentImagePane/);
+    assert.match(sidebar, /agent-dialog--tools/);
+    assert.match(sidebar, /useAgentDialogFocus/);
+    assert.match(sidebar, /SidebarBody/);
     assert.match(sidebar, /AgentPromptLibraryPanel/);
     assert.match(sidebar, /AgentFormTemplatePanel/);
     assert.match(sidebar, /AgentFormTemplatePanel/);
