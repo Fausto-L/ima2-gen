@@ -2,21 +2,17 @@ import type { ImageModel } from "../types";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AGENT_LLM_MODEL_OPTIONS, getAgentLlmModelOption } from "../lib/agentModelOptions";
 import { IMAGE_MODEL_OPTIONS, OPENAI_IMAGE_MODEL_OPTIONS, GROK_IMAGE_MODEL_OPTIONS, GEMINI_IMAGE_MODEL_OPTIONS, UNSUPPORTED_IMAGE_MODELS, VIDEO_MODEL_OPTIONS, isGeminiImageModel } from "../lib/imageModels";
 import { REASONING_EFFORT_OPTIONS, type ReasoningEffort } from "../lib/reasoning";
 import { useAppStore } from "../store/useAppStore";
 import { useI18n } from "../i18n";
-import type { AgentGenerationSettings } from "./agent/agentTypes";
 import { Select } from "./controls/Select";
 
 type ImageModelSelectProps = {
   variant: "settings" | "sidebar";
-  agentSettings?: AgentGenerationSettings;
-  onAgentSettingsChange?: (patch: Partial<AgentGenerationSettings>) => void;
 };
 
-export function ImageModelSelect({ variant, agentSettings, onAgentSettingsChange }: ImageModelSelectProps) {
+export function ImageModelSelect({ variant }: ImageModelSelectProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -42,11 +38,7 @@ export function ImageModelSelect({ variant, agentSettings, onAgentSettingsChange
   const current = modelOptions.find((option) => option.value === imageModel && (!option.providerHint || option.providerHint === provider))
     ?? modelOptions.find((option) => option.value === imageModel)
     ?? modelOptions[0];
-  const agentMode = variant === "sidebar" && !!agentSettings && !!onAgentSettingsChange;
-  const currentAgentModel = agentSettings ? getAgentLlmModelOption(agentSettings) : null;
   const currentReasoning = REASONING_EFFORT_OPTIONS.find((option) => option.value === reasoningEffort)
-    ?? REASONING_EFFORT_OPTIONS[0];
-  const currentAgentReasoning = REASONING_EFFORT_OPTIONS.find((option) => option.value === agentSettings?.reasoningEffort)
     ?? REASONING_EFFORT_OPTIONS[0];
 
 
@@ -160,27 +152,21 @@ export function ImageModelSelect({ variant, agentSettings, onAgentSettingsChange
   useEffect(() => {
     if (variant !== "sidebar" || !open) return;
 
-    const activeIndex = agentMode
-      ? AGENT_LLM_MODEL_OPTIONS.findIndex((option) => option.value === currentAgentModel?.value)
-      : modelOptions.findIndex((option) => option.value === imageModel);
+    const activeIndex = modelOptions.findIndex((option) => option.value === imageModel);
     const frame = requestAnimationFrame(() => {
       focusMenuItem(activeIndex >= 0 ? activeIndex : 0);
     });
 
     return () => cancelAnimationFrame(frame);
-  }, [agentMode, currentAgentModel?.value, imageModel, modelOptions, open, variant]);
+  }, [imageModel, modelOptions, open, variant]);
 
   if (variant === "sidebar") {
-    const triggerModel = agentMode && currentAgentModel
-      ? currentAgentModel.shortLabel
-      : videoModelSelected
-        ? (VIDEO_MODEL_OPTIONS.find((o) => o.value === videoModelSelected)?.shortLabel ?? VIDEO_MODEL_OPTIONS[0].shortLabel)
-        : current.shortLabel.split(" ")[0];
-    const triggerEffort = agentMode
-      ? currentAgentReasoning.shortLabel
-      : isGeminiImageModel(imageModel)
-        ? current.shortLabel.split(" ")[1] || ""
-        : currentReasoning.shortLabel;
+    const triggerModel = videoModelSelected
+      ? (VIDEO_MODEL_OPTIONS.find((o) => o.value === videoModelSelected)?.shortLabel ?? VIDEO_MODEL_OPTIONS[0].shortLabel)
+      : current.shortLabel.split(" ")[0];
+    const triggerEffort = isGeminiImageModel(imageModel)
+      ? current.shortLabel.split(" ")[1] || ""
+      : currentReasoning.shortLabel;
 
     return (
       <div ref={rootRef} className="image-model-select image-model-select--sidebar">
@@ -203,72 +189,7 @@ export function ImageModelSelect({ variant, agentSettings, onAgentSettingsChange
           </span>
           <span className="image-model-select__trigger-effort">{triggerEffort}</span>
         </button>
-        {open && agentMode && currentAgentModel && onAgentSettingsChange ? createPortal(
-          <div
-            ref={menuRef}
-            className="image-model-select__menu"
-            role="menu"
-            aria-label={t("sidebar.quickSettingsMenu")}
-            onKeyDown={handleMenuKeyDown}
-            style={{
-              position: "fixed",
-              top: menuPos.top,
-              left: menuPos.left,
-              width: menuPos.width,
-              maxHeight: menuPos.maxHeight,
-              overflowY: "auto",
-              zIndex: 160,
-            }}
-          >
-            <div className="image-model-select__section" role="group" aria-label={t("agent.model")}>
-              <div className="image-model-select__section-title">{t("agent.model")}</div>
-              {AGENT_LLM_MODEL_OPTIONS.map((option, index) => (
-                <button
-                  key={option.value}
-                  ref={(node) => {
-                    menuItemRefs.current[index] = node;
-                  }}
-                  type="button"
-                  className={`image-model-select__item${option.value === currentAgentModel.value ? " is-active" : ""}`}
-                  role="menuitemradio"
-                  aria-checked={option.value === currentAgentModel.value}
-                  tabIndex={-1}
-                  onClick={() => {
-                    onAgentSettingsChange({ model: option.value, provider: option.provider });
-                    setOpen(false);
-                  }}
-                >
-                  <span>{option.shortLabel}</span>
-                  <small>{option.fullLabel}</small>
-                </button>
-              ))}
-            </div>
-            <div className="image-model-select__section" role="group" aria-label={t("sidebar.reasoningLabel")}>
-              <div className="image-model-select__section-title">{t("sidebar.reasoningLabel")}</div>
-              {REASONING_EFFORT_OPTIONS.map((option, index) => (
-                <button
-                  key={option.value}
-                  ref={(node) => {
-                    menuItemRefs.current[AGENT_LLM_MODEL_OPTIONS.length + index] = node;
-                  }}
-                  type="button"
-                  className={`image-model-select__item${option.value === agentSettings?.reasoningEffort ? " is-active" : ""}`}
-                  role="menuitemradio"
-                  aria-checked={option.value === agentSettings?.reasoningEffort}
-                  tabIndex={-1}
-                  onClick={() => {
-                    onAgentSettingsChange({ reasoningEffort: option.value as AgentGenerationSettings["reasoningEffort"] });
-                    setOpen(false);
-                  }}
-                >
-                  <span>{option.shortLabel}</span>
-                  <small>{t(option.fullLabelKey)}</small>
-                </button>
-              ))}
-            </div>
-          </div>,
-          document.body,
-        ) : open ? createPortal(
+        {open ? createPortal(
           <div
             ref={menuRef}
             className="image-model-select__menu"

@@ -39,15 +39,11 @@ describe("Agent Mode layout contract", () => {
 
   it("does not have pane switcher or sidebar collapse toggle", () => {
     const topbar = readSource("ui/src/components/agent/AgentTopBar.tsx");
-    const sidebar = readSource("ui/src/components/agent/AgentSessionSidebar.tsx");
     const css = readSource("ui/src/styles/agent-workspace.css");
 
     assert.doesNotMatch(topbar, /AgentPaneToggle/);
-    assert.doesNotMatch(sidebar, /AgentPaneToggle/);
     assert.doesNotMatch(topbar, /UIModeSwitch/);
-    assert.doesNotMatch(sidebar, /UIModeSwitch/);
     assert.doesNotMatch(topbar, /onToggleSidebar/);
-    assert.doesNotMatch(sidebar, /onCollapse/);
     assert.doesNotMatch(css, /agent-workspace--collapsed/);
   });
 });

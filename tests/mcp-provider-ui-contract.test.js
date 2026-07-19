@@ -199,8 +199,8 @@ describe("MCP provider UI contract", () => {
     const sidebar = readSource("ui/src/components/Sidebar.tsx");
     const mobile = readSource("ui/src/components/MobileAppBar.tsx");
 
-    assert.match(sidebar, /agentMode \? \([\s\S]*<ImageModelSelect variant="sidebar"/);
-    assert.match(sidebar, /:\s*\(\s*<GenProviderModelSelect compact=\{isMobile\} \/>/);
+    assert.match(sidebar, /<GenProviderModelSelect compact=\{isMobile\} \/>/);
+    assert.doesNotMatch(sidebar, /<ImageModelSelect/);
     assert.match(mobile, /<GenProviderModelSelect compact \/>/);
     assert.doesNotMatch(mobile, /<ImageModelSelect/);
   });

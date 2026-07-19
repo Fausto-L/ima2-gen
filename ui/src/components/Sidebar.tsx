@@ -3,7 +3,6 @@ import { GenerateButton } from "./GenerateButton";
 import { InFlightList } from "./InFlightList";
 import { InFlightBadge } from "./composer/InFlightBadge";
 import { SessionPicker } from "./SessionPicker";
-import { ImageModelSelect } from "./ImageModelSelect";
 import { GenProviderModelSelect } from "./GenProviderModelSelect";
 import { CardNewsComposer } from "./card-news/CardNewsComposer";
 import { SidebarHistory } from "./history/SidebarHistory";
@@ -12,7 +11,6 @@ import { ENABLE_AGENT_MODE, ENABLE_CARD_NEWS_MODE, ENABLE_NODE_MODE } from "../l
 import { useI18n } from "../i18n";
 import { resolveWorkspaceSettings } from "../lib/workspaceProfile";
 import { useIsMobile } from "../hooks/useIsMobile";
-import type { AgentGenerationSettings } from "./agent/agentTypes";
 
 const DESKTOP_INFLIGHT_PANEL_ID = "sidebar-inflight-panel";
 
@@ -80,13 +78,7 @@ export function SidebarStack() {
   );
 }
 
-type SidebarChromeProps = {
-  agentSettings?: AgentGenerationSettings;
-  onAgentSettingsChange?: (patch: Partial<AgentGenerationSettings>) => void;
-};
-
-export function SidebarChrome({ agentSettings, onAgentSettingsChange }: SidebarChromeProps = {}) {
-  const agentMode = Boolean(agentSettings && onAgentSettingsChange);
+export function SidebarChrome() {
   const isMobile = useIsMobile();
   return (
     <>
@@ -98,11 +90,7 @@ export function SidebarChrome({ agentSettings, onAgentSettingsChange }: SidebarC
         </div>
         <div className="logo-actions">
           <PromptLibraryButton />
-          {agentMode ? (
-            <ImageModelSelect variant="sidebar" agentSettings={agentSettings} onAgentSettingsChange={onAgentSettingsChange} />
-          ) : (
-            <GenProviderModelSelect compact={isMobile} />
-          )}
+          <GenProviderModelSelect compact={isMobile} />
         </div>
       </div>
     </>
