@@ -131,7 +131,7 @@ routes/
 | `bin/commands/show.ts` | 77 | Single history item display/reveal client |
 | `bin/commands/video.ts` | 354 | Video CLI surface: generate, edit, extend, frame, analyze, and branch-local `continue` |
 | `bin/commands/ping.ts` | 32 | Server health probe client |
-| `bin/lib/client.ts` | 165 | Server discovery, HTTP request wrapper (connection: close), response normalization |
+| `bin/lib/client.ts` | 179 | Server discovery, HTTP request wrapper (connection: close, cleared timeouts), response normalization |
 | `bin/lib/platform.ts` | 129 | Browser-open and binary-resolution helpers |
 | `bin/lib/args.ts` | 93 | Dependency-free argv parser |
 | `bin/lib/files.ts` | 40 | Data URI file conversion and output naming |

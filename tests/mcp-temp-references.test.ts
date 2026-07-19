@@ -87,11 +87,12 @@ test("POST /api/mcp/temp-references writes two contained generated files", async
     for (const file of response.body.files as Array<{ filename: string }>) {
       assert.match(file.filename, new RegExp(`^tmpref_${response.body.batchId}_[12]\\.(png|jpeg)$`));
       assert.ok(existsSync(join(generatedDir, file.filename)));
-      // Same normalizer on both sides — Windows 8.3 short-name forms must
-      // compare equal regardless of which side produced the long form.
+      // Same async realpath on both sides — Windows realpathSync preserves
+      // 8.3 short-name input while fs.promises.realpath normalizes (260719).
+      const { realpath } = await import("node:fs/promises");
       assert.equal(
-        realpathSync(await safeGeneratedFilePath(generatedDir, file.filename)),
-        realpathSync(join(generatedDir, file.filename)),
+        await safeGeneratedFilePath(generatedDir, file.filename),
+        await realpath(join(generatedDir, file.filename)),
       );
     }
   });

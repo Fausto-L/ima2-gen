@@ -23,9 +23,11 @@ export interface ServerHealth {
 }
 
 async function probe(base: string, timeoutMs = 600): Promise<ServerHealth | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const r = await fetch(`${base}/api/health`, {
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: controller.signal,
       // CLI is short-lived: close the socket so process.exit() never races a
       // keep-alive handle (libuv UV_HANDLE_CLOSING assert on Windows, 260719).
       headers: { connection: "close" },
@@ -34,6 +36,8 @@ async function probe(base: string, timeoutMs = 600): Promise<ServerHealth | null
     return (await r.json()) as ServerHealth;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -83,18 +87,28 @@ export async function request(base: string, path: string, {
     ? { "X-ima2-client": `cli/${CLI_VERSION}` }
     : { "Content-Type": "application/json", "X-ima2-client": `cli/${CLI_VERSION}` };
   const finalHeaders = { ...baseHeaders, ...(extraHeaders || {}) };
-  const res = await fetch(base + path, {
-    method,
-    // connection: close — see the health-check note above.
-    headers: { connection: "close", ...finalHeaders },
-    body: body === undefined ? undefined
-        : raw ? body
-        : JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  const text = await res.text();
+  // Manual timeout + clearTimeout: a lingering AbortSignal.timeout handle
+  // crashes process.exit() on Windows Node 24 (UV_HANDLE_CLOSING, 260719).
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res: Response;
+  let text: string;
+  try {
+    res = await fetch(base + path, {
+      method,
+      // connection: close — see the health-check note above.
+      headers: { connection: "close", ...finalHeaders },
+      body: body === undefined ? undefined
+          : raw ? body
+          : JSON.stringify(body),
+      signal: controller.signal,
+    });
+    text = await res.text();
+  } finally {
+    clearTimeout(timer);
+  }
   let json: any = null;
-  try { json = JSON.parse(text); } catch {}
+  try { json = JSON.parse(text!); } catch {}
   if (!res.ok) {
     const err: any = new Error(json?.error?.message || json?.error || `HTTP ${res.status}`);
     err.status = res.status;
