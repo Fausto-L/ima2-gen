@@ -85,6 +85,7 @@ function ElementToggleButton({ active, busy, label, onToggle }: {
 export function AssetElementToggle({ item }: { item: AssetItem }) {
   const { t } = useI18n();
   const showToast = useAppStore((state) => state.showToast);
+  const deleteAssetItem = useAppStore((state) => state.deleteAssetItem);
   const [pending, setPending] = useState(false);
   const isElement = item.kind === "element";
   const supported = isElement || ((item.kind === "image" || item.kind === "video") && Boolean(item.filePath));
@@ -95,11 +96,20 @@ export function AssetElementToggle({ item }: { item: AssetItem }) {
 
   useEffect(() => { if (supported && !isElement) void loadMemberships(); }, [supported, isElement]);
 
-  // Element items get a read-only active badge — no membership loading or toggle needed.
+  // Element items: active toggle — pressing it removes the element from the
+  // library (the counterpart of toggling the source asset on).
   if (isElement) {
-    return <span className="asset-element-toggle is-active is-readonly" aria-label={label}>
-      <span className="asset-element-toggle__glyph" aria-hidden="true">@</span>
-    </span>;
+    const demote = async (): Promise<void> => {
+      if (pending) return;
+      setPending(true);
+      try {
+        if (await deleteAssetItem(item.id)) removeMembership(item.id);
+        else showToast(t("assets.actionFailed"), true);
+      } finally {
+        setPending(false);
+      }
+    };
+    return <ElementToggleButton active busy={pending} label={t("assets.removeFromElements")} onToggle={() => void demote()} />;
   }
 
   if (!supported) return null;

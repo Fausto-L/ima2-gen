@@ -50,7 +50,6 @@
 .assets-tile .asset-element-toggle:hover { background: color-mix(in srgb, var(--bg) 94%, transparent); }
 .assets-tile .asset-element-toggle.is-active { color: var(--red); }
 .assets-tile .asset-element-toggle.is-active .asset-element-toggle__glyph { font-weight: 850; }
-.assets-tile .asset-element-toggle.is-readonly { cursor: default; pointer-events: none; opacity: .88; }
 .assets-tile .asset-element-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .assets-tile .asset-element-toggle:disabled { cursor: wait; opacity: .56; }
 .assets-tile:hover .assets-tile__delete, .assets-tile:focus-within .assets-tile__delete { opacity: 1; }

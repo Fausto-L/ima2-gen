@@ -53,6 +53,8 @@ describe("asset Element quick-register contract", () => {
     assert.match(control, /sourceAssetId: item\.id/);
     assert.match(control, /elementKind: "character"/);
     assert.match(control, /onPointerDown=\{stopPointer\}/);
+    assert.match(control, /removeFromElements/);
+    assert.doesNotMatch(control, /is-readonly/);
     assert.match(grid, /<FavoriteStarButton[\s\S]*?<AssetElementToggle item=\{item\} \/>/);
     assert.match(css, /\.assets-tile \.asset-element-toggle \{[^}]*border: 1px solid[^}]*background: color-mix/);
     assert.match(css, /\.assets-tile \.asset-element-toggle\.is-active \{ color: var\(--red\); \}/);

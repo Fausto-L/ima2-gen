@@ -1734,6 +1734,7 @@
     "searchPlaceholder": "Search assets…",
     "allAssets": "All assets",
     "elementLibrary": "Element library",
+    "removeFromElements": "Remove from element library",
     "emptyElementsTitle": "No elements yet",
     "emptyElementsBody": "Elements are reusable @-mentionable references (characters, products, styles, scenes). Save a gallery image to assets and promote it, then mention it anywhere with @.",
     "newFolder": "New folder",
