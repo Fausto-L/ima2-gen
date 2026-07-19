@@ -127,11 +127,11 @@ describe("ima2 video CLI contracts", () => {
     const server = makeServer((_req, res) => res.writeHead(404).end());
     const base = await listen(server);
     const bare = await runCLI(["video", "clip", "--json", "--server", base]);
-    assert.equal(bare.code, 2);
+    assert.equal(bare.code, 2, String(bare.stderr).slice(0, 800));
     assert.equal(JSON.parse(bare.stdout).code, "NO_DEFAULT_MODEL");
     assert.equal(bare.stdout.trim().split("\n").length, 1);
     const auto = await runCLI(["video", "clip", "--provider", "auto", "--json", "--server", base]);
-    assert.equal(auto.code, 2);
+    assert.equal(auto.code, 2, String(auto.stderr).slice(0, 800));
     assert.equal(JSON.parse(auto.stdout).code, "PROVIDER_AUTO_REMOVED");
   });
 
@@ -139,11 +139,11 @@ describe("ima2 video CLI contracts", () => {
     const server = makeServer((_req, res) => res.writeHead(404).end());
     const base = await listen(server);
     const grokFlag = await runCLI(["video", "clip", "--model", "runway/veo-3.1", "--planner-model", "x", "--json", "--server", base]);
-    assert.equal(grokFlag.code, 2); assert.equal(JSON.parse(grokFlag.stdout).code, "FLAG_NOT_SUPPORTED");
+    assert.equal(grokFlag.code, 2, String(grokFlag.stderr).slice(0, 800)); assert.equal(JSON.parse(grokFlag.stdout).code, "FLAG_NOT_SUPPORTED");
     const unsupported = await runCLI(["video", "clip", "--model", "runway/gen-4.5", "--resolution", "1080p", "--json", "--server", base]);
-    assert.equal(unsupported.code, 2); assert.equal(JSON.parse(unsupported.stdout).code, "MCP_PARAMETER_UNSUPPORTED");
+    assert.equal(unsupported.code, 2, String(unsupported.stderr).slice(0, 800)); assert.equal(JSON.parse(unsupported.stdout).code, "MCP_PARAMETER_UNSUPPORTED");
     const localRef = await runCLI(["video", "clip", "--model", "runway/veo-3.1", "--ref", "./local.png", "--json", "--server", base]);
-    assert.equal(localRef.code, 2); assert.equal(JSON.parse(localRef.stdout).code, "MCP_REF_MUST_BE_GENERATED");
+    assert.equal(localRef.code, 2, String(localRef.stderr).slice(0, 800)); assert.equal(JSON.parse(localRef.stdout).code, "MCP_REF_MUST_BE_GENERATED");
   });
 
   it("passes explicit MCP parameters and generated start frames through the async job bridge", async () => {
@@ -215,7 +215,7 @@ describe("ima2 video CLI contracts", () => {
       "video", "clip", "--model", "runway/veo-3.1",
       "--ref", "1780000000001_hero.png:hero", "--json", "--server", base,
     ]);
-    assert.equal(tagged.code, 2);
+    assert.equal(tagged.code, 2, String(tagged.stderr).slice(0, 800));
     const taggedPayload = JSON.parse(tagged.stdout);
     assert.equal(taggedPayload.code, "INPUT_ROLE_UNSUPPORTED");
     assert.equal(taggedPayload.role, "image_references");
@@ -260,7 +260,7 @@ describe("ima2 video CLI contracts", () => {
       "video", "clip", "--model", "runway/gen-4.5", "--video-ref", "1780000000000_source.mp4",
       "--json", "--server", base,
     ]);
-    assert.equal(unsupported.code, 2);
+    assert.equal(unsupported.code, 2, String(unsupported.stderr).slice(0, 800));
     const payload = JSON.parse(unsupported.stdout);
     assert.equal(payload.code, "INPUT_ROLE_UNSUPPORTED");
     assert.deepEqual(payload.supportedModels, ["runway/seedance-2"]);
@@ -270,7 +270,7 @@ describe("ima2 video CLI contracts", () => {
       "video", "clip", "--model", "runway/seedance-2", "--end", "1780000000001_end.png",
       "--json", "--server", base,
     ]);
-    assert.equal(missingStart.code, 2);
+    assert.equal(missingStart.code, 2, String(missingStart.stderr).slice(0, 800));
     assert.equal(JSON.parse(missingStart.stdout).code, "END_FRAME_REQUIRES_START");
   });
 
@@ -290,37 +290,37 @@ describe("ima2 video CLI contracts", () => {
 
   it("rejects invalid generate and extend durations before network calls", async () => {
     const noPrompt = await runCLI(["video"]);
-    assert.equal(noPrompt.code, 2);
+    assert.equal(noPrompt.code, 2, String(noPrompt.stderr).slice(0, 800));
     assert.match(noPrompt.stderr, /Active video prompt required/);
     assert.match(noPrompt.stderr, /naturally fill the selected duration/);
 
     const badGenerate = await runCLI(["video", "clip", "--duration", "6abc"]);
-    assert.equal(badGenerate.code, 2);
+    assert.equal(badGenerate.code, 2, String(badGenerate.stderr).slice(0, 800));
     assert.match(badGenerate.stderr, /--duration must be an integer/);
 
     const badExtend = await runCLI(["video", "extend", "continue", "--video", "https://example.com/a.mp4", "--duration", "999"]);
-    assert.equal(badExtend.code, 2);
+    assert.equal(badExtend.code, 2, String(badExtend.stderr).slice(0, 800));
     assert.match(badExtend.stderr, /--duration must be between 2 and 10/);
 
     const badExtendBeforeServer = await runCLI(["video", "extend", "continue", "--video", "https://example.com/a.mp4", "--duration", "abc", "--server", "http://127.0.0.1:9"]);
-    assert.equal(badExtendBeforeServer.code, 2);
+    assert.equal(badExtendBeforeServer.code, 2, String(badExtendBeforeServer.stderr).slice(0, 800));
     assert.match(badExtendBeforeServer.stderr, /--duration must be an integer/);
     assert.doesNotMatch(badExtendBeforeServer.stderr, /server unreachable/);
 
     const badTimeout = await runCLI(["video", "clip", "--timeout", "1abc"]);
-    assert.equal(badTimeout.code, 2);
+    assert.equal(badTimeout.code, 2, String(badTimeout.stderr).slice(0, 800));
     assert.match(badTimeout.stderr, /--timeout must be an integer/);
 
     const zeroTimeout = await runCLI(["video", "edit", "p", "--video", "https://example.com/v.mp4", "--timeout", "0"]);
-    assert.equal(zeroTimeout.code, 2);
+    assert.equal(zeroTimeout.code, 2, String(zeroTimeout.stderr).slice(0, 800));
     assert.match(zeroTimeout.stderr, /--timeout must be at least 1/);
 
     const unknown = await runCLI(["video", "clip", "--duraton", "5"]);
-    assert.equal(unknown.code, 2);
+    assert.equal(unknown.code, 2, String(unknown.stderr).slice(0, 800));
     assert.match(unknown.stderr, /unknown option: --duraton/);
 
     const noContinuePrompt = await runCLI(["video", "continue", "--video", "sample.mp4"]);
-    assert.equal(noContinuePrompt.code, 2);
+    assert.equal(noContinuePrompt.code, 2, String(noContinuePrompt.stderr).slice(0, 800));
     assert.match(noContinuePrompt.stderr, /Active video prompt required/);
     assert.match(noContinuePrompt.stderr, /stable ending frame/);
   });

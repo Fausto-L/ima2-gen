@@ -87,7 +87,12 @@ test("POST /api/mcp/temp-references writes two contained generated files", async
     for (const file of response.body.files as Array<{ filename: string }>) {
       assert.match(file.filename, new RegExp(`^tmpref_${response.body.batchId}_[12]\\.(png|jpeg)$`));
       assert.ok(existsSync(join(generatedDir, file.filename)));
-      assert.equal(await safeGeneratedFilePath(generatedDir, file.filename), realpathSync(join(generatedDir, file.filename)));
+      // Same normalizer on both sides — Windows 8.3 short-name forms must
+      // compare equal regardless of which side produced the long form.
+      assert.equal(
+        realpathSync(await safeGeneratedFilePath(generatedDir, file.filename)),
+        realpathSync(join(generatedDir, file.filename)),
+      );
     }
   });
 });

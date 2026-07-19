@@ -105,7 +105,7 @@ describe("ima2 CLI commands (live server)", () => {
 
   it("ima2 gen without prompt exits 2", async () => {
     const { code, stderr } = await runCLI(["gen"]);
-    assert.strictEqual(code, 2);
+    assert.strictEqual(code, 2, String(stderr).slice(0, 800));
     assert.match(stderr, /prompt/i);
   });
 
@@ -129,8 +129,8 @@ describe("ima2 CLI commands (live server)", () => {
   });
 
   it("bare gen fails closed without defaults.image", async () => {
-    const { stdout, code } = await runCLI(["gen", "hi", "--json"]);
-    assert.strictEqual(code, 2);
+    const { stdout, code, stderr } = await runCLI(["gen", "hi", "--json"]);
+    assert.strictEqual(code, 2, String(stderr).slice(0, 800));
     const payload = JSON.parse(stdout);
     assert.strictEqual(payload.code, "NO_DEFAULT_MODEL");
     assert.ok(payload.models);
@@ -139,8 +139,8 @@ describe("ima2 CLI commands (live server)", () => {
   });
 
   it("gen rejects the removed provider auto with a typed envelope", async () => {
-    const { stdout, code } = await runCLI(["gen", "hi", "--provider", "auto", "--json"]);
-    assert.strictEqual(code, 2);
+    const { stdout, code, stderr } = await runCLI(["gen", "hi", "--provider", "auto", "--json"]);
+    assert.strictEqual(code, 2, String(stderr).slice(0, 800));
     assert.strictEqual(JSON.parse(stdout).code, "PROVIDER_AUTO_REMOVED");
   });
 
@@ -323,7 +323,7 @@ describe("ima2 CLI commands (live server)", () => {
 
   it("ima2 cancel without requestId exits 2", async () => {
     const { code, stderr } = await runCLI(["cancel"]);
-    assert.strictEqual(code, 2);
+    assert.strictEqual(code, 2, String(stderr).slice(0, 800));
     assert.match(stderr, /requestId/i);
   });
 
