@@ -180,7 +180,8 @@ export class McpConnectionManager {
       if (!sameConnection(this.sessions.get(provider)?.identity, identity)) return;
       void this.refresh(provider).catch(() => undefined);
     }, this.options.reconnectDelayMs ?? 250);
-    timer.unref?.();
+    // No unref: the timer is lifecycle-managed (shutdown clears it) and
+    // Node 22's test runner resolves the loop while tests await it (260719).
     this.reconnectTimers.set(provider, timer);
   }
   private async closeStale(provider: string, transport: StreamableHTTPClientTransport): Promise<McpConnectionStatus> {
@@ -396,7 +397,7 @@ export class McpConnectionManager {
           void this.closeProviderWork(provider);
         }
       }, timeout);
-      timer.unref?.();
+      // No unref: cleared on success (~below) and aborted on shutdown (260719).
       try {
         await this.connectAtGeneration(provider, endpoint, generation, {
           signal: controller.signal,

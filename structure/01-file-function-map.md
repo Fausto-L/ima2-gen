@@ -104,7 +104,7 @@ routes/
 | `lib/ssePublish.ts` | 17 | `publishJobEvent` — terminal `done` suppression after cancel (cancel↔done race guard) |
 | `ui/src/lib/eventChannel.ts` | 156 | Browser singleton `EventSource` for `/api/events`; exponential backoff reconnect; `subscribe(jobId)` routing; connection state callbacks; `armStreamTimeout`; `ensureConnected` |
 | `ui/src/lib/sseStreamError.ts` | 25 | Shared `parseSseErrorPayload` — normalizes flat/nested SSE error shapes |
-| `bin/ima2.ts` | 498 | CLI setup, serve, status, doctor, open, reset, command dispatch (`serve --dev` enables verbose diagnostics) |
+| `bin/ima2.ts` | 519 | CLI setup, serve, status, doctor, open, reset, command dispatch (`serve --dev` enables verbose diagnostics) |
 | `bin/commands/gen.ts` | 299 | CLI image-generation client with references, provider override, model, mode, moderation, web-search, reasoning-effort, session, timeout recovery, background preset (`--bg`), and output-dir options |
 | `bin/commands/edit.ts` | 166 | CLI image-edit client with provider override, model, mode, moderation, web-search, reasoning-effort, session, timeout recovery, and output options |
 | `bin/commands/multimode.ts` | 210 | CLI multimode SSE client with provider override, references, prompt mode, incremental image save, timeout recovery, web-search, reasoning-effort, and session options |
@@ -131,7 +131,7 @@ routes/
 | `bin/commands/show.ts` | 77 | Single history item display/reveal client |
 | `bin/commands/video.ts` | 354 | Video CLI surface: generate, edit, extend, frame, analyze, and branch-local `continue` |
 | `bin/commands/ping.ts` | 32 | Server health probe client |
-| `bin/lib/client.ts` | 146 | Server discovery, HTTP request wrapper, response normalization |
+| `bin/lib/client.ts` | 159 | Server discovery, HTTP request wrapper, response normalization |
 | `bin/lib/platform.ts` | 129 | Browser-open and binary-resolution helpers |
 | `bin/lib/args.ts` | 93 | Dependency-free argv parser |
 | `bin/lib/files.ts` | 40 | Data URI file conversion and output naming |
@@ -164,7 +164,7 @@ routes/
 | `lib/mcp/tokenStore.ts` | 325 | Versioned 0600 MCP token records, endpoint/origin binding inspection, revision/tombstone CAS, and PID+nonce recovery lock |
 | `lib/mcp/oauthProvider.ts` | 150 | SDK OAuth provider, memory-only PKCE/state, bound credential persistence, scoped invalidation, and legacy binding migration |
 | `lib/mcp/connectionRuntime.ts` | 123 | MCP session/connection identity helpers, restore inspection, terminal/session-invalid error classification, and bounded concurrency |
-| `lib/mcp/connectionManager.ts` | 496 | Generation/epoch-safe connect, callback, refresh, disconnect, post-listen restore, one terminal reconnect, tool calls, and shutdown |
+| `lib/mcp/connectionManager.ts` | 497 | Generation/epoch-safe connect, callback, refresh, disconnect, post-listen restore, one terminal reconnect, tool calls, and shutdown |
 | `lib/mcp/shutdown.ts` | 24 | Post-listen restore activation plus concurrent HTTP/MCP shutdown coordination and grace bound |
 | `lib/mcp/snapshotPipeline.ts` | 113 | Generation/epoch-safe live tool snapshot ingest and stale-result suppression |
 | `lib/oauthLauncher.ts` | 119 | OAuth proxy child process startup and actual ready-port capture |
