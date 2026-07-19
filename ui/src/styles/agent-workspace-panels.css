@@ -384,8 +384,12 @@
 }
 
 .agent-result-thumb:focus-visible {
-  outline: 2px solid var(--focus-ring);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+.agent-result-thumb .agent-image-fallback {
+  opacity: 0.45;
 }
 
 .agent-result-thumb img,

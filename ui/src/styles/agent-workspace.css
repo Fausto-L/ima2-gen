@@ -438,6 +438,13 @@
   height: 24px;
   display: grid;
   place-items: center;
+  opacity: 0.4;
+  transition: opacity 0.12s ease;
+}
+
+.agent-session-row:hover .agent-session-row__actions button,
+.agent-session-row:focus-within .agent-session-row__actions button {
+  opacity: 1;
 }
 
 .agent-rail {
@@ -446,6 +453,26 @@
   gap: 8px;
   padding: 10px;
   border-right: 1px solid var(--border);
+}
+
+.agent-rail > button {
+  border-radius: var(--agent-r-sm, 8px);
+}
+
+.agent-rail > button:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+
+.agent-rail > button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.agent-rail__sessions > button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .agent-rail__sessions {

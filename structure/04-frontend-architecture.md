@@ -210,3 +210,6 @@ Error handling is centralized. API helpers preserve `err.code` where the server 
 Previous document: `[[03-server-api]]`
 
 Next document: `[[05-node-mode]]`
+
+
+Snapshot note, 2026-07-20: **Agent Mode component polish** (devlog unit `260720_agent-component-polish`). Shared chrome grammar: agent radius scale (`--agent-r-lg/md/sm`), 56px pane headers, monochrome model pill (blue removed inside agent, classic keeps blue), status chip, streaming gradient replaced with flat tint. Chat de-boxing: agent turns render borderless (user turns keep filled bubble), tool-run toggle solidified (dashed border removed, green hover removed — green stays exclusive to run state), composer `!important` eliminated and Send rewritten at proper specificity. Stage/rail polish: filmstrip radius unified, placeholder thumbs dimmed (opacity 0.45), rail menu/create buttons scoped hover+focus, overlay header joins 56px contract with complete close-button states, drawer action buttons fade to 0.4 at rest. Focus rings unified to `--accent` across agent thumbs and image preview (cyan stays in classic mode).
