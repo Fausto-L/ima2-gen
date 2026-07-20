@@ -1,9 +1,9 @@
 ---
 title: "060 — 현재 상태 및 재개 가이드"
 lane: "260716_cli-entry-routing"
-status: "wp1~wp3 완료 · wp4 미착수 · wp5 부분 기반"
-updated: "2026-07-18"
-evidence: "2026-07-18 closeout-sweep audit"
+status: "wp1~wp3 완료 · wp4/wp5 로드맵 확장(041/051) 반영 · 구현 미착수"
+updated: "2026-07-20"
+evidence: "2026-07-18 closeout-sweep audit + 2026-07-20 로드맵 확장 사이클(Sol A-gate GO-WITH-FIXES 3 fold)"
 ---
 
 # 060 — CLI 진입점 라우팅: 현재 상태 및 재개 가이드
@@ -17,8 +17,8 @@ evidence: "2026-07-18 closeout-sweep audit"
 | wp1 | 완료 | strict model routing, fail-closed 기본 모델, 모델/도구 dispatch | `80da5e7`; 모델/도구 dispatch 후속은 `4505642` |
 | wp2 | 완료 | CLI 문서·스킬 이관 및 버전 갱신 | `21b9b9b` |
 | wp3 | 완료 | end frame·이미지/비디오 레퍼런스의 서버 계약, inputRoles 게이트, UI 슬롯, CLI 연동 | `a878e74`; 잔여 타입/카탈로그/UI 스타일은 `4505642`; [Gen-4 Turbo 슬롯 증거](evidence-wp3-gen4turbo-slots.png), [Seedance 슬롯 증거](evidence-wp3-seedance-slots.png) |
-| wp4 | 미착수 | 캐릭터 binding 저장/조회, MCP 요청·lineage 연결, Runway/Higgsfield 브리지, UI, CLI 전부 남음 | [040 스펙](040_character-persistence.md:25) 및 Accept([:70](040_character-persistence.md:70)-[:74](040_character-persistence.md:74)); `characterBindings`, `characterElementId`, `--character`, `trained-id`, `stateless-refs`는 devlog 밖 코드에 없음 |
-| wp5 | 부분 기반 | Runway `edit_video`/`upscale_*` action은 존재하나, multishot·keyframe preview·CLI·UI·Higgsfield 파생 기능은 미구현 | `lib/mcp/mediaWorkflowRouter.ts:27-35`, `lib/mcp/adapters/runway.ts:200-214`; [050 스펙](050_derivative-diversity.md:10) |
+| wp4 | 로드맵 확장 완료 · 구현 미착수 | 040 스펙 + [041 amendment](041_wp4-roadmap-expansion.md)(저장 모델 element.refs 재사용+보존 불변식, 409 충돌 규칙, recover 계약, UI/CLI 봉투). 캐릭터 binding 저장/조회, MCP 요청·lineage 연결, Runway/Higgsfield 브리지, UI, CLI 전부 남음 | `characterBindings`, `characterElementId`, `--character`는 devlog 밖 코드에 없음; delta 근거 [001](001_current-feature-delta.md) |
+| wp5 | 로드맵 확장 완료 · 부분 기반 | 050 스펙 + [051 amendment](051_wp5-roadmap-expansion.md)(long-job 파이프라인 탑승, preview lineage 확장, ResultActions/stage 부착). multishot·keyframe preview·CLI·UI·Higgsfield 파생 기능은 미구현 | `lib/mcp/mediaWorkflowRouter.ts:27-35`, `lib/mcp/adapters/runway.ts:200-214` |
 
 wp3 후속 `4505642`에는 `ui/src/lib/mcpProviders.ts`의 end-frame/reference-video typed inputRoles, `mcp-models-catalog`의 `audio_references` 부정 assertion, 오른쪽 패널 reference-slot 스타일이 포함된다.
 
@@ -26,7 +26,8 @@ wp3 후속 `4505642`에는 `ui/src/lib/mcpProviders.ts`의 end-frame/reference-v
 
 ### 1. wp4 — 캐릭터 영속성 전체 구현
 
-`040_character-persistence.md`의 순서를 그대로 따른다.
+`040_character-persistence.md`의 조사 결론 위에 [041](041_wp4-roadmap-expansion.md)의
+amendment(저장 모델/Accept 치환)를 적용한다. 충돌 시 041 우선.
 
 1. **저장 모델** — `element(kind=character)` 메타데이터에 `CharacterProviderBinding`을 저장·조회한다. provider, `stateless-refs`/`trained-id`, 원본 `refFilenames`, Runway tag, Higgsfield `externalId`(`soul_id`)와 학습 상태를 보존하고 roundtrip 계약 테스트를 먼저 고정한다.
 2. **MCP 요청 연결** — `characterElementId`를 `/api/mcp/generate`에 수용하고 결과 lineage에도 기록한다. 현재 `routes/mcpMedia.ts:224-227,337-345,408-437`은 start/end/reference/video 입력만 다루므로 여기서부터 연결한다.
@@ -36,7 +37,9 @@ wp3 후속 `4505642`에는 `ui/src/lib/mcpProviders.ts`의 end-frame/reference-v
 
 ### 2. wp5 — 파생 제작 다양성
 
-`050_derivative-diversity.md`를 기준으로, 새 병렬 라우터를 만들지 말고 기존 Runway native action 기반을 확장한다.
+`050_derivative-diversity.md`의 tool 분류 위에 [051](051_wp5-roadmap-expansion.md)의
+amendment(preview lineage 확장, stage 호환, capabilities lock 표면화)를 적용한다.
+새 병렬 라우터를 만들지 말고 기존 Runway native action 기반을 확장한다.
 
 1. **wp5a / Runway P1** — `edit_video`에 keyframe 입력·프리뷰 승인 단계를 추가하고, `generate_multishot_video`을 storyboard→`shots[]` 흐름으로 실행 경로에 연결한다. 현재 multishot은 snapshot/skill에만 있고 실행 경로에는 없다.
 2. **wp5b / Runway P2** — 기존 `video.upscale`/`image.upscale`에 provider 파라미터를 노출하고, UI 제어와 `ima2 edit-video`·`ima2 upscale` CLI 진입점을 추가한다.
