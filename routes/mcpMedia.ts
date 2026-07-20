@@ -22,6 +22,7 @@ import { higgsfieldAdapter } from "../lib/mcp/adapters/higgsfield.js";
 import { parseMcpPresetRecord, type McpPresetValue } from "../lib/mcp/modelCapabilities.js";
 import type { MediaProviderAdapter } from "../lib/mcp/providerAdapter.js";
 import { requireRuntimeContext, type RouteRuntimeContext } from "../lib/runtimeContext.js";
+import { resolveCharacterBindingRefs } from "../lib/mcp/characterRefs.js";
 
 /** Test seams (production uses the real implementations). */
 export interface McpMediaDeps {
@@ -31,6 +32,7 @@ export interface McpMediaDeps {
   writeSidecar: typeof atomicWriteJson;
   upload: typeof uploadLocalMediaToRunway;
   concat: typeof concatVideos;
+  adapters?: Record<string, MediaProviderAdapter>;
 }
 
 const ADAPTERS: Record<string, MediaProviderAdapter> = {
@@ -229,17 +231,31 @@ export function registerMcpMediaRoutes(app: Express, ctxRaw: RouteRuntimeContext
     writeSidecar: depsPartial.writeSidecar ?? atomicWriteJson,
     upload: depsPartial.upload ?? uploadLocalMediaToRunway,
     concat: depsPartial.concat ?? concatVideos,
+    ...(depsPartial.adapters ? { adapters: depsPartial.adapters } : {}),
   };
 
   app.post("/api/mcp/generate", async (req: Request, res: Response) => {
     const {
       provider, kind, prompt, model, ratio, startFrameUrl, startFrameFilename,
       endFrameFilename, referenceFilenames, references, referenceVideoFilename,
+      characterElementId: rawCharacterElementId,
     } = req.body ?? {};
-    const adapter = ADAPTERS[String(provider)];
+    const adapters = deps.adapters ?? ADAPTERS;
+    const adapter = adapters[String(provider)];
     if (!adapter) return res.status(400).json({ error: { code: "MCP_PROVIDER_UNKNOWN", message: String(provider) } });
     if (kind !== "image" && kind !== "video") return res.status(400).json({ error: { code: "INVALID_KIND", message: "kind must be image|video" } });
     if (!adapter.executable) return res.status(409).json({ error: { code: "MCP_EXECUTION_LOCKED", message: `${adapter.provider} is catalog-only` } });
+    // Character binding vs generic element mention: never merge (041 decision 2).
+    if (rawCharacterElementId !== undefined && (typeof rawCharacterElementId !== "string" || !rawCharacterElementId)) {
+      return res.status(400).json({ error: { code: "INVALID_CHARACTER_ELEMENT", message: "characterElementId must be a non-empty string" } });
+    }
+    const characterElementId = typeof rawCharacterElementId === "string" && rawCharacterElementId ? rawCharacterElementId : null;
+    if (characterElementId && Array.isArray(req.body?.elementIds) && req.body.elementIds.length > 0) {
+      return res.status(409).json({ error: { code: "CHARACTER_ELEMENT_CONFLICT",
+        message: "use either elementIds or characterElementId, not both",
+        fix: ["character binding: drop element mentions and send characterElementId only",
+              "generic element refs: remove characterElementId"] } });
+    }
     if (typeof prompt !== "string" || !prompt.trim()) return res.status(400).json({ error: { code: "INVALID_PROMPT", message: "prompt is required" } });
     let parameters: Record<string, McpPresetValue>;
     try {
@@ -309,6 +325,20 @@ export function registerMcpMediaRoutes(app: Express, ctxRaw: RouteRuntimeContext
       }
       for (const name of referenceFilenames as string[]) rawReferences.push({ filename: name });
     }
+    // Character provider binding (wp4 043): inject binding refs into
+    // rawReferences BEFORE the shared cap/upload chain so request refs and
+    // binding refs share one 3-entry cap rule. Never auto-trim (041 invariant 3).
+    if (characterElementId) {
+      const resolved = resolveCharacterBindingRefs(characterElementId, adapter.provider);
+      if (!resolved.ok) {
+        return res.status(resolved.status).json({ error: { code: resolved.code, message: resolved.message, ...(resolved.fix ? { fix: resolved.fix } : {}) } });
+      }
+      for (const ref of resolved.refs) rawReferences.push(ref);
+      if (rawReferences.length > 3) {
+        return res.status(400).json({ error: { code: "INVALID_MCP_REFERENCES",
+          message: "request references plus character binding refs exceed the 3-reference cap" } });
+      }
+    }
     const localReferences: Array<{ path: string; tag?: string }> = [];
     if (rawReferences.length > 0) {
       try {
@@ -358,7 +388,7 @@ export function registerMcpMediaRoutes(app: Express, ctxRaw: RouteRuntimeContext
     } catch (error) {
       return res.status(400).json({ error: { code: errorCode(error), message: "request violates the model capability contract" } });
     }
-    const started = startJob({ requestId, kind: `mcp-${kind}`, prompt, meta: { provider: adapter.provider, model: model ?? null } });
+    const started = startJob({ requestId, kind: `mcp-${kind}`, prompt, meta: { provider: adapter.provider, model: model ?? null, ...(characterElementId ? { characterElementId } : {}) } });
     if (started && isStartJobFailure(started)) {
       return res.status(started.code === "TOO_MANY_JOBS" ? 429 : 409).json({ error: { code: started.code, message: "cannot start job" } });
     }
@@ -369,7 +399,7 @@ export function registerMcpMediaRoutes(app: Express, ctxRaw: RouteRuntimeContext
     void runMcpMediaJob({
       ctx, deps, adapter, requestId, kind, prompt, model, ratio, parameters, startFrameUrl,
       localStartFramePath, localEndFramePath, localReferences, localReferenceVideoPath,
-      parentFilename, endFrameParentFilename, signal: abort.signal,
+      parentFilename, endFrameParentFilename, characterElementId, signal: abort.signal,
     });
   });
 
@@ -393,6 +423,7 @@ async function runMcpMediaJob(input: {
   localReferenceVideoPath?: string | null;
   parentFilename?: string | null;
   endFrameParentFilename?: string | null;
+  characterElementId?: string | null;
   signal: AbortSignal;
 }): Promise<void> {
   const { ctx, deps, adapter, requestId, kind, prompt, signal } = input;
@@ -486,9 +517,10 @@ async function runMcpMediaJob(input: {
         ...(input.parentFilename ? { parent: { filename: input.parentFilename, mediaType: "image", role: "start-frame" } } : {}),
         ...(input.endFrameParentFilename ? { endFrameParent: { filename: input.endFrameParentFilename, mediaType: "image", role: "end-frame" } } : {}),
         ...(referenceParents.length > 0 ? { referenceParents } : {}),
+        ...(input.characterElementId ? { characterElementId: input.characterElementId } : {}),
         kind: `mcp-${kind}`,
       },
-      doneExtra: { provider: adapter.provider, model: input.model ?? null },
+      doneExtra: { provider: adapter.provider, model: input.model ?? null, ...(input.characterElementId ? { characterElementId: input.characterElementId } : {}) },
     });
   } catch (error) {
     const code = errorCode(error);

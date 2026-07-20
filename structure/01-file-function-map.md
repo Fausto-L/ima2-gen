@@ -165,6 +165,7 @@ routes/
 | `lib/mcp/oauthProvider.ts` | 150 | SDK OAuth provider, memory-only PKCE/state, bound credential persistence, scoped invalidation, and legacy binding migration |
 | `lib/mcp/connectionRuntime.ts` | 123 | MCP session/connection identity helpers, restore inspection, terminal/session-invalid error classification, and bounded concurrency |
 | `lib/mcp/connectionManager.ts` | 497 | Generation/epoch-safe connect, callback, refresh, disconnect, post-listen restore, one terminal reconnect, tool calls, and shutdown |
+| `lib/mcp/characterRefs.ts` | 41 | Character provider binding resolution for MCP generate — element load, binding validation, refs expansion without trimming |
 | `lib/mcp/shutdown.ts` | 24 | Post-listen restore activation plus concurrent HTTP/MCP shutdown coordination and grace bound |
 | `lib/mcp/snapshotPipeline.ts` | 113 | Generation/epoch-safe live tool snapshot ingest and stale-result suppression |
 | `lib/oauthLauncher.ts` | 119 | OAuth proxy child process startup and actual ready-port capture |
