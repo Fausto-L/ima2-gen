@@ -10,6 +10,7 @@ import { wasFlagPassed } from "./argsExplicit.js";
 import { resolveHistoryReference, resolveServer, request } from "./client.js";
 import { loadCliDefaults } from "./config-store.js";
 import { runMcpJob } from "./mcpJob.js";
+import { characterElementIdForMcp } from "./characterResolve.js";
 import { resolveTarget, type ModelCatalog, type ModelEntry, type ResolveResult } from "./modelResolver.js";
 import { color, die, err, exitCodeForError, fail, json, out } from "./output.js";
 import { createCliRequestId } from "./recover-output.js";
@@ -318,8 +319,15 @@ async function runMcpVideo(argv: string[], args: ParsedArgs, context: VideoConte
   const selected = mcpParameters(argv, args, capabilities);
   const references = mcpMediaInputs(args, context, capabilities.inputRoles);
   const requestId = createCliRequestId("req_cli_video");
+  const characterElementId = args.character
+    ? await characterElementIdForMcp({
+        serverBase: context.server.base, idOrName: String(args.character),
+        lane: context.target.lane, inputRoles: capabilities.inputRoles, json: Boolean(args.json),
+      })
+    : null;
   const body = { provider: context.target.lane, kind: "video", prompt: context.prompt, model: context.target.model,
-    requestId, parameters: selected.parameters, ...(selected.ratio ? { ratio: selected.ratio } : {}), ...references };
+    requestId, parameters: selected.parameters, ...(selected.ratio ? { ratio: selected.ratio } : {}), ...references,
+    ...(characterElementId ? { characterElementId } : {}) };
   try {
     const result = await runMcpJob({ serverBase: context.server.base, kind: "video", body, requestId,
       timeoutMs: MCP_VIDEO_TIMEOUT_MS, json: Boolean(args.json), onProgress: (phase: unknown) => err(`[${String(phase)}]`) });
@@ -337,6 +345,11 @@ export async function runVideoGenerate(argv: string[], args: ParsedArgs, prompt:
   if (parseInteger(args.timeout, 600, "--timeout") < 1) die(2, "--timeout must be at least 1");
   const { server, catalog } = await fetchCatalog(args);
   const target = resolveVideoTarget(args, catalog);
+  if (args.character && target.transport !== "mcp") {
+    fail({ json: Boolean(args.json), code: "CAPABILITY_MISMATCH",
+      message: "--character is only supported on MCP lanes (runway/higgsfield); core lanes use element mentions",
+      exitCode: 2 });
+  }
   const context = { server, catalog, target, prompt };
   if (target.transport === "mcp") return runMcpVideo(argv, args, context);
   rejectMcpInputFlagsOnCore(argv, args);

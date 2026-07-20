@@ -89,6 +89,7 @@ const SPEC = {
     end:           { type: "string" },
     ref:           { type: "string", repeatable: true },
     "video-ref":   { type: "string" },
+    character:     { type: "string" },
     out:           { short: "o", type: "string" },
     "out-dir":     { short: "d", type: "string" },
     json:          { type: "boolean" },
@@ -133,6 +134,7 @@ const HELP = `
         --ref <file|@last|file:tag>     Grok image input or MCP tagged image reference
                                         Repeatable: Grok max 7, MCP max 3
         --video-ref <generated-filename> MCP V2V/restyle reference video
+        --character <element-id|name>      MCP lanes only: character binding element
     -o, --out <file>                    Output file path
     -d, --out-dir <dir>                 Output directory
         --json                          Print JSON result to stdout

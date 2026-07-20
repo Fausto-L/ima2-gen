@@ -673,6 +673,14 @@ Runway and Higgsfield are MCP lanes. They submit `POST /api/mcp/generate` (202)
 and the CLI waits on SSE until completion. MCP generation supports `-n 1` only,
 and `--ref` values must be generated gallery filenames, not arbitrary local
 paths. Core-only planning/session flags are rejected with `FLAG_NOT_SUPPORTED`.
+`ima2 gen` and `ima2 video` also accept `--character <element-id|name>` on MCP
+lanes: the element must be a `character` element in the assets workspace with
+a provider binding for the selected lane (Runway: stateless refs + optional
+`@tag`). Fail-closed envelopes: `CHARACTER_ELEMENT_NOT_FOUND`,
+`CHARACTER_ELEMENT_AMBIGUOUS`, `CHARACTER_BINDING_MISSING`,
+`CAPABILITY_MISMATCH` (core lane or model without `image_references`),
+`BINDING_NOT_READY`, and server-side `CHARACTER_ELEMENT_CONFLICT` /
+`CHARACTER_REFS_EXCEED_PROVIDER_CAP`.
 Runway is available when connected; Higgsfield remains locked until its paid
 lane is enabled. Inspect current state with `ima2 models --kind video`.
 

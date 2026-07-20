@@ -8,6 +8,7 @@ import { resolveServer, request, normalizeGenerate } from "../lib/client.js";
 import { fileToDataUri, dataUriToFile, defaultOutName, readStdin } from "../lib/files.js";
 import { loadCliDefaults } from "../lib/config-store.js";
 import { runMcpJob } from "../lib/mcpJob.js";
+import { characterElementIdForMcp } from "../lib/characterResolve.js";
 import { resolveTarget, type ModelCatalog, type ModelEntry, type ResolveResult } from "../lib/modelResolver.js";
 import { out, die, dieWithError, color, err, fail, json } from "../lib/output.js";
 import { createCliRequestId, recoverGeneratedOutputs, formatRecoveryHint } from "../lib/recover-output.js";
@@ -31,6 +32,7 @@ const SPEC = {
     stdin: { type: "boolean" }, timeout: { type: "string", default: "180" }, server: { type: "string" },
     model: { type: "string" }, provider: { type: "string" }, mode: { type: "string", default: "auto" },
     moderation: { type: "string", default: "low" }, bg: { type: "string" }, session: { type: "string" },
+    character: { type: "string" },
     "reasoning-effort": { type: "string" }, "web-search": { type: "boolean" },
     "no-web-search": { type: "boolean" }, help: { short: "h", type: "boolean" },
   },
@@ -52,6 +54,7 @@ const HELP = `
     -s, --size <WxH | auto>                 Core lanes only. Default: 1024x1024
     -n, --count <1..${MAX_GENERATION_COUNT}>                     MCP lanes: 1 only
         --ref <file|generated-file[:tag]>   Local file on core; generated filename on MCP
+        --character <element-id|name>       MCP lanes only: character binding element
     -o, --out <file>                        Single-image output path
     -d, --out-dir <dir>                     Output directory
         --json                              Print one JSON result to stdout
@@ -196,8 +199,15 @@ async function runMcpImage(argv: string[], args: ParsedArgs, context: ImageConte
   const entry = context.catalog.lanes[context.target.lane]?.models.image.find((item) => item.id === context.target.model);
   const references = validateMcpRefs(refs, context, inputRoles(entry), Boolean(args.json));
   const requestId = createCliRequestId("req_cli_gen");
+  const characterElementId = args.character
+    ? await characterElementIdForMcp({
+        serverBase: context.server.base, idOrName: String(args.character),
+        lane: context.target.lane, inputRoles: inputRoles(entry), json: Boolean(args.json),
+      })
+    : null;
   const body = { provider: context.target.lane, kind: "image", prompt: context.prompt, model: context.target.model,
-    requestId, parameters: {}, ...(references.length ? { references } : {}) };
+    requestId, parameters: {}, ...(references.length ? { references } : {}),
+    ...(characterElementId ? { characterElementId } : {}) };
   try {
     const result = await runMcpJob({ serverBase: context.server.base, kind: "image", body, requestId,
       timeoutMs: MCP_IMAGE_TIMEOUT_MS, json: Boolean(args.json), onProgress: (phase: unknown) => err(`[${String(phase)}]`) });
@@ -288,6 +298,11 @@ export default async function genCmd(argv: string[]): Promise<void> {
   if (refs.length > MAX_REFERENCE_COUNT) die(2, `max ${MAX_REFERENCE_COUNT} --ref attachments`);
   const { server, catalog } = await fetchCatalog(args.server, Boolean(args.json));
   const target = resolveImageTarget(args, catalog);
+  if (args.character && target.transport !== "mcp") {
+    fail({ json: Boolean(args.json), code: "CAPABILITY_MISMATCH",
+      message: "--character is only supported on MCP lanes (runway/higgsfield); core lanes use element mentions",
+      exitCode: 2 });
+  }
   let context = { server, catalog, target, prompt, refs, explicitOut: args.out ? String(args.out) : null,
     outDir: args["out-dir"] ? String(args["out-dir"]) : null };
   if (target.transport === "mcp") return runMcpImage(argv, args, context);
