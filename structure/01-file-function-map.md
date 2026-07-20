@@ -211,9 +211,10 @@ routes/
 | `lib/agyCli.ts` | 44 | Antigravity CLI discovery and process execution helpers |
 | `lib/agyImageAdapter.ts` | 397 | Antigravity CLI image-generation provider adapter |
 | `lib/apiCachePolicy.ts` | 12 | API response cache-control policy helpers |
-| `lib/assetsStore.ts` | 512 | Generated asset indexing, lookup, and persistence helpers |
+| `lib/assetsStore.ts` | 533 | Generated asset indexing, lookup, and persistence helpers |
 | `lib/atomicWrite.ts` | 16 | Atomic file-write helper |
 | `lib/capabilities.ts` | 138 | Runtime provider and feature capability resolution |
+| `lib/characterBindings.ts` | 112 | Character provider binding validation, refs preservation guard, and drift detection |
 | `lib/composerSnapshot.ts` | 34 | Composer state snapshot normalization |
 | `lib/configKeys.ts` | 69 | Runtime configuration key definitions and validation |
 | `lib/elementCompiler.ts` | 199 | Structured element prompt compilation and validation |
