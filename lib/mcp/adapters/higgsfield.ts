@@ -12,6 +12,10 @@
 // - `generate_video` takes `medias[].value` as media_id/job_id via
 //   `media_import_url` / `media_upload_widget`, never raw URLs — the upload
 //   path differs from Runway's init_upload/complete_upload.
+// - Character bridge (wp4 041/044): a trained-id binding passes its
+//   externalId (soul_id) as params.soul_id and refreshes status/trainedAt
+//   from show_characters. When unlocking, replace the BINDING_NOT_READY stub
+//   in tests/mcp-character-route.test.ts with real-adapter activation.
 import type { MediaJobRequest, MediaProviderAdapter, ToolCallPlan } from "../providerAdapter.js";
 
 /** Media-relevant generation tools confirmed in the 73-tool snapshot (011). */
