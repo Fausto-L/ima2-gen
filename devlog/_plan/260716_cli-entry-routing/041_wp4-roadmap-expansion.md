@@ -83,4 +83,10 @@ fixture로 만든 계약 테스트).
 4. lineage(taskId+provider+kind)만으로 recover 재개 계약 테스트.
 5. 바인딩 없음/training/failed/capability 미스매치 각각의 fail path 계약 테스트.
 6. Runway 캐릭터 생성 1건(사용자 승인 시) refs+tag 통과 + lineage에 characterElementId 기록.
+   → **완료 (2026-07-20, 사용자 승인)**: `ima2 gen "@jipy watering flowers…"
+   --model runway/gen-4 --character Jipy` — requestId `req_cli_gen_mrsy66we_shxc9l`,
+   sidecar에 `characterElementId: a_01KXMRWE2GHA7KMZ76NYAEF38D`,
+   `referenceParents: [{filename: 1780486863325_efd3b33c_0.png, role: image-reference,
+   tag: jipy}]`, providerTaskId 기록. uploading phase 관측, 결과 이미지는 레퍼런스와
+   같은 캐릭터(시각 확인).
 7. Higgsfield 트랙은 결제 전까지 UI 배지 + train 비활성(계약 테스트로 고정).
