@@ -11,6 +11,7 @@ import { publishJobEvent } from "../lib/ssePublish.js";
 import { safeGeneratedFilePath } from "../lib/videoFrameExtract.js";
 import { concatVideos } from "../lib/videoConcat.js";
 import { executeMediaJob, executeMediaPlan } from "../lib/mcp/executeMediaJob.js";
+import { executeEditVideoPreview } from "../lib/mcp/editVideoPreview.js";
 import { downloadMediaResult } from "../lib/mcp/downloadMediaResult.js";
 import { commitMediaResult } from "../lib/mcp/commitMediaResult.js";
 import { appendMcpJobLog, logMcpJobError } from "../lib/mcp/jobLog.js";
@@ -100,6 +101,8 @@ async function handleMediaAction(
     ? req.body.keyframeTimestampSeconds : undefined;
   const previewUrl = typeof req.body?.previewUrl === "string" && req.body.previewUrl
     ? req.body.previewUrl : undefined;
+  const keyframeModel = typeof req.body?.keyframeModel === "string" && req.body.keyframeModel
+    ? req.body.keyframeModel : undefined;
   const operation = ACTION_TO_OPERATION[String(action)];
   if (!operation) { res.status(400).json({ error: { code: "INVALID_ACTION", message: `unknown action: ${String(action)}` } }); return; }
   if (files.length === 0) { res.status(400).json({ error: { code: "INVALID_FILES", message: "files[] is required" } }); return; }
@@ -142,7 +145,7 @@ async function handleMediaAction(
 
   const abort = new AbortController();
   registerJobAbortController(requestId, abort);
-  void runMediaAction({ ctx, deps, requestId, operation, decision: decision.plan!, mode: decision.mode, provider, resolvedFiles, prompt: typeof prompt === "string" ? prompt : undefined, keyframeTimestampSeconds, previewUrl, signal: abort.signal });
+  void runMediaAction({ ctx, deps, requestId, operation, decision: decision.plan!, mode: decision.mode, provider, resolvedFiles, prompt: typeof prompt === "string" ? prompt : undefined, keyframeTimestampSeconds, previewUrl, keyframeModel, signal: abort.signal });
 }
 
 async function runMediaAction(input: {
@@ -157,6 +160,7 @@ async function runMediaAction(input: {
   prompt?: string;
   keyframeTimestampSeconds?: number;
   previewUrl?: string;
+  keyframeModel?: string;
   signal: AbortSignal;
 }): Promise<void> {
   const { ctx, deps, requestId } = input;
@@ -194,15 +198,43 @@ async function runMediaAction(input: {
       ...(input.prompt ? { prompt: input.prompt } : {}),
       ...(input.keyframeTimestampSeconds !== undefined ? { keyframeTimestampSeconds: input.keyframeTimestampSeconds } : {}),
       ...(input.previewUrl ? { keyframeImageUrl: input.previewUrl } : {}),
+      ...(input.keyframeModel ? { keyframeModel: input.keyframeModel } : {}),
     });
+    // edit-video-preview is SYNCHRONOUS (wp5b2 live capture): stage-1 returns
+    // structuredContent.kind === "keyframe_preview" with keyframeUrl — no async
+    // task exists, so the executeMediaPlan polling loop must not run here.
+    if (input.operation === "video.edit.preview") {
+      setJobPhase(requestId, "provider-running");
+      publishJobEvent(requestId, "progress", { phase: "provider-running" });
+      const preview = await executeEditVideoPreview(manager, runwayAdapter, plan, { signal: input.signal });
+      setJobPhase(requestId, "downloading");
+      publishJobEvent(requestId, "progress", { phase: "downloading" });
+      const download = await deps.download(preview.keyframeUrl, { kind: "image", attempts: 5, baseDelayMs: 4_000 });
+      await commitMediaResult({
+        ctx, deps, requestId, kind: "image",
+        tempPath: download.tempPath, cleanup: download.cleanup,
+        ext: extensionFor("image", download.contentType, preview.keyframeUrl),
+        meta: {
+          requestId, mediaType: "image", provider: input.provider, providerTransport: "mcp-streamable-http",
+          providerUrl: download.sanitizedUrl,
+          workflow: input.operation, kind: `mcp-action`,
+          parent: { filename: basename(source), mediaType: "video", role: "source" },
+          approvalStatus: "pending",
+          ...(preview.keyframeTimestampSeconds !== undefined ? { keyframeTimestampSeconds: preview.keyframeTimestampSeconds } : {}),
+          ...(input.prompt ? { editPrompt: input.prompt } : {}),
+          ...(preview.nextArguments ? { keyframeSubmit: preview.nextArguments } : {}),
+        },
+        doneExtra: { workflow: input.operation, mode: "native", provider: input.provider },
+      });
+      return;
+    }
     const result = await deps.executePlan(manager, runwayAdapter, plan, {
       signal: input.signal,
       onPhase: (phase) => { setJobPhase(requestId, phase); publishJobEvent(requestId, "progress", { phase }); },
     });
     setJobPhase(requestId, "downloading");
     publishJobEvent(requestId, "progress", { phase: "downloading" });
-    const isPreview = input.operation === "video.edit.preview";
-    const kind = input.operation === "image.upscale" || isPreview ? "image" as const : "video" as const;
+    const kind = input.operation === "image.upscale" ? "image" as const : "video" as const;
     const download = await deps.download(result.outputUrls[0], { kind, attempts: 5, baseDelayMs: 4_000 });
     await commitMediaResult({
       ctx, deps, requestId, kind,
@@ -213,7 +245,6 @@ async function runMediaAction(input: {
         providerTaskId: result.taskId, providerUrl: download.sanitizedUrl,
         workflow: input.operation, kind: `mcp-action`,
         parent: { filename: basename(source), mediaType: kind === "image" ? "image" : "video", role: "source" },
-        ...(isPreview ? { approvalStatus: "pending" } : {}),
         ...(input.operation === "video.edit.submit" ? { approvalOf: input.previewUrl } : {}),
       },
       doneExtra: { workflow: input.operation, mode: "native", provider: input.provider },

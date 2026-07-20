@@ -258,6 +258,7 @@ export interface EditVideoInputs {
   prompt?: string;
   keyframeTimestampSeconds?: number;
   keyframeImageUrl?: string;
+  keyframeModel?: string;
   upscale?: Record<string, unknown>;
 }
 
@@ -279,6 +280,7 @@ export function buildRunwayActionCall(action: RunwayMediaAction, inputs: EditVid
       return { toolName: "edit_video", args: {
         rationale, promptText: inputs.prompt, video: { url: inputs.url },
         ...(inputs.keyframeTimestampSeconds !== undefined ? { keyframeTimestampSeconds: inputs.keyframeTimestampSeconds } : {}),
+        ...(inputs.keyframeModel ? { keyframeModel: inputs.keyframeModel } : {}),
       } };
     }
     case "edit-video-submit": {

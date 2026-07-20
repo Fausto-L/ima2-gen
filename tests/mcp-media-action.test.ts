@@ -29,7 +29,22 @@ writeFileSync(join(dir, "generated", "src-image.png"), Buffer.from([0x89, 0x50, 
 writeFileSync(join(dir, "generated", "clip-a.mp4"), Buffer.from("a"));
 writeFileSync(join(dir, "generated", "clip-b.mp4"), Buffer.from("b"));
 
-const fakeManager = { status: () => ({ provider: "runway", state: "connected", snapshotDiff: { drifted: [], missing: [], added: [] } }) };
+const keyframePreviewResponse = {
+  content: [{ type: "text", text: "Edited keyframe generated (t=0.5s). The video edit has NOT been submitted yet.\n\nKeyframe URL: https://cdn.example.com/kf.png" }],
+  structuredContent: {
+    kind: "keyframe_preview", prompt: "add snow", keyframeTimestampSeconds: 0.5,
+    keyframeUrl: "https://cdn.example.com/kf.png", nextTool: "edit_video",
+    nextArguments: { video: { url: "https://cdn.example.com/src.mp4" }, keyframeImage: { url: "https://cdn.example.com/kf.png" } },
+  },
+};
+
+const fakeManager = {
+  status: () => ({ provider: "runway", state: "connected", snapshotDiff: { drifted: [], missing: [], added: [] } }),
+  callTool: async (_provider: string, toolName: string) => {
+    if (toolName === "edit_video") return keyframePreviewResponse;
+    throw new Error(`unexpected tool ${toolName}`);
+  },
+};
 
 const tempOut = join(dir, "action-result.bin");
 const deps = {
@@ -79,6 +94,7 @@ test("path traversal in files[] is rejected before any work", async () => withAp
 }));
 
 test("native upscale-image dispatches plan, records parent lineage in sidecar", async () => withApp(async (base) => {
+  const donePromise = waitForEvent("act-1", "done");
   const response = await fetch(`${base}/api/mcp/media-action`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ action: "upscale-image", files: ["src-image.png"], requestId: "act-1" }),
@@ -87,19 +103,20 @@ test("native upscale-image dispatches plan, records parent lineage in sidecar", 
   const body = await response.json() as { mode: string; plan: string };
   assert.equal(body.mode, "native");
   assert.equal(body.plan, "upscale_image");
-  const done = await waitForEvent("act-1", "done");
+  const done = await donePromise;
   const sidecar = JSON.parse(readFileSync(join(dir, "generated", String(done.filename) + ".json"), "utf8"));
   assert.deepEqual(sidecar.parent, { filename: "src-image.png", mediaType: "image", role: "source" });
   assert.equal(sidecar.workflow, "image.upscale");
 }));
 
 test("stitch falls back to local concat with fallback metadata (native call 0)", async () => withApp(async (base) => {
+  const donePromise = waitForEvent("act-2", "done");
   const response = await fetch(`${base}/api/mcp/media-action`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ action: "stitch", files: ["clip-a.mp4", "clip-b.mp4"], requestId: "act-2" }),
   });
   assert.equal((await response.json() as { mode: string }).mode, "fallback");
-  const done = await waitForEvent("act-2", "done");
+  const done = await donePromise;
   const sidecar = JSON.parse(readFileSync(join(dir, "generated", String(done.filename) + ".json"), "utf8"));
   assert.equal(sidecar.fallback, true);
   assert.equal(sidecar.provider, "local-ffmpeg");
@@ -113,4 +130,21 @@ test("reframe is unavailable (higgsfield locked) with typed 409", async () => wi
   });
   assert.equal(response.status, 409);
   assert.equal((await response.json() as { error: { code: string } }).error.code, "MEDIA_ACTION_UNAVAILABLE");
+}));
+
+test("edit-video-preview runs synchronously (no polling) and commits an approval-pending image (wp5b2)", async () => withApp(async (base) => {
+  const donePromise = waitForEvent("act-3", "done");
+  const response = await fetch(`${base}/api/mcp/media-action`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "edit-video-preview", files: ["clip-a.mp4"], prompt: "add snow", keyframeTimestampSeconds: 0.5, requestId: "act-3" }),
+  });
+  assert.equal(response.status, 202);
+  const done = await donePromise;
+  const sidecar = JSON.parse(readFileSync(join(dir, "generated", String(done.filename) + ".json"), "utf8"));
+  assert.equal(sidecar.workflow, "video.edit.preview");
+  assert.equal(sidecar.mediaType, "image");
+  assert.equal(sidecar.approvalStatus, "pending");
+  assert.equal(sidecar.keyframeTimestampSeconds, 0.5);
+  assert.deepEqual(sidecar.parent, { filename: "clip-a.mp4", mediaType: "video", role: "source" });
+  assert.deepEqual(sidecar.keyframeSubmit?.keyframeImage, { url: "https://cdn.example.com/kf.png" });
 }));
