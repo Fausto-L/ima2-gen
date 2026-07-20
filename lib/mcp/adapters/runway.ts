@@ -251,10 +251,19 @@ function balancedJsonEnd(text: string, brace: number): number {
   return -1;
 }
 
-export type RunwayMediaAction = "upscale-video" | "upscale-image" | "edit-video";
+export type RunwayMediaAction = "upscale-video" | "upscale-image" | "edit-video" | "edit-video-preview" | "edit-video-submit";
 
-/** Native media-action plans (060 WP6). Inputs must be runway-hosted or public HTTPS URLs. */
-export function buildRunwayActionCall(action: RunwayMediaAction, inputs: { url: string; prompt?: string }): ToolCallPlan {
+export interface EditVideoInputs {
+  url: string;
+  prompt?: string;
+  keyframeTimestampSeconds?: number;
+  keyframeImageUrl?: string;
+  upscale?: Record<string, unknown>;
+}
+
+/** Native media-action plans (060 WP6). Inputs must be runway-hosted or public HTTPS URLs.
+ *  wp5 052: edit-video-preview / edit-video-submit extend the inputs for the 2-step keyframe workflow. */
+export function buildRunwayActionCall(action: RunwayMediaAction, inputs: EditVideoInputs & { url: string; prompt?: string }): ToolCallPlan {
   const rationale = DEFAULT_RATIONALE;
   switch (action) {
     case "upscale-video":
@@ -264,6 +273,22 @@ export function buildRunwayActionCall(action: RunwayMediaAction, inputs: { url: 
     case "edit-video": {
       if (!inputs.prompt) throw new Error("MCP_ACTION_PROMPT_REQUIRED");
       return { toolName: "edit_video", args: { rationale, promptText: inputs.prompt, video: { url: inputs.url } } };
+    }
+    case "edit-video-preview": {
+      if (!inputs.prompt) throw new Error("MCP_ACTION_PROMPT_REQUIRED");
+      return { toolName: "edit_video", args: {
+        rationale, promptText: inputs.prompt, video: { url: inputs.url },
+        ...(inputs.keyframeTimestampSeconds !== undefined ? { keyframeTimestampSeconds: inputs.keyframeTimestampSeconds } : {}),
+      } };
+    }
+    case "edit-video-submit": {
+      if (!inputs.prompt) throw new Error("MCP_ACTION_PROMPT_REQUIRED");
+      if (!inputs.keyframeImageUrl) throw new Error("MCP_ACTION_PREVIEW_REQUIRED");
+      return { toolName: "edit_video", args: {
+        rationale, promptText: inputs.prompt, video: { url: inputs.url },
+        keyframeImage: { url: inputs.keyframeImageUrl },
+        ...(inputs.keyframeTimestampSeconds !== undefined ? { keyframeTimestampSeconds: inputs.keyframeTimestampSeconds } : {}),
+      } };
     }
   }
 }

@@ -7,7 +7,9 @@ export type MediaOperation =
   | "video.upscale"
   | "image.upscale"
   | "video.edit"
-  | "video.reframe";
+  | "video.reframe"
+  | "video.edit.preview"
+  | "video.edit.submit";
 
 export type MediaActionMode = "native" | "fallback" | "unavailable";
 
@@ -28,6 +30,8 @@ const NATIVE_TOOL: Partial<Record<MediaOperation, Record<string, string>>> = {
   "video.upscale": { runway: "upscale_video" },
   "image.upscale": { runway: "upscale_image" },
   "video.edit": { runway: "edit_video" },
+  "video.edit.preview": { runway: "edit_video" },
+  "video.edit.submit": { runway: "edit_video" },
 };
 
 const FALLBACK: Partial<Record<MediaOperation, string>> = {

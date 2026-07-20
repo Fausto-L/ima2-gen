@@ -486,7 +486,13 @@ export class McpConnectionManager {
       undefined,
       { ...(options.signal ? { signal: options.signal } : {}), timeout: options.timeoutMs ?? 120_000 },
     );
-      if ((raw as { isError?: boolean }).isError) throw new Error(`MCP_TOOL_ERROR:${name}`);
+      if ((raw as { isError?: boolean }).isError) {
+        const content = (raw as { content?: unknown[] }).content;
+        const text = Array.isArray(content)
+          ? content.map((c) => (c as { text?: string }).text ?? "").filter(Boolean).join(" ")
+          : JSON.stringify(raw).slice(0, 300);
+        throw new Error(`MCP_TOOL_ERROR:${name}:${text.slice(0, 300)}`);
+      }
       return raw;
     } catch (error) {
       markSessionInvalid(this.sessions.get(provider), identity, error);

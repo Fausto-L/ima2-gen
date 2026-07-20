@@ -83,6 +83,8 @@ const ACTION_TO_OPERATION: Record<string, MediaOperation> = {
   "upscale-image": "image.upscale",
   "edit-video": "video.edit",
   "reframe": "video.reframe",
+  "edit-video-preview": "video.edit.preview",
+  "edit-video-submit": "video.edit.submit",
 };
 
 async function handleMediaAction(
@@ -94,9 +96,17 @@ async function handleMediaAction(
   const { action, prompt } = req.body ?? {};
   const provider = typeof req.body?.provider === "string" ? req.body.provider : "runway";
   const files: string[] = Array.isArray(req.body?.files) ? req.body.files.map(String) : [];
+  const keyframeTimestampSeconds = typeof req.body?.keyframeTimestampSeconds === "number"
+    ? req.body.keyframeTimestampSeconds : undefined;
+  const previewUrl = typeof req.body?.previewUrl === "string" && req.body.previewUrl
+    ? req.body.previewUrl : undefined;
   const operation = ACTION_TO_OPERATION[String(action)];
   if (!operation) { res.status(400).json({ error: { code: "INVALID_ACTION", message: `unknown action: ${String(action)}` } }); return; }
   if (files.length === 0) { res.status(400).json({ error: { code: "INVALID_FILES", message: "files[] is required" } }); return; }
+  if (operation === "video.edit.submit" && !previewUrl) {
+    res.status(400).json({ error: { code: "INVALID_PREVIEW", message: "previewUrl is required for edit-video-submit" } });
+    return;
+  }
 
   // Containment-validate every input before any work (audit blocker 2).
   const resolvedFiles: string[] = [];
@@ -132,7 +142,7 @@ async function handleMediaAction(
 
   const abort = new AbortController();
   registerJobAbortController(requestId, abort);
-  void runMediaAction({ ctx, deps, requestId, operation, decision: decision.plan!, mode: decision.mode, provider, resolvedFiles, prompt: typeof prompt === "string" ? prompt : undefined, signal: abort.signal });
+  void runMediaAction({ ctx, deps, requestId, operation, decision: decision.plan!, mode: decision.mode, provider, resolvedFiles, prompt: typeof prompt === "string" ? prompt : undefined, keyframeTimestampSeconds, previewUrl, signal: abort.signal });
 }
 
 async function runMediaAction(input: {
@@ -145,6 +155,8 @@ async function runMediaAction(input: {
   provider: string;
   resolvedFiles: string[];
   prompt?: string;
+  keyframeTimestampSeconds?: number;
+  previewUrl?: string;
   signal: AbortSignal;
 }): Promise<void> {
   const { ctx, deps, requestId } = input;
@@ -177,14 +189,20 @@ async function runMediaAction(input: {
       ? (ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : "image/jpeg")
       : "video/mp4";
     const sourceUrl = await deps.upload(manager, source, { fileName: basename(source), mimeType: mime });
-    const plan = buildRunwayActionCall(actionForOperation(input.operation), { url: sourceUrl, ...(input.prompt ? { prompt: input.prompt } : {}) });
+    const plan = buildRunwayActionCall(actionForOperation(input.operation), {
+      url: sourceUrl,
+      ...(input.prompt ? { prompt: input.prompt } : {}),
+      ...(input.keyframeTimestampSeconds !== undefined ? { keyframeTimestampSeconds: input.keyframeTimestampSeconds } : {}),
+      ...(input.previewUrl ? { keyframeImageUrl: input.previewUrl } : {}),
+    });
     const result = await deps.executePlan(manager, runwayAdapter, plan, {
       signal: input.signal,
       onPhase: (phase) => { setJobPhase(requestId, phase); publishJobEvent(requestId, "progress", { phase }); },
     });
     setJobPhase(requestId, "downloading");
     publishJobEvent(requestId, "progress", { phase: "downloading" });
-    const kind = input.operation === "image.upscale" ? "image" as const : "video" as const;
+    const isPreview = input.operation === "video.edit.preview";
+    const kind = input.operation === "image.upscale" || isPreview ? "image" as const : "video" as const;
     const download = await deps.download(result.outputUrls[0], { kind, attempts: 5, baseDelayMs: 4_000 });
     await commitMediaResult({
       ctx, deps, requestId, kind,
@@ -195,11 +213,14 @@ async function runMediaAction(input: {
         providerTaskId: result.taskId, providerUrl: download.sanitizedUrl,
         workflow: input.operation, kind: `mcp-action`,
         parent: { filename: basename(source), mediaType: kind === "image" ? "image" : "video", role: "source" },
+        ...(isPreview ? { approvalStatus: "pending" } : {}),
+        ...(input.operation === "video.edit.submit" ? { approvalOf: input.previewUrl } : {}),
       },
       doneExtra: { workflow: input.operation, mode: "native", provider: input.provider },
     });
   } catch (error) {
     const code = errorCode(error);
+    console.error(`[mcp-action ERROR] requestId=${requestId} operation=${input.operation} code=${code} message=${(error as Error)?.message?.slice(0, 500)} stack=${(error as Error)?.stack?.slice(0, 300)}`);
     void logMcpJobError(ctx.config.storage.generatedDir, { requestId, provider: "runway" }, error);
     finishJob(requestId, { status: "error", errorCode: code });
     publishJobEvent(requestId, "error", { code, message: "media action failed" });
@@ -209,6 +230,8 @@ async function runMediaAction(input: {
 function actionForOperation(operation: MediaOperation): RunwayMediaAction {
   if (operation === "video.upscale") return "upscale-video";
   if (operation === "image.upscale") return "upscale-image";
+  if (operation === "video.edit.preview") return "edit-video-preview";
+  if (operation === "video.edit.submit") return "edit-video-submit";
   return "edit-video";
 }
 
