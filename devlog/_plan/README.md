@@ -37,6 +37,12 @@ Deferred / 미래 항목은 `_plan/` 직속이 아니라 `_plan/_future/`에 둔
 2026-07-15: `260715_asset_gen_mode/`(에셋 생성 모드 — asset-gen 탭, backgroundPreset,
 클라이언트 키잉, 알파 WebM 파생) WP1-WP11 완료로 `_fin/` 이동.
 
+2026-07-20: `260719_higgsfield-recover-guard/`(recover route 409 실행 가드 +
+Higgsfield unlock 사전조건 기록) 검증 재확인(typecheck 0 errors,
+mcp-recover-route 5/5) 후 `_fin/` 이동. 같은 날짜의
+`260719_node22-mcp-timer-unref/`, `260719_windows-ci-matrix-repair/`는 별도
+closeout 예정으로 `_plan`에 남는다.
+
 Deferred (`_plan/_future/`): `260715_icon_pipeline/`,
 `260430_issue27-canvas-svg-export/`,
 `260430_issue28-canvas-pptx-export/`, `260430_issue31-provider-masked-edit/`,
