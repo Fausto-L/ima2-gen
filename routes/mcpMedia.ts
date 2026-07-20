@@ -55,10 +55,10 @@ function stripQuery(rawUrl: string | undefined): string | null {
   }
 }
 
-const IMAGE_INPUT_MAX_BYTES = 50 * 1024 * 1024;
+export const IMAGE_INPUT_MAX_BYTES = 50 * 1024 * 1024;
 const VIDEO_INPUT_MAX_BYTES = 100 * 1024 * 1024;
 
-async function localMediaPath(
+export async function localMediaPath(
   generatedDir: string,
   filename: string,
   options: { label: string; maxBytes: number; extensions: RegExp },

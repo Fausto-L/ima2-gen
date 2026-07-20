@@ -1018,6 +1018,15 @@ through the same single persistence owner with `parent`/`inputs` lineage.
 
 ### `POST /api/mcp/tasks/:taskId/recover`
 
+### `POST /api/mcp/multishot`
+
+Generate a multishot (multi-scene) video through Runway MCP. Body:
+`{ prompt?: string, shots?: string[] (3-5), duration?: 5|10|15, resolution?: "720p"|"1080p", aspectRatio?, sound?: boolean, firstSceneFilename?, requestId? }`.
+`prompt` maps to auto mode (storyPrompt); `shots[]` maps to custom mode.
+One of `prompt` or `shots` is required (`400 INVALID_MULTISHOT` otherwise).
+Async: `202 { requestId, provider }`; lifecycle events on `/api/events`.
+Results commit with `workflow: "video.multishot"` and `mcpParameters`.
+
 Re-download a remote-succeeded MCP task into the generated library. Body:
 `{ provider?: "runway", kind?: "video"|"image" }`. Use after a generation's
 download/commit step failed transiently — provider assets stay fetchable for

@@ -37,6 +37,7 @@ import { registerMcpConnectionRoutes } from "./mcpConnections.js";
 import { registerMcpMediaRoutes } from "./mcpMedia.js";
 import { registerMcpRecoverRoutes } from "./mcpRecover.js";
 import { registerMcpTempReferenceRoutes } from "./mcpTempReferences.js";
+import { registerMcpMultishotRoutes } from "./mcpMultishot.js";
 import { registerContractRoutes } from "./contracts.js";
 import { mountKeyRoutes } from "./keys.js";
 import { registerGenerationRequestLogRoutes } from "./generationRequestLog.js";
@@ -82,6 +83,7 @@ export function configureRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
   registerMcpMediaRoutes(app, ctx);
   registerMcpRecoverRoutes(app, ctx);
   registerMcpTempReferenceRoutes(app, ctx);
+  registerMcpMultishotRoutes(app, ctx);
   registerContractRoutes(app, ctx);
   mountKeyRoutes(app, ctx);
   registerGenerationRequestLogRoutes(app, ctx);

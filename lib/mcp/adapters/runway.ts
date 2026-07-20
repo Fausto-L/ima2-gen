@@ -293,6 +293,39 @@ export function buildRunwayActionCall(action: RunwayMediaAction, inputs: EditVid
   }
 }
 
+/** Multishot video plan (wp5 053). */
+export function buildMultishotCall(input: {
+  storyPrompt?: string;
+  shots?: string[];
+  duration?: 5 | 10 | 15;
+  aspectRatio?: string;
+  resolution?: "720p" | "1080p";
+  sound?: boolean;
+  firstSceneImageUrl?: string;
+}): ToolCallPlan {
+  const mode = input.shots && input.shots.length > 0 ? "custom" : "auto";
+  if (mode === "custom") {
+    if (!input.shots || input.shots.length < 3 || input.shots.length > 5) {
+      throw new Error("MCP_REQUEST_INVALID:multishot custom mode requires 3-5 shots");
+    }
+  } else {
+    if (!input.storyPrompt) throw new Error("MCP_REQUEST_INVALID:multishot auto mode requires storyPrompt");
+  }
+  return {
+    toolName: "generate_multishot_video",
+    args: {
+      rationale: DEFAULT_RATIONALE,
+      mode,
+      ...(mode === "auto" ? { storyPrompt: input.storyPrompt } : { shots: input.shots!.map((prompt) => ({ prompt })) }),
+      ...(input.duration !== undefined ? { duration: input.duration } : {}),
+      ...(input.aspectRatio ? { aspectRatio: input.aspectRatio } : {}),
+      ...(input.resolution ? { resolution: input.resolution } : {}),
+      ...(input.sound !== undefined ? { sound: input.sound } : {}),
+      ...(input.firstSceneImageUrl ? { firstSceneImage: { url: input.firstSceneImageUrl } } : {}),
+    },
+  };
+}
+
 export const runwayAdapter: MediaProviderAdapter = {
   provider: "runway",
   models: { image: IMAGE_MODELS, video: VIDEO_MODELS },
