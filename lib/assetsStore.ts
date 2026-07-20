@@ -8,6 +8,24 @@ export type AssetKind = (typeof ASSET_KINDS)[number];
 export const ELEMENT_KINDS = ["character", "product", "style", "scene"] as const;
 export type ElementKind = (typeof ELEMENT_KINDS)[number];
 
+export const CHARACTER_BINDING_PROVIDERS = ["runway", "higgsfield"] as const;
+export type CharacterBindingProvider = (typeof CHARACTER_BINDING_PROVIDERS)[number];
+export const CHARACTER_BINDING_MODES = ["stateless-refs", "trained-id"] as const;
+export type CharacterBindingMode = (typeof CHARACTER_BINDING_MODES)[number];
+export type CharacterBindingStatus = "ready" | "training" | "failed";
+
+export type CharacterProviderBinding = {
+  provider: CharacterBindingProvider;
+  mode: CharacterBindingMode;
+  externalId?: string;
+  tag?: string;
+  status?: CharacterBindingStatus;
+  trainedAt?: string;
+  trainedFromRefs?: string[];
+};
+
+const CHARACTER_BINDING_TAG_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;
+
 export type AssetRecord = {
   id: string;
   kind: AssetKind;
@@ -164,6 +182,73 @@ function assertElementMetadata(value: unknown) {
   ) {
     throw storeError(400, "INVALID_ELEMENT_METADATA", "element defaultStrength must be a number from 0 to 1");
   }
+  if (metadata.characterBindings !== undefined) {
+    assertCharacterBindings(metadata.characterBindings, metadata.elementKind as ElementKind);
+  }
+}
+
+function assertCharacterBindings(value: unknown, elementKind: ElementKind) {
+  if (elementKind !== "character") {
+    throw storeError(400, "INVALID_ELEMENT_METADATA", "characterBindings require elementKind=character");
+  }
+  if (!Array.isArray(value) || value.length > 2) {
+    throw storeError(400, "INVALID_ELEMENT_METADATA", "characterBindings must be an array of at most 2 entries");
+  }
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw storeError(400, "INVALID_ELEMENT_METADATA", "characterBindings entries must be objects");
+    }
+    const binding = entry as Record<string, unknown>;
+    if (typeof binding.provider !== "string" || !(CHARACTER_BINDING_PROVIDERS as readonly string[]).includes(binding.provider)) {
+      throw storeError(400, "INVALID_ELEMENT_METADATA", `binding provider must be one of ${CHARACTER_BINDING_PROVIDERS.join("|")}`);
+    }
+    if (seen.has(binding.provider)) {
+      throw storeError(400, "INVALID_ELEMENT_METADATA", `duplicate binding for provider ${binding.provider}`);
+    }
+    seen.add(binding.provider);
+    if (typeof binding.mode !== "string" || !(CHARACTER_BINDING_MODES as readonly string[]).includes(binding.mode)) {
+      throw storeError(400, "INVALID_ELEMENT_METADATA", `binding mode must be one of ${CHARACTER_BINDING_MODES.join("|")}`);
+    }
+    if (binding.provider === "runway" && binding.mode !== "stateless-refs") {
+      throw storeError(400, "INVALID_ELEMENT_METADATA", "runway bindings must use mode stateless-refs");
+    }
+    if (binding.provider === "higgsfield" && binding.mode !== "trained-id") {
+      throw storeError(400, "INVALID_ELEMENT_METADATA", "higgsfield bindings must use mode trained-id");
+    }
+    if (binding.externalId !== undefined && typeof binding.externalId !== "string") {
+      throw storeError(400, "INVALID_ELEMENT_METADATA", "binding externalId must be a string");
+    }
+    if (binding.tag !== undefined && (typeof binding.tag !== "string" || !CHARACTER_BINDING_TAG_PATTERN.test(binding.tag))) {
+      throw storeError(400, "INVALID_ELEMENT_METADATA", "binding tag must be 1-32 letters, numbers, underscores, or hyphens");
+    }
+    if (binding.status !== undefined && !["ready", "training", "failed"].includes(binding.status as string)) {
+      throw storeError(400, "INVALID_ELEMENT_METADATA", "binding status must be ready|training|failed");
+    }
+    if (binding.trainedAt !== undefined && typeof binding.trainedAt !== "string") {
+      throw storeError(400, "INVALID_ELEMENT_METADATA", "binding trainedAt must be a string");
+    }
+    if (binding.trainedFromRefs !== undefined
+      && (!Array.isArray(binding.trainedFromRefs) || binding.trainedFromRefs.length > 6
+        || binding.trainedFromRefs.some((ref) => typeof ref !== "string"))) {
+      throw storeError(400, "INVALID_ELEMENT_METADATA", "binding trainedFromRefs must be an array of up to 6 file paths");
+    }
+  }
+}
+
+/** Character bindings reference the element itself (not individual refs), so while
+ *  any binding exists the full refs list is binding-referenced (041 invariant 1). */
+export function bindingsOf(metadata: Record<string, unknown> | null): CharacterProviderBinding[] {
+  const bindings = metadata?.characterBindings;
+  return Array.isArray(bindings) ? (bindings as CharacterProviderBinding[]) : [];
+}
+
+/** Drift check (041 invariant 2): trained-id bindings drift when the current refs
+ *  differ from the snapshot recorded at train time. Stateless bindings never drift. */
+export function bindingDrift(currentRefs: string[], binding: CharacterProviderBinding): boolean {
+  if (binding.mode !== "trained-id" || !Array.isArray(binding.trainedFromRefs)) return false;
+  if (binding.trainedFromRefs.length !== currentRefs.length) return true;
+  return binding.trainedFromRefs.some((ref, index) => currentRefs[index] !== ref);
 }
 
 function assertElementKind(value: unknown): ElementKind {
@@ -389,7 +474,11 @@ export function updateAsset(
     patch.metadata === undefined
       ? serializeMetadata(existing.metadata)
       : serializeMetadata(patch.metadata);
-  if (existing.kind === "element") assertElementMetadata(parseMetadata(metadata));
+  if (existing.kind === "element") {
+    const parsed = parseMetadata(metadata);
+    assertElementMetadata(parsed);
+    assertRefsPreservedForBindings(existing.metadata, parsed);
+  }
   const tags = patch.tags === undefined ? existing.tags : normalizeTags(patch.tags);
   const t = now();
   const run = db.transaction(() => {
@@ -400,6 +489,24 @@ export function updateAsset(
   });
   run();
   return getAsset(id);
+}
+
+/** Refs preservation guard (041 invariant 1): while any character binding exists,
+ *  removing refs is rejected with 409 — removal requires an explicit unlink
+ *  (dropping/changing characterBindings in the same patch). Comparison is a raw
+ *  string set-difference, so reorders and additions pass while dedupe/rename/
+ *  asset-move count as removal. */
+function assertRefsPreservedForBindings(
+  previous: Record<string, unknown> | null,
+  next: Record<string, unknown> | null,
+) {
+  if (bindingsOf(previous).length === 0 || bindingsOf(next).length === 0) return;
+  const oldRefs = Array.isArray(previous?.refs) ? (previous?.refs as string[]) : [];
+  const newRefs = Array.isArray(next?.refs) ? (next?.refs as string[]) : [];
+  const removed = oldRefs.filter((ref) => !newRefs.includes(ref));
+  if (removed.length > 0) {
+    throw storeError(409, "REFS_BOUND_TO_CHARACTER", "remove the character binding first (unlink)");
+  }
 }
 
 export function deleteAsset(id: string): boolean {
