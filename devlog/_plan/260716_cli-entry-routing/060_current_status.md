@@ -1,9 +1,9 @@
 ---
 title: "060 — 현재 상태 및 재개 가이드"
 lane: "260716_cli-entry-routing"
-status: "wp1~wp3 완료 · wp4/wp5 로드맵 확장(041/051) 반영 · 구현 미착수"
+status: "wp1~wp4 완료 · wp5 로드맵 확장(051) 반영 · 구현 대기"
 updated: "2026-07-20"
-evidence: "2026-07-18 closeout-sweep audit + 2026-07-20 로드맵 확장 사이클(Sol A-gate GO-WITH-FIXES 3 fold)"
+evidence: "2026-07-18 closeout-sweep audit + 2026-07-20 wp4 구현 루프(1772/1772 green)"
 ---
 
 # 060 — CLI 진입점 라우팅: 현재 상태 및 재개 가이드
@@ -17,7 +17,7 @@ evidence: "2026-07-18 closeout-sweep audit + 2026-07-20 로드맵 확장 사이�
 | wp1 | 완료 | strict model routing, fail-closed 기본 모델, 모델/도구 dispatch | `80da5e7`; 모델/도구 dispatch 후속은 `4505642` |
 | wp2 | 완료 | CLI 문서·스킬 이관 및 버전 갱신 | `21b9b9b` |
 | wp3 | 완료 | end frame·이미지/비디오 레퍼런스의 서버 계약, inputRoles 게이트, UI 슬롯, CLI 연동 | `a878e74`; 잔여 타입/카탈로그/UI 스타일은 `4505642`; [Gen-4 Turbo 슬롯 증거](evidence-wp3-gen4turbo-slots.png), [Seedance 슬롯 증거](evidence-wp3-seedance-slots.png) |
-| wp4 | 로드맵 확장 완료 · 구현 미착수 | 040 스펙 + [041 amendment](041_wp4-roadmap-expansion.md)(저장 모델 element.refs 재사용+보존 불변식, 409 충돌 규칙, recover 계약, UI/CLI 봉투). 캐릭터 binding 저장/조회, MCP 요청·lineage 연결, Runway/Higgsfield 브리지, UI, CLI 전부 남음 | `characterBindings`, `characterElementId`, `--character`는 devlog 밖 코드에 없음; delta 근거 [001](001_current-feature-delta.md) |
+| wp4 | 구현 완료 (라이브 생성 증거만 보류) | 042-046 슬라이스 전부 랜딩: 저장 모델(lib/characterBindings.ts, 409 REFS_BOUND 가드), /api/mcp/generate characterElementId(lib/mcp/characterRefs.ts, 충돌/cap/NOT_READY 게이트), UI 카드+슬롯(CharacterBindingsCard/McpCharacterSlot), CLI --character(bin/lib/characterResolve.ts). 남은 것: 041 Accept 6의 Runway 실생성 1건(사용자 승인·과금)뿐 | `7dec392` `813b5a2` `3d9c046` `b0f6cb6` `d33354e` `4af8555`; 전체 스위트 1772/1772; [바인딩 카드 증거](evidence-wp4-bindings-card.png) |
 | wp5 | 로드맵 확장 완료 · 부분 기반 | 050 스펙 + [051 amendment](051_wp5-roadmap-expansion.md)(long-job 파이프라인 탑승, preview lineage 확장, ResultActions/stage 부착). multishot·keyframe preview·CLI·UI·Higgsfield 파생 기능은 미구현 | `lib/mcp/mediaWorkflowRouter.ts:27-35`, `lib/mcp/adapters/runway.ts:200-214` |
 
 wp3 후속 `4505642`에는 `ui/src/lib/mcpProviders.ts`의 end-frame/reference-video typed inputRoles, `mcp-models-catalog`의 `audio_references` 부정 assertion, 오른쪽 패널 reference-slot 스타일이 포함된다.
