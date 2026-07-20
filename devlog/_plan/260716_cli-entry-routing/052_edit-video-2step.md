@@ -52,11 +52,25 @@ RunwayMediaAction에 `"edit-video-preview" | "edit-video-submit"` 추가:
 - preview 결과 커밋(stage 1): 결과가 이미지 URL이면 kind=image로 commitMediaResult,
   meta에 `previewOf: <submit 의도 requestId>` 대신 `approvalStatus: "pending"`,
   `workflow: "video.edit.preview"`, parent(소스 비디오) 기록.
-  **stage-1 응답 shape은 미검증(unverified)** — 구현 시 stub으로 image-URL 응답을
-  주고, 라이브 1건에서 실제 shape을 확인해 다륾면 문서를 고친다(C-ACTIVATION).
+- ~~stage-1 응답 shape은 미검증(unverified)~~ → **2026-07-20 라이브 캡처로 확정
+  (proven)**: stage-1은 동기 응답 `structuredContent.kind === "keyframe_preview"`
+  + `keyframeUrl` + `nextArguments`(stage-2 인자 사전). task가 생성되지 않는다
+  ("The video edit has NOT been submitted yet"가 응답 텍스트에 명시). 구현은
+  `lib/mcp/editVideoPreview.ts`(동기 실행 + 504 재시도)로 분기하고 polling을
+  타지 않는다. preview sidecar에는 `keyframeSubmit: nextArguments`를 기록한다.
 - submit 커밋: meta에 `approvalOf: <previewFilename>`, `workflow: "video.edit.submit"`.
   preview sidecar의 approvalStatus를 "approved"로 갱신(헬퍼
   `markPreviewApproved(generatedDir, previewFilename)` — sidecar JSON 읽기-쓰기).
+
+### 3-1. 라이브 검증 상태 (2026-07-20)
+
+- stage-1 shape: proven (raw 캡처 보존 — 서버 로그 `[edit_video RAW SUBMIT]`).
+- stage-1 라이브 재현: Runway edit_video 엔드포인트가 CloudFront 30s 게이트웨이
+  상한으로 간헐적 504를 반환(동기 keyframe 생성이 30초를 넘는 경우). 계약 테스트와
+  재시도 로직으로 흡수하고, 제공자 회복 시간대에 재검증한다.
+- stage-2 submit: 계획/키프레임 전달까지는 정상 — Runway 응답이
+  "Runway workspace limit reached"를 반환. **워크스페이스 한도(과금/동시성)
+  문제로 사용자 판단 필요**(NEEDS_HUMAN). 코드 결함 아님.
 
 ### 4. UI — MODIFY `ui/src/components/ResultActions.tsx`
 
