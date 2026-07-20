@@ -48,6 +48,8 @@ export type McpGenerateInput = {
   /** Up to 3 tagged references; tag is the @alias usable in the prompt. */
   references?: Array<{ filename: string; tag?: string }>;
   referenceVideoFilename?: string;
+  /** Character element whose provider binding expands into references server-side. */
+  characterElementId?: string;
   requestId?: string;
 };
 

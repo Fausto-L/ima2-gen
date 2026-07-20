@@ -330,7 +330,7 @@ export function registerMcpMediaRoutes(app: Express, ctxRaw: RouteRuntimeContext
     // binding refs share one 3-entry cap rule. Never auto-trim (041 invariant 3).
     if (characterElementId) {
       const resolved = resolveCharacterBindingRefs(characterElementId, adapter.provider);
-      if (!resolved.ok) {
+      if (resolved.ok === false) {
         return res.status(resolved.status).json({ error: { code: resolved.code, message: resolved.message, ...(resolved.fix ? { fix: resolved.fix } : {}) } });
       }
       for (const ref of resolved.refs) rawReferences.push(ref);

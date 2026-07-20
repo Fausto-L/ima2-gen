@@ -133,6 +133,11 @@ async function runMcpGenerate(get: StoreGet): Promise<void> {
   // prompt can address each image as @tag; the server uploads the files and
   // forwards provider-hosted URLs via the model's image_references role.
   const selectedIds: string[] = (state as unknown as { selectedElementIds?: string[] }).selectedElementIds ?? [];
+  // wp4: character binding and @element mentions never mix (server 409 mirror).
+  if (state.mcpCharacterElementId && selectedIds.length > 0) {
+    get().showToast(t("mcp.characterSlotConflictHint"), true);
+    return;
+  }
   const elementReferences = selectedIds
     .map((id) => state.assets.find((asset) => asset.id === id))
     .flatMap((asset) => {
@@ -152,6 +157,7 @@ async function runMcpGenerate(get: StoreGet): Promise<void> {
       mcpProvider: state.mcpProvider, mcpModel: state.mcpModel, mcpMediaKind: state.mcpMediaKind,
       mcpRatio: state.mcpRatio, mcpParameters: state.mcpParameters, mcpInputRoles: state.mcpInputRoles ?? [],
       mcpReferenceSelection: prepared.selection, currentImageFilename: state.currentImage?.filename ?? null,
+      mcpCharacterElementId: state.mcpCharacterElementId ?? null,
       ...(elementReferences.length > 0 ? { elementReferences } : {}),
     }, prompt, `mcp_ui_${Date.now()}`);
     if (!input) return;
@@ -176,6 +182,7 @@ function clearMcpLane(set: StoreSet): void {
     mcpParameters: {},
     mcpInputRoles: [],
     mcpReferenceSelection: emptyMcpReferenceSelection(),
+    mcpCharacterElementId: null,
     ...(coreGenerateAction ? { generate: coreGenerateAction } : {}),
   });
 }

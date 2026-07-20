@@ -300,7 +300,7 @@ export type AppState = PresetState & ReferenceTraySlice & {
   loadMoreAssets: () => Promise<void>;
   setAssetsFilters: (patch: Partial<AssetsFilters>) => void;
   saveToAssets: (item: GenerateItem) => Promise<boolean>;
-  updateAssetItem: (id: string, patch: { name?: string; folderId?: string | null; notes?: string; tags?: string[] }) => Promise<boolean>;
+  updateAssetItem: (id: string, patch: { name?: string; folderId?: string | null; notes?: string; tags?: string[]; metadata?: Record<string, unknown> }) => Promise<boolean>;
   deleteAssetItem: (id: string) => Promise<boolean>;
   createAssetFolder: (name: string, parentId?: string | null) => Promise<boolean>;
   renameAssetFolder: (id: string, name: string) => Promise<boolean>;
@@ -475,6 +475,7 @@ export type AppState = PresetState & ReferenceTraySlice & {
   mcpParameters?: Record<string, McpPresetValue>;
   mcpInputRoles?: McpInputRole[];
   mcpReferenceSelection?: McpReferenceSelection;
+  mcpCharacterElementId?: string | null;
   setQuality: (q: Quality) => void;
   setSizePreset: (s: SizePreset) => void;
   setCustomSize: (w: number, h: number) => void;

@@ -232,6 +232,9 @@ export type McpGenerationBuildState = {
   mcpReferenceSelection?: McpReferenceSelection;
   /** Tagged references from @element mentions; tag = @alias in the prompt. */
   elementReferences?: Array<{ filename: string; tag?: string }>;
+  /** Character element binding (wp4): server expands binding refs; never mixed
+   *  with elementReferences in one request (client disables the slot first). */
+  mcpCharacterElementId?: string | null;
 };
 
 /** Sanitizes an element name into a Runway-style @tag alias. */
@@ -291,6 +294,7 @@ export function buildMcpGenerationInput(
     ...(endFrameFilename ? { endFrameFilename } : {}),
     ...(references.length > 0 ? { references: references.map(({ filename, tag }) => ({ filename, ...(tag ? { tag } : {}) })) } : {}),
     ...(referenceVideoFilename ? { referenceVideoFilename } : {}),
+    ...(state.mcpCharacterElementId ? { characterElementId: state.mcpCharacterElementId } : {}),
     ...(requestId ? { requestId } : {}),
   };
 }

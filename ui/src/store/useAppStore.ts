@@ -256,6 +256,7 @@ export const useAppStore = create<AppState>((set, get, store) => ({
   insertedPrompts: storedGenerationDefaults.insertedPrompts ?? [],
   mcpInputRoles: [],
   mcpReferenceSelection: emptyMcpReferenceSelection(),
+  mcpCharacterElementId: null,
   trayItems: [],
   nextAttachmentOrdinal: 1,
   retiredTags: {},

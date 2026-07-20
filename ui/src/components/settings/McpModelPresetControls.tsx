@@ -2,6 +2,7 @@ import { useI18n } from "../../i18n";
 import type { McpModelEntry, McpModelParameter, McpPresetValue } from "../../lib/mcpProviders";
 import { DurationSlider } from "../controls/DurationSlider";
 import { McpReferenceSlots } from "./McpReferenceSlots";
+import { McpCharacterSlot } from "./McpCharacterSlot";
 
 const CORE_PARAMETERS = new Set(["duration", "resolution", "quality", "mode"]);
 
@@ -152,6 +153,7 @@ export function McpModelPresetControls({ entry, ratio, parameters, disabled, onR
         <div className="mcp-tool-inputs">
           <div className="section-title">{t("mcp.toolInputsLabel")}</div>
           <McpReferenceSlots inputRoles={entry.capabilities.inputRoles} disabled={disabled} />
+          <McpCharacterSlot inputRoles={entry.capabilities.inputRoles} disabled={disabled} />
         </div>
       ) : null}
       {advanced.length > 0 ? (
