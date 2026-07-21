@@ -684,6 +684,13 @@ a provider binding for the selected lane (Runway: stateless refs + optional
 Runway is available when connected; Higgsfield remains locked until its paid
 lane is enabled. Inspect current state with `ima2 models --kind video`.
 
+`ima2 upscale <generated-file>` upscales through the MCP media-action pipeline:
+images take `--scale-factor 2|4|8|16` (above 2 requires `--flavor sublime`),
+`--flavor`, `--sharpen`, `--smart-grain`, `--ultra-detail`; videos take no
+parameters. Multishot generation is `POST /api/mcp/multishot` (CLI surface
+planned). Video edit is the 2-step `edit-video-preview` → `edit-video-submit`
+media action; stage-1 returns a synchronous keyframe preview.
+
 ### Modes (auto-detected from --ref count)
 
 | Refs | Mode | Max Duration |

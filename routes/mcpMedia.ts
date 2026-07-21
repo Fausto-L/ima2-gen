@@ -15,7 +15,7 @@ import { executeEditVideoPreview } from "../lib/mcp/editVideoPreview.js";
 import { downloadMediaResult } from "../lib/mcp/downloadMediaResult.js";
 import { commitMediaResult } from "../lib/mcp/commitMediaResult.js";
 import { appendMcpJobLog, logMcpJobError } from "../lib/mcp/jobLog.js";
-import { buildRunwayActionCall, REFERENCE_TAG_PATTERN, runwayAdapter, type RunwayMediaAction } from "../lib/mcp/adapters/runway.js";
+import { buildRunwayActionCall, REFERENCE_TAG_PATTERN, runwayAdapter, type RunwayMediaAction, type UpscaleImageParams } from "../lib/mcp/adapters/runway.js";
 import { uploadLocalMediaToRunway } from "../lib/mcp/adapters/runwayUpload.js";
 import { resolveMediaAction, type MediaOperation } from "../lib/mcp/mediaWorkflowRouter.js";
 import { loadEffectiveSnapshot } from "../lib/mcp/snapshotStore.js";
@@ -106,6 +106,27 @@ async function handleMediaAction(
   const operation = ACTION_TO_OPERATION[String(action)];
   if (!operation) { res.status(400).json({ error: { code: "INVALID_ACTION", message: `unknown action: ${String(action)}` } }); return; }
   if (files.length === 0) { res.status(400).json({ error: { code: "INVALID_FILES", message: "files[] is required" } }); return; }
+  // Upscale parameters (054): image.upscale only, allowlisted keys. video.upscale
+  // takes none per the provider schema — silently ignoring is not allowed.
+  const UPSCALE_PARAM_KEYS = new Set(["scaleFactor", "flavor", "sharpen", "smartGrain", "ultraDetail"]);
+  let upscaleParameters: Record<string, unknown> | undefined;
+  if (req.body?.parameters !== undefined) {
+    const raw = req.body.parameters;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      res.status(400).json({ error: { code: "INVALID_MEDIA_PARAMETERS", message: "parameters must be an object" } });
+      return;
+    }
+    if (operation !== "image.upscale") {
+      res.status(400).json({ error: { code: "INVALID_MEDIA_PARAMETERS", message: `parameters are not supported for ${operation}` } });
+      return;
+    }
+    const keys = Object.keys(raw as Record<string, unknown>);
+    if (keys.some((key) => !UPSCALE_PARAM_KEYS.has(key))) {
+      res.status(400).json({ error: { code: "INVALID_MEDIA_PARAMETERS", message: `allowed keys: ${[...UPSCALE_PARAM_KEYS].join(", ")}` } });
+      return;
+    }
+    upscaleParameters = raw as Record<string, unknown>;
+  }
   if (operation === "video.edit.submit" && !previewUrl) {
     res.status(400).json({ error: { code: "INVALID_PREVIEW", message: "previewUrl is required for edit-video-submit" } });
     return;
@@ -145,7 +166,7 @@ async function handleMediaAction(
 
   const abort = new AbortController();
   registerJobAbortController(requestId, abort);
-  void runMediaAction({ ctx, deps, requestId, operation, decision: decision.plan!, mode: decision.mode, provider, resolvedFiles, prompt: typeof prompt === "string" ? prompt : undefined, keyframeTimestampSeconds, previewUrl, keyframeModel, signal: abort.signal });
+  void runMediaAction({ ctx, deps, requestId, operation, decision: decision.plan!, mode: decision.mode, provider, resolvedFiles, prompt: typeof prompt === "string" ? prompt : undefined, keyframeTimestampSeconds, previewUrl, keyframeModel, upscaleParameters, signal: abort.signal });
 }
 
 async function runMediaAction(input: {
@@ -161,6 +182,7 @@ async function runMediaAction(input: {
   keyframeTimestampSeconds?: number;
   previewUrl?: string;
   keyframeModel?: string;
+  upscaleParameters?: Record<string, unknown>;
   signal: AbortSignal;
 }): Promise<void> {
   const { ctx, deps, requestId } = input;
@@ -199,6 +221,7 @@ async function runMediaAction(input: {
       ...(input.keyframeTimestampSeconds !== undefined ? { keyframeTimestampSeconds: input.keyframeTimestampSeconds } : {}),
       ...(input.previewUrl ? { keyframeImageUrl: input.previewUrl } : {}),
       ...(input.keyframeModel ? { keyframeModel: input.keyframeModel } : {}),
+      ...(input.upscaleParameters ? { upscale: input.upscaleParameters as UpscaleImageParams } : {}),
     });
     // edit-video-preview is SYNCHRONOUS (wp5b2 live capture): stage-1 returns
     // structuredContent.kind === "keyframe_preview" with keyframeUrl — no async
@@ -246,6 +269,7 @@ async function runMediaAction(input: {
         workflow: input.operation, kind: `mcp-action`,
         parent: { filename: basename(source), mediaType: kind === "image" ? "image" : "video", role: "source" },
         ...(input.operation === "video.edit.submit" ? { approvalOf: input.previewUrl } : {}),
+        ...(input.upscaleParameters ? { mcpParameters: input.upscaleParameters } : {}),
       },
       doneExtra: { workflow: input.operation, mode: "native", provider: input.provider },
     });

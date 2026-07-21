@@ -7,6 +7,10 @@ import { postVideoExtendStream } from "../lib/videoExtendStream";
 import { isVideoItem, extractFirstFrame, extractMidFrame, extractLastFrame } from "../lib/videoMedia";
 import { continueFromItem, continueFromItemAsUrl } from "../lib/continueFromItem";
 import { ResultMetadataModal } from "./ResultMetadataModal";
+import { UpscalePopover } from "./UpscalePopover";
+import { buildUpscaleBody, type UpscaleParams } from "../lib/upscaleAction";
+import { jsonFetch } from "../lib/api";
+import { listMcpProviders } from "../lib/mcpProviders";
 import type { GenerateItem } from "../types";
 
 interface ResultActionsProps { imageOverride?: GenerateItem | null; onAfterDeleteFocus?: () => void }
@@ -44,7 +48,39 @@ export function ResultActions({
   const [animating, setAnimating] = useState(false);
   const [extendState, setExtendState] = useState<ExtendState>("idle");
   const [metadataOpen, setMetadataOpen] = useState(false);
+  const [upscaleOpen, setUpscaleOpen] = useState(false);
+  const [upscalePending, setUpscalePending] = useState(false);
+  const [runwayConnected, setRunwayConnected] = useState(false);
   const extendAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void listMcpProviders().then((providers) => {
+      if (!alive) return;
+      setRunwayConnected(providers.some((p) => p.id === "runway" && p.status.state === "connected"));
+    }).catch(() => undefined);
+    return () => { alive = false; };
+  }, []);
+
+  const startUpscale = async (params: UpscaleParams) => {
+    if (!actionImage?.filename || upscalePending) return;
+    const body = buildUpscaleBody(actionImage.filename, params);
+    if (!body) { showToast(t("result.upscaleInvalid"), true); return; }
+    setUpscalePending(true);
+    try {
+      await jsonFetch("/api/mcp/media-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      setUpscaleOpen(false);
+      showToast(t("result.upscaleStarted"));
+    } catch {
+      showToast(t("result.upscaleFailed"), true);
+    } finally {
+      setUpscalePending(false);
+    }
+  };
 
   useEffect(() => () => extendAbortRef.current?.abort(), []);
   const actionImage = imageOverride ?? currentImage;
@@ -342,6 +378,38 @@ export function ResultActions({
         >
           {animating ? t("result.animating") : t("result.animate")}
         </button>
+      )}
+      {runwayConnected && actionImage.filename && (
+        isVideo ? (
+          <button
+            type="button"
+            className="action-btn"
+            disabled={upscalePending}
+            onClick={() => void startUpscale({})}
+            title={t("result.upscaleTitle")}
+          >
+            {upscalePending ? t("inflight.streaming") : t("result.upscale")}
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="action-btn"
+              disabled={upscalePending}
+              onClick={() => setUpscaleOpen((open) => !open)}
+              title={t("result.upscaleTitle")}
+            >
+              {t("result.upscale")}
+            </button>
+            {upscaleOpen ? (
+              <UpscalePopover
+                pending={upscalePending}
+                onSubmit={(params) => void startUpscale(params)}
+                onClose={() => setUpscaleOpen(false)}
+              />
+            ) : null}
+          </>
+        )
       )}
       {canExtend && (
         <>

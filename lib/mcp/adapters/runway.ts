@@ -259,7 +259,16 @@ export interface EditVideoInputs {
   keyframeTimestampSeconds?: number;
   keyframeImageUrl?: string;
   keyframeModel?: string;
-  upscale?: Record<string, unknown>;
+  upscale?: UpscaleImageParams;
+}
+
+/** upscale_image optional parameters (054). scaleFactor > 2 requires flavor "sublime". */
+export interface UpscaleImageParams {
+  scaleFactor?: 2 | 4 | 8 | 16;
+  flavor?: "sublime" | "photo" | "photo_denoiser";
+  sharpen?: number;
+  smartGrain?: number;
+  ultraDetail?: number;
 }
 
 /** Native media-action plans (060 WP6). Inputs must be runway-hosted or public HTTPS URLs.
@@ -269,8 +278,24 @@ export function buildRunwayActionCall(action: RunwayMediaAction, inputs: EditVid
   switch (action) {
     case "upscale-video":
       return { toolName: "upscale_video", args: { rationale, video: { url: inputs.url } } };
-    case "upscale-image":
-      return { toolName: "upscale_image", args: { rationale, image: { url: inputs.url } } };
+    case "upscale-image": {
+      const upscale = inputs.upscale ?? {};
+      if (upscale.scaleFactor !== undefined && ![2, 4, 8, 16].includes(upscale.scaleFactor)) {
+        throw new Error("MCP_REQUEST_INVALID:scaleFactor must be 2, 4, 8, or 16");
+      }
+      if (upscale.scaleFactor !== undefined && upscale.scaleFactor > 2
+        && upscale.flavor !== undefined && upscale.flavor !== "sublime") {
+        throw new Error("MCP_REQUEST_INVALID:scaleFactor above 2 requires flavor 'sublime'");
+      }
+      return { toolName: "upscale_image", args: {
+        rationale, image: { url: inputs.url },
+        ...(upscale.scaleFactor !== undefined ? { scaleFactor: upscale.scaleFactor } : {}),
+        ...(upscale.flavor ? { flavor: upscale.flavor } : {}),
+        ...(upscale.sharpen !== undefined ? { sharpen: upscale.sharpen } : {}),
+        ...(upscale.smartGrain !== undefined ? { smartGrain: upscale.smartGrain } : {}),
+        ...(upscale.ultraDetail !== undefined ? { ultraDetail: upscale.ultraDetail } : {}),
+      } };
+    }
     case "edit-video": {
       if (!inputs.prompt) throw new Error("MCP_ACTION_PROMPT_REQUIRED");
       return { toolName: "edit_video", args: { rationale, promptText: inputs.prompt, video: { url: inputs.url } } };

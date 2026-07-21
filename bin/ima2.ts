@@ -463,6 +463,7 @@ switch (command) {
     break;
   case "gen":
   case "video":
+  case "upscale":
   case "edit":
   case "ls":
   case "show":

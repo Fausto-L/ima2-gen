@@ -804,7 +804,15 @@
     "sendToComfyUI": "ComfyUI로 보내기",
     "sendToComfyUITitle": "이 저장된 이미지를 로컬 ComfyUI로 업로드",
     "permanentDelete": "완전 삭제",
-    "permanentDeleteConfirm": "\"{filename}\" 이미지를 완전히 삭제할까요? 이 작업은 되돌릴 수 없습니다."
+    "permanentDeleteConfirm": "\"{filename}\" 이미지를 완전히 삭제할까요? 이 작업은 되돌릴 수 없습니다.",
+    "upscale": "업스케일",
+    "upscaleTitle": "Runway로 업스케일 (MCP)",
+    "upscaleFlavor": "플레이버",
+    "upscaleFlavorAuto": "자동",
+    "upscaleStart": "업스케일 시작",
+    "upscaleStarted": "업스케일을 시작했습니다",
+    "upscaleFailed": "업스케일 실패",
+    "upscaleInvalid": "업스케일 파라미터가 올바르지 않습니다"
   },
   "session": {
     "switchTitle": "세션 전환",

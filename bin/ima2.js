@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { exitFlushed, installExitFlushGuard } from "./lib/output.js";
+installExitFlushGuard();
 import { createInterface } from "readline/promises";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
@@ -99,7 +101,7 @@ async function setup() {
         catch {
             console.log("\n  Grok login failed or cancelled. You can retry with 'ima2 grok login'.\n");
             rl.close();
-            process.exit(1);
+            exitFlushed(1);
         }
         console.log("  Grok configured. Run 'ima2 serve' to start.\n");
     }
@@ -158,7 +160,7 @@ async function setup() {
             catch {
                 console.log("\n  Login failed or cancelled. You can retry with 'ima2 serve'.\n");
                 rl.close();
-                process.exit(1);
+                exitFlushed(1);
             }
         }
         else {
@@ -172,6 +174,27 @@ async function setup() {
     return config;
 }
 async function serve(serveArgs = []) {
+    // Singleton guard: one ima2 server per machine unless --force is given.
+    // Probes the advertise file + default port only (IMA2_SERVER may point at a
+    // remote server and must not block starting a local one).
+    if (!serveArgs.includes("--force")) {
+        try {
+            const { findRunningServer } = await import("./lib/client.js");
+            const running = await findRunningServer({ includeEnv: false });
+            if (running?.health?.ok) {
+                const pid = running.health.pid ?? "?";
+                const version = running.health.version ?? "?";
+                console.log(`\n  ima2 server already running at ${running.base} (pid ${pid}, v${version}).`);
+                console.log("  Open it with 'ima2 open', or stop that process to restart.");
+                console.log("  To intentionally run a second instance: ima2 serve --force\n");
+                return;
+            }
+        }
+        catch (e) {
+            const err = errInfo(e);
+            console.error(`[ima2] Running-server check skipped: ${err.message || err.raw}`);
+        }
+    }
     try {
         await maybePromptGithubStar();
     }
@@ -189,7 +212,7 @@ async function serve(serveArgs = []) {
         console.log(uiDist.reason === "missing-source-and-dist"
             ? "  This installation appears broken. Reinstall: npm i -g ima2-gen\n"
             : "");
-        process.exit(1);
+        exitFlushed(1);
     }
     const env = { ...process.env };
     const serveDev = serveArgs.includes("--dev");
@@ -208,9 +231,9 @@ async function serve(serveArgs = []) {
     });
     child.on("error", (err) => {
         console.error(`[ima2] Failed to start server: ${err.message}`);
-        process.exit(1);
+        exitFlushed(1);
     });
-    child.on("exit", (code) => process.exit(code));
+    child.on("exit", (code) => exitFlushed(code ?? 0));
     process.on("SIGINT", () => killProcessTree(child.pid));
     process.on("SIGTERM", () => killProcessTree(child.pid));
     if (process.platform === "win32") {
@@ -280,7 +303,7 @@ function showHelp() {
     use 'ima2 ps --json' to monitor requestIds and 'ima2 cancel <id>' to stop.
 
   Server commands:
-    serve [--dev]  Start the image generation server
+    serve [--dev] [--force]  Start the server (--force allows a second instance)
     setup, login   Configure API key or GPT OAuth (interactive)
     status         Show current configuration status
     doctor         Diagnose environment and setup
@@ -375,12 +398,12 @@ const args = process.argv.slice(2);
 const command = args[0];
 if (args.includes("-v") || args.includes("--version")) {
     console.log(pkg.version);
-    process.exit(0);
+    exitFlushed(0);
 }
 if ((!command || args.includes("-h") || args.includes("--help"))
     && !["doctor", "gen", "video", "edit", "ls", "show", "ps", "cancel", "session", "history", "prompt", "multimode", "node", "annotate", "canvas-versions", "metadata", "comfy", "cardnews", "inflight", "storage", "billing", "providers", "oauth", "grok", "config", "defaults", "models", "capabilities", "tools", "skill", "ping", "backfill-thumbs"].includes(command)) {
     showHelp();
-    process.exit(command ? 0 : 1);
+    exitFlushed(command ? 0 : 1);
 }
 switch (command) {
     case "serve":
@@ -390,7 +413,7 @@ switch (command) {
     case "login":
         setup().then(() => console.log("  Done. Run 'ima2 serve' to start.")).catch((e) => {
             console.error(`Setup failed: ${e?.message || e}`);
-            process.exit(1);
+            exitFlushed(1);
         });
         break;
     case "status":
@@ -414,7 +437,7 @@ switch (command) {
             }
             catch (err) {
                 console.error(`  ${err instanceof Error ? err.message : String(err)}`);
-                process.exit(2);
+                exitFlushed(2);
             }
             writeFileSync(CONFIG_FILE, "{}");
             console.log("  Config reset. Run 'ima2 serve' to reconfigure.");
@@ -425,6 +448,7 @@ switch (command) {
         break;
     case "gen":
     case "video":
+    case "upscale":
     case "edit":
     case "ls":
     case "show":
@@ -480,5 +504,5 @@ switch (command) {
     default:
         console.log(`  Unknown command: "${command}"`);
         console.log("  Run 'ima2 --help' for usage.\n");
-        process.exit(1);
+        exitFlushed(1);
 }

@@ -804,7 +804,15 @@
     "sendToComfyUI": "Send to ComfyUI",
     "sendToComfyUITitle": "Upload this saved image to local ComfyUI",
     "permanentDelete": "Permanently delete",
-    "permanentDeleteConfirm": "Permanently delete \"{filename}\"? This cannot be undone."
+    "permanentDeleteConfirm": "Permanently delete \"{filename}\"? This cannot be undone.",
+    "upscale": "Upscale",
+    "upscaleTitle": "Upscale through Runway (MCP)",
+    "upscaleFlavor": "Flavor",
+    "upscaleFlavorAuto": "auto",
+    "upscaleStart": "Start upscale",
+    "upscaleStarted": "Upscale started",
+    "upscaleFailed": "Upscale failed",
+    "upscaleInvalid": "Invalid upscale parameters"
   },
   "session": {
     "switchTitle": "Switch session",

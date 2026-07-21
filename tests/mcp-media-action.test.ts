@@ -148,3 +148,33 @@ test("edit-video-preview runs synchronously (no polling) and commits an approval
   assert.deepEqual(sidecar.parent, { filename: "clip-a.mp4", mediaType: "video", role: "source" });
   assert.deepEqual(sidecar.keyframeSubmit?.keyframeImage, { url: "https://cdn.example.com/kf.png" });
 }));
+
+test("upscale-image accepts allowlisted parameters and records them in the sidecar (054)", async () => withApp(async (base) => {
+  const donePromise = waitForEvent("act-4", "done");
+  const response = await fetch(`${base}/api/mcp/media-action`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "upscale-image", files: ["src-image.png"], parameters: { scaleFactor: 2, sharpen: 25 }, requestId: "act-4" }),
+  });
+  assert.equal(response.status, 202);
+  const done = await donePromise;
+  const sidecar = JSON.parse(readFileSync(join(dir, "generated", String(done.filename) + ".json"), "utf8"));
+  assert.deepEqual(sidecar.mcpParameters, { scaleFactor: 2, sharpen: 25 });
+}));
+
+test("upscale-image rejects non-allowlisted parameter keys with 400", async () => withApp(async (base) => {
+  const response = await fetch(`${base}/api/mcp/media-action`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "upscale-image", files: ["src-image.png"], parameters: { turbo: true } }),
+  });
+  assert.equal(response.status, 400);
+  assert.equal((await response.json() as { error: { code: string } }).error.code, "INVALID_MEDIA_PARAMETERS");
+}));
+
+test("video.upscale rejects parameters entirely (provider schema has none)", async () => withApp(async (base) => {
+  const response = await fetch(`${base}/api/mcp/media-action`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "upscale-video", files: ["clip-a.mp4"], parameters: { scaleFactor: 2 } }),
+  });
+  assert.equal(response.status, 400);
+  assert.equal((await response.json() as { error: { code: string } }).error.code, "INVALID_MEDIA_PARAMETERS");
+}));

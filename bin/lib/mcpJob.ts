@@ -8,6 +8,8 @@ export interface McpJobOptions {
   timeoutMs: number;
   json: boolean;
   onProgress?: (phase: string) => void;
+  /** POST path override (default /api/mcp/generate; media actions use /api/mcp/media-action). */
+  postPath?: string;
 }
 
 export interface McpJobResult {
@@ -79,7 +81,7 @@ async function responseError(response: Response): Promise<McpJobError> {
 
 async function submitJob(opts: McpJobOptions, signal: AbortSignal): Promise<void> {
   try {
-    const response = await fetch(`${baseUrl(opts.serverBase)}/api/mcp/generate`, {
+    const response = await fetch(`${baseUrl(opts.serverBase)}${opts.postPath ?? "/api/mcp/generate"}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...opts.body, kind: opts.kind, requestId: opts.requestId }),
