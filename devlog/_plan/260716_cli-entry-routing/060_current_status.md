@@ -1,9 +1,9 @@
 ---
 title: "060 — 현재 상태 및 재개 가이드"
 lane: "260716_cli-entry-routing"
-status: "wp1~wp4 완료 · wp5 로드맵 확장(051) 반영 · 구현 대기"
-updated: "2026-07-20"
-evidence: "2026-07-18 closeout-sweep audit + 2026-07-20 wp4 구현 루프(1772/1772 green)"
+status: "wp1~wp4 완료 · wp5 Runway P1/P2 완료(edit_video 라이브 한도 대기) · Higgsfield 게이트 유지"
+updated: "2026-07-21"
+evidence: "2026-07-18 closeout-sweep audit + 2026-07-20/21 wp4·wp5 구현 루프(1806/1806 green)"
 ---
 
 # 060 — CLI 진입점 라우팅: 현재 상태 및 재개 가이드
@@ -18,7 +18,7 @@ evidence: "2026-07-18 closeout-sweep audit + 2026-07-20 wp4 구현 루프(1772/1
 | wp2 | 완료 | CLI 문서·스킬 이관 및 버전 갱신 | `21b9b9b` |
 | wp3 | 완료 | end frame·이미지/비디오 레퍼런스의 서버 계약, inputRoles 게이트, UI 슬롯, CLI 연동 | `a878e74`; 잔여 타입/카탈로그/UI 스타일은 `4505642`; [Gen-4 Turbo 슬롯 증거](evidence-wp3-gen4turbo-slots.png), [Seedance 슬롯 증거](evidence-wp3-seedance-slots.png) |
 | wp4 | 완료 (라이브 증거 포함) | 042-046 슬라이스 전부 랜딩 + Runway 실생성 1건(041 Accept 6, 2026-07-20 사용자 승인): 저장 모델(lib/characterBindings.ts), /api/mcp/generate characterElementId(lib/mcp/characterRefs.ts), UI 카드+슬롯, CLI --character. 라이브 sidecar에 characterElementId+referenceParents(tag) 기록 확인 | `7dec392` `813b5a2` `3d9c046` `b0f6cb6` `d33354e` `4af8555`; 전체 스위트 1772/1772; [바인딩 카드 증거](evidence-wp4-bindings-card.png) |
-| wp5 | 로드맵 확장 완료 · 부분 기반 | 050 스펙 + [051 amendment](051_wp5-roadmap-expansion.md)(long-job 파이프라인 탑승, preview lineage 확장, ResultActions/stage 부착). multishot·keyframe preview·CLI·UI·Higgsfield 파생 기능은 미구현 | `lib/mcp/mediaWorkflowRouter.ts:27-35`, `lib/mcp/adapters/runway.ts:200-214` |
+| wp5 | Runway P1/P2 완료 · edit_video 라이브 한도 대기 | multishot: 전용 라우트+adapter, 라이브 720p/5s 성공(`f0517f2`, sidecar 1784539402777). upscale: 파라미터 노출+`ima2 upscale`+ResultActions 팝오버(`6fe3822`, 베이스 라이브 1784538508044). edit_video: 2단 구현+stage-1 동기 shape 확정(`7274ed0`), 라이브 full-flow는 Runway 504/워크스페이스 한도로 NEEDS_HUMAN | 052-054 docs; 전체 스위트 1806/1806 |
 
 wp3 후속 `4505642`에는 `ui/src/lib/mcpProviders.ts`의 end-frame/reference-video typed inputRoles, `mcp-models-catalog`의 `audio_references` 부정 assertion, 오른쪽 패널 reference-slot 스타일이 포함된다.
 
@@ -35,23 +35,23 @@ amendment(저장 모델/Accept 치환)를 적용한다. 충돌 시 041 우선.
 4. **UI** — character element 상세에 provider binding 카드(Runway tag, Higgsfield 학습/크레딧 상태)를 추가하고, `image_references`를 선언한 MCP 모델에서만 캐릭터 슬롯을 노출한다.
 5. **CLI** — wp1 resolver 위에 `ima2 gen/video --character <element-id|name>`를 추가하고, 모델 capability·provider binding 미충족은 명시 에러로 fail-closed 처리한다.
 
-### 2. wp5 — 파생 제작 다양성
+### 2. wp5 — 파생 제작 다양성 (2026-07-21 상태)
 
-`050_derivative-diversity.md`의 tool 분류 위에 [051](051_wp5-roadmap-expansion.md)의
-amendment(preview lineage 확장, stage 호환, capabilities lock 표면화)를 적용한다.
-새 병렬 라우터를 만들지 말고 기존 Runway native action 기반을 확장한다.
+완료: multishot(routes/mcpMultishot.ts, auto/custom, 라이브 증거), upscale 파라미터
+(lib/mcp/adapters/runway.ts UpscaleImageParams, `ima2 upscale`, ResultActions 팝오버),
+edit_video 2단(lib/mcp/editVideoPreview.ts 동기 stage-1 + submit 경로).
+잔여:
 
-1. **wp5a / Runway P1** — `edit_video`에 keyframe 입력·프리뷰 승인 단계를 추가하고, `generate_multishot_video`을 storyboard→`shots[]` 흐름으로 실행 경로에 연결한다. 현재 multishot은 snapshot/skill에만 있고 실행 경로에는 없다.
-2. **wp5b / Runway P2** — 기존 `video.upscale`/`image.upscale`에 provider 파라미터를 노출하고, UI 제어와 `ima2 edit-video`·`ima2 upscale` CLI 진입점을 추가한다.
+1. **edit_video 라이브 full-flow 재검증** — Runway edit_video 엔드포인트가 504
+   (CloudFront 30s)를 연발하는 시간대가 있고, stage-2는 "Runway workspace limit
+   reached"를 반환했다. 제공자/계정 한도 회복 후 preview→submit을 1회 재실행한다.
+2. **multishot CLI/UI 표면** — 라우트는 있고 CLI/직접 UI 슬롯은 없다(053 §3 기록).
 3. **wp5c / Higgsfield 결제 후** — `motion_control`과 `reframe`을 먼저 검토하고 wp4의 캐릭터/Soul 흐름과 묶는다. `voice_change`·`dubbing`은 입력 음성 검증과 언어 선택이 독립 표면이므로 별도 단위로 분리한다.
-
 ## 재개 절차와 검증 게이트
 
-1. `040_character-persistence.md`와 `050_derivative-diversity.md`의 계약·Accept를 다시 읽고, 현재 MCP tools/list 스냅샷과 provider 연결/결제 상태를 재확인한다.
-2. wp4는 저장 roundtrip → 업로드 전 capability/binding 거부 → Runway refs+tag 요청 shape 및 lineage 순으로 계약·route 테스트를 추가한다. 실제 Runway/Higgsfield 생성은 승인된 과금 호출일 때만 1건으로 제한한다.
-3. wp5는 기존 `mediaWorkflowRouter`/Runway adapter의 action 계약을 먼저 확장하고, 그 뒤 UI와 CLI를 같은 요청 계약으로 연결한다. multishot·keyframe preview는 실행 경로와 결과 카드까지 도달하는지 별도 확인한다.
-4. 각 서브 phase 완료 전 `npm run typecheck`, `npm run typecheck:tests`, 영향 받은 `node --test` 계약, `npm run test:inventory`, `cd ui && npm run build`를 실행한다. 2026-07-18 closeout-sweep의 기준선은 전체 **1665/1665**, 두 typecheck, UI build green이다.
-5. 실행 증거(요청 shape, lineage, UI 슬롯/결과 카드)를 해당 WP devlog에 남기고, 과금·결제 전제와 unverified provider 계약은 proven처럼 승격하지 않는다.
+1. 잔여 작업 전 `040`/`041`/`050`/`051`과 042-046/052-054의 계약을 다시 읽고, 현재 MCP tools/list 스냅샷과 provider 연결/결제 상태를 재확인한다.
+2. 각 서브 phase 완료 전 `npm run typecheck`, `npm run typecheck:tests`, 영향 받은 `node --test` 계약(실행기는 반드시 `node --import tsx --test` — plain node --test는 모듈 이중 인스턴스로 이벤트 테스트가 거짓 실패한다), `npm run test:inventory`, `cd ui && npm run build`를 실행한다. 2026-07-21 기준선은 전체 **1806/1806**, 두 typecheck, UI build green이다.
+3. 실행 증거(요청 shape, lineage, UI 슬롯/결과 카드)를 해당 WP devlog에 남기고, 과금·결제 전제와 unverified provider 계약은 proven처럼 승격하지 않는다.
 
 ## 주의 — generic elementIds와 혼동 금지
 
