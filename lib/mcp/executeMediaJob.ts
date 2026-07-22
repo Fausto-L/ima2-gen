@@ -22,6 +22,12 @@ const sleep = (ms: number, signal?: AbortSignal) =>
     signal?.addEventListener("abort", () => { clearTimeout(timer); reject(new Error("MCP_JOB_ABORTED")); }, { once: true });
   });
 
+/** Provider-side rate limiting shows up as tool-error text, not HTTP status (020-A). */
+const RATE_LIMIT_PATTERN = /\b429\b|rate.?limit|too many request/i;
+function isRateLimited(error: unknown): boolean {
+  return RATE_LIMIT_PATTERN.test(String((error as Error)?.message ?? error));
+}
+
 export async function executeMediaJob(
   manager: McpConnectionManager,
   adapter: MediaProviderAdapter,
@@ -68,6 +74,10 @@ export async function executeMediaPlan(
       pollResult = await manager.callTool(adapter.provider, pollPlan.toolName, pollPlan.args, { signal: options.signal });
       pollErrors = 0;
     } catch (error) {
+      if (options.signal?.aborted) throw new Error("MCP_JOB_ABORTED");
+      // Rate limiting is not a poll failure: the remote task is still alive.
+      // Back off harder and keep polling; the overall deadline bounds waiting.
+      if (isRateLimited(error)) { interval = Math.min(interval * 2, 30_000); continue; }
       // A dropped poll must not kill a running remote task — retry up to 3.
       pollErrors += 1;
       if (pollErrors >= 3) throw error;
