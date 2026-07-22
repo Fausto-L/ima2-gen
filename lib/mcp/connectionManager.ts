@@ -429,9 +429,9 @@ export class McpConnectionManager {
   /** A successful real RPC proves the transport works: clear the sticky
    *  degraded detail (010-A) and restore the auto-reconnect budget (010-B). */
   private noteRpcSuccess(provider: string, identity: McpConnectionIdentity | null): void {
-    this.reconnectBudget.delete(provider);
     const session = this.sessions.get(provider);
     if (!session || !sameConnection(session.identity, identity)) return;
+    this.reconnectBudget.delete(provider);
     if (session.detail === "MCP_TRANSPORT_DEGRADED") session.detail = undefined;
   }
 

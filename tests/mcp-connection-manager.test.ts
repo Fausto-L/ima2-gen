@@ -568,3 +568,32 @@ test("auto-reconnect budget resets after a successful RPC and after explicit con
   await h.waitForAttempt(attemptsBefore + 2);
   await waitForState(h.manager, "runway", "connected");
 });
+
+test("stale-generation RPC success cannot reset the current reconnect budget (010-B audit R1)", async (t) => {
+  const callGate = deferred();
+  let gated = true;
+  const h = makeHarness(t, {
+    reconnectDelayMs: 0,
+    callTool: async () => { if (gated) { gated = false; await callGate.promise; } return {}; },
+  });
+  await h.manager.connect("runway");
+  const staleCall = h.manager.callTool("runway", "x", {}); // old generation, parked on gate
+  await h.manager.refresh("runway"); // new generation
+  // Exhaust the new generation's budget with consecutive drops (no successful RPC).
+  for (let drop = 0; drop < 3; drop += 1) {
+    h.clients[h.clients.length - 1].onclose?.();
+    await h.waitForAttempt(3 + drop);
+    await waitForState(h.manager, "runway", "connected");
+  }
+  h.clients[h.clients.length - 1].onclose?.();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(h.manager.status("runway").state, "offline");
+  const attemptsBefore = h.attempts();
+  // Stale RPC completes now: it must NOT restore the exhausted budget.
+  callGate.resolve();
+  await staleCall;
+  h.clients[h.clients.length - 1]?.onclose?.();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(h.attempts(), attemptsBefore);
+  assert.equal(h.manager.status("runway").state, "offline");
+});
