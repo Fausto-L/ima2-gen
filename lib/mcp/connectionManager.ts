@@ -9,6 +9,8 @@ import { addCandidate, inspectRestore, isTerminalTransportError, markSessionInva
 import type { McpConnectionIdentity, McpConnectionManagerOptions, PendingAuth, ProviderSession } from "./connectionRuntime.js";
 import type { McpConnectionStatus, McpToolListing } from "./types.js";
 const DEFAULT_PENDING_AUTH_TTL_MS = 10 * 60 * 1000;
+/** Cap on consecutive automatic reconnects without a successful real RPC (010-B). */
+const MAX_AUTO_RECONNECTS = 3;
 export class McpConnectionManager {
   private readonly sessions = new Map<string, ProviderSession>();
   private readonly pendingAuth = new Map<string, PendingAuth>();
@@ -22,6 +24,9 @@ export class McpConnectionManager {
   private readonly disconnectFlights = new Map<string, Promise<McpConnectionStatus>>();
   private readonly disconnectIntents = new Set<string>();
   private readonly reconnectTimers = new Map<string, NodeJS.Timeout>();
+  /** Consecutive auto-reconnects used per provider; reset only by real RPC
+   *  success, explicit connect/OAuth callback, disconnect, or reset (010-B). */
+  private readonly reconnectBudget = new Map<string, number>();
   private readonly restoreControllers = new Map<string, { generation: number; controller: AbortController }>();
   private epoch = 0;
   private shuttingDown = false;
@@ -63,6 +68,7 @@ export class McpConnectionManager {
   async connect(provider: string): Promise<McpConnectionStatus> {
     if (this.shuttingDown) throw new Error("MCP_SHUTTING_DOWN");
     const endpoint = resolveProviderEndpoint(provider, this.options.enabledProviders);
+    this.reconnectBudget.delete(provider); // explicit user path: fresh budget (010-B)
     const restore = this.restoreControllers.get(provider);
     if (restore) {
       this.restoreControllers.delete(provider);
@@ -137,7 +143,6 @@ export class McpConnectionManager {
         detail: undefined,
         identity,
         expectedClose: false,
-        reconnectUsed: false,
       });
       return this.status(provider);
     } catch (error) {
@@ -173,13 +178,15 @@ export class McpConnectionManager {
     if (!session || !sameConnection(session.identity, identity)) return;
     session.state = "offline";
     session.detail = "MCP_TRANSPORT_OFFLINE";
-    if (session.reconnectUsed || this.shuttingDown) return;
-    session.reconnectUsed = true;
+    const used = this.reconnectBudget.get(provider) ?? 0;
+    if (used >= MAX_AUTO_RECONNECTS || this.shuttingDown) return;
+    if (this.reconnectTimers.has(provider)) return; // duplicate-registration guard (010-B)
+    this.reconnectBudget.set(provider, used + 1);
     const timer = setTimeout(() => {
       this.reconnectTimers.delete(provider);
       if (!sameConnection(this.sessions.get(provider)?.identity, identity)) return;
       void this.refresh(provider).catch(() => undefined);
-    }, this.options.reconnectDelayMs ?? 250);
+    }, (this.options.reconnectDelayMs ?? 250) * 2 ** used);
     // No unref: the timer is lifecycle-managed (shutdown clears it) and
     // Node 22's test runner resolves the loop while tests await it (260719).
     this.reconnectTimers.set(provider, timer);
@@ -218,6 +225,7 @@ export class McpConnectionManager {
     if (!pending || pending.expiresAt < this.now() || !this.isCurrent(pending.provider, pending.generation)) {
       return this.rejectInvalidCallback(pending);
     }
+    this.reconnectBudget.delete(pending.provider); // explicit user path: fresh budget (010-B)
     if (this.callbackFlights.get(pending.provider)?.generation === pending.generation) {
       return this.rejectInvalidCallback(pending);
     }
@@ -309,6 +317,7 @@ export class McpConnectionManager {
     if (disconnect || this.disconnectIntents.has(provider)) return disconnect?.then(() => undefined) ?? Promise.resolve();
     const existing = this.resetFlights.get(provider);
     if (existing) return existing;
+    this.reconnectBudget.delete(provider); // intentional teardown: fresh budget (010-B)
     this.bumpGeneration(provider);
     this.markDisconnected(provider);
     const promise = this.closeProviderWork(provider);
@@ -348,6 +357,7 @@ export class McpConnectionManager {
     const existing = this.disconnectFlights.get(provider);
     if (existing) return existing;
     this.disconnectIntents.add(provider);
+    this.reconnectBudget.delete(provider); // intentional teardown: fresh budget (010-B)
     this.bumpGeneration(provider);
     this.markDisconnected(provider);
     const promise = this.performDisconnect(provider, endpoint);
@@ -416,6 +426,15 @@ export class McpConnectionManager {
     return session?.state === "connected" && session.identity ? { ...session.identity } : null;
   }
 
+  /** A successful real RPC proves the transport works: clear the sticky
+   *  degraded detail (010-A) and restore the auto-reconnect budget (010-B). */
+  private noteRpcSuccess(provider: string, identity: McpConnectionIdentity | null): void {
+    this.reconnectBudget.delete(provider);
+    const session = this.sessions.get(provider);
+    if (!session || !sameConnection(session.identity, identity)) return;
+    if (session.detail === "MCP_TRANSPORT_DEGRADED") session.detail = undefined;
+  }
+
   async shutdown(): Promise<void> {
     if (this.shuttingDown) return;
     this.shuttingDown = true;
@@ -445,6 +464,7 @@ export class McpConnectionManager {
         cursor = page.nextCursor;
       } while (cursor);
     } catch (error) { markSessionInvalid(this.sessions.get(provider), identity, error); throw error; }
+    this.noteRpcSuccess(provider, identity);
     if (sameConnection(this.connectionIdentity(provider), identity)) session.toolCount = tools.length;
     const client = session.client as unknown as { getServerVersion?: () => Record<string, unknown> | undefined };
     const transport = session.transport as unknown as { protocolVersion?: string } | undefined;
@@ -493,6 +513,7 @@ export class McpConnectionManager {
           : JSON.stringify(raw).slice(0, 300);
         throw new Error(`MCP_TOOL_ERROR:${name}:${text.slice(0, 300)}`);
       }
+      this.noteRpcSuccess(provider, identity);
       return raw;
     } catch (error) {
       markSessionInvalid(this.sessions.get(provider), identity, error);

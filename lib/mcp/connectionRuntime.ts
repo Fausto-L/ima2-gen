@@ -16,7 +16,6 @@ export interface ProviderSession {
   snapshotDiff?: { drifted: string[]; missing: string[]; added: string[] };
   identity?: McpConnectionIdentity;
   expectedClose?: boolean;
-  reconnectUsed?: boolean;
 }
 
 export interface PendingAuth {

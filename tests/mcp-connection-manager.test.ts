@@ -487,3 +487,84 @@ test("stale callTool failure cannot mark a newer epoch offline", async (t) => {
   await assert.rejects(() => oldCall, /Unauthorized/);
   assert.equal(h.manager.status("runway").state, "connected");
 });
+
+async function waitForState(manager: McpConnectionManager, provider: string, state: string): Promise<void> {
+  for (let i = 0; i < 200; i += 1) {
+    if (manager.status(provider).state === state) return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.equal(manager.status(provider).state, state);
+}
+
+test("successful callTool clears sticky MCP_TRANSPORT_DEGRADED detail (010-A)", async (t) => {
+  const h = makeHarness(t);
+  await h.manager.connect("runway");
+  h.clients[0].onerror?.(new Error("temporary stream issue"));
+  assert.equal(h.manager.status("runway").detail, "MCP_TRANSPORT_DEGRADED");
+  await h.manager.callTool("runway", "models_explore", {});
+  assert.equal(h.manager.status("runway").state, "connected");
+  assert.equal(h.manager.status("runway").detail, undefined);
+});
+
+test("successful listTools clears sticky MCP_TRANSPORT_DEGRADED detail (010-A)", async (t) => {
+  const h = makeHarness(t);
+  await h.manager.connect("runway");
+  h.clients[0].onerror?.(new Error("temporary stream issue"));
+  assert.equal(h.manager.status("runway").detail, "MCP_TRANSPORT_DEGRADED");
+  await h.manager.listTools("runway");
+  assert.equal(h.manager.status("runway").detail, undefined);
+});
+
+test("auto-reconnect budget: 4 consecutive drops without RPC stop after 3 reconnects (010-B)", async (t) => {
+  const h = makeHarness(t, { reconnectDelayMs: 0 });
+  await h.manager.connect("runway");
+  for (let drop = 0; drop < 3; drop += 1) {
+    h.clients[h.clients.length - 1].onclose?.();
+    assert.equal(h.manager.status("runway").state, "offline");
+    await h.waitForAttempt(drop + 2);
+    await waitForState(h.manager, "runway", "connected");
+  }
+  assert.equal(h.attempts(), 4);
+  // Fourth consecutive drop: budget exhausted — no further automatic reconnect.
+  h.clients[h.clients.length - 1].onclose?.();
+  assert.equal(h.manager.status("runway").state, "offline");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(h.attempts(), 4);
+  assert.equal(h.manager.status("runway").state, "offline");
+});
+
+test("auto-reconnect budget resets after a successful RPC and after explicit connect (010-B)", async (t) => {
+  const h = makeHarness(t, { reconnectDelayMs: 0 });
+  await h.manager.connect("runway");
+  for (let drop = 0; drop < 3; drop += 1) {
+    h.clients[h.clients.length - 1].onclose?.();
+    await h.waitForAttempt(drop + 2);
+    await waitForState(h.manager, "runway", "connected");
+  }
+  assert.equal(h.attempts(), 4);
+  // A working RPC proves the transport: budget goes back to full.
+  await h.manager.callTool("runway", "models_explore", {});
+  h.clients[h.clients.length - 1].onclose?.();
+  await h.waitForAttempt(5);
+  await waitForState(h.manager, "runway", "connected");
+  // That drop consumed 1 of the fresh budget; reset again via RPC so the next
+  // exhaustion loop starts from a full budget (auto-reconnect success itself
+  // never resets — that is the contract under test).
+  await h.manager.callTool("runway", "models_explore", {});
+  // Exhaust the budget again without RPC, then verify explicit connect() also resets it.
+  for (let drop = 0; drop < 3; drop += 1) {
+    h.clients[h.clients.length - 1].onclose?.();
+    await h.waitForAttempt(6 + drop);
+    await waitForState(h.manager, "runway", "connected");
+  }
+  h.clients[h.clients.length - 1].onclose?.();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(h.manager.status("runway").state, "offline");
+  const attemptsBefore = h.attempts();
+  await h.manager.connect("runway");
+  assert.equal(h.attempts(), attemptsBefore + 1);
+  assert.equal(h.manager.status("runway").state, "connected");
+  h.clients[h.clients.length - 1].onclose?.();
+  await h.waitForAttempt(attemptsBefore + 2);
+  await waitForState(h.manager, "runway", "connected");
+});
