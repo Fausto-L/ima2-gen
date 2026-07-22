@@ -75,7 +75,7 @@ routes/
 | `server.ts` | 523 | Express bootstrap, middleware wiring, OAuth startup, runtime advertisement, port fallback, post-listen MCP restore, coordinated shutdown, route registration, static serving |
 | `config.ts` | 376 | Centralized runtime config (env > `~/.ima2/config.json` > defaults), prompt import/index caps, web-search/reasoning-effort defaults, API-provider defaults, and backward-compatible flat re-exports |
 | `routes/index.ts` | 91 | Route registration hub: health, capabilities, events, storage, metadata, history, imageImport, sessions, edit, nodes, multimode, generate, agent, prompt builder, generationRequestLog, annotations, canvasVersions, comfy, prompts, prompt import, keys, auth, quota, grok, agy, video, videoExtended, mcpMultishot, and (when `features.cardNews`) cardNews |
-| `routes/mcpMultishot.ts` | 110 | Multishot (multi-scene) video generation route via Runway MCP |
+| `routes/mcpMultishot.ts` | 112 | Multishot (multi-scene) video generation route via Runway MCP |
 | `routes/capabilities.ts` | 35 | `GET /api/capabilities` — agent-facing runtime defaults; `GET/PATCH /api/config/grok-planner` — Grok planner model query/update |
 | `routes/generate.ts` | 13 | Classic generation API route wiring |
 | `routes/edit.ts` | 407 | Edit API, mask validation, cancellation, OAuth/API edit response save, provider/web-search/reasoning-effort plumbing |

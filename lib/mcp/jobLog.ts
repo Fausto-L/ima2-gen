@@ -4,6 +4,7 @@
 // job path.
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { scrubValue } from "./sanitizer.js";
 
 export type McpJobLogEvent = {
   event: "submitted" | "taskId" | "succeeded" | "download-attempt-failed" | "error" | "done" | "recovered";
@@ -25,7 +26,9 @@ function causeMessage(error: unknown): string | undefined {
   if (!cause) return undefined;
   const code = (cause as { code?: unknown })?.code;
   const message = (cause as { message?: unknown })?.message;
-  return [code, message].filter((part) => typeof part === "string" && part).join(":") || String(cause).slice(0, 160);
+  const joined = [code, message].filter((part) => typeof part === "string" && part).join(":") || String(cause).slice(0, 160);
+  // Secret-scrub (030): nested causes can carry signed URLs/tokens from providers.
+  return scrubValue(joined);
 }
 
 export async function appendMcpJobLog(generatedDir: string, entry: McpJobLogEvent): Promise<void> {
@@ -46,7 +49,7 @@ export async function appendMcpJobLog(generatedDir: string, entry: McpJobLogEven
 export function logMcpJobError(generatedDir: string, entry: Omit<McpJobLogEvent, "event" | "cause">, error: unknown): Promise<void> {
   return appendMcpJobLog(generatedDir, {
     ...entry, event: "error",
-    code: String((error as Error)?.message ?? error).split(":")[0].slice(0, 80),
+    code: scrubValue(String((error as Error)?.message ?? error).split(":")[0].slice(0, 80)),
     ...(causeMessage(error) ? { cause: causeMessage(error) } : {}),
   });
 }

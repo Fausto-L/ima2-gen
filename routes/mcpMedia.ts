@@ -19,6 +19,7 @@ import { buildRunwayActionCall, REFERENCE_TAG_PATTERN, runwayAdapter, type Runwa
 import { uploadLocalMediaToRunway } from "../lib/mcp/adapters/runwayUpload.js";
 import { resolveMediaAction, type MediaOperation } from "../lib/mcp/mediaWorkflowRouter.js";
 import { loadEffectiveSnapshot } from "../lib/mcp/snapshotStore.js";
+import { scrubValue } from "../lib/mcp/sanitizer.js";
 import { higgsfieldAdapter } from "../lib/mcp/adapters/higgsfield.js";
 import { parseMcpPresetRecord, type McpPresetValue } from "../lib/mcp/modelCapabilities.js";
 import type { MediaProviderAdapter } from "../lib/mcp/providerAdapter.js";
@@ -275,7 +276,8 @@ async function runMediaAction(input: {
     });
   } catch (error) {
     const code = errorCode(error);
-    console.error(`[mcp-action ERROR] requestId=${requestId} operation=${input.operation} code=${code} message=${(error as Error)?.message?.slice(0, 500)} stack=${(error as Error)?.stack?.slice(0, 300)}`);
+    // Secret-scrub (030): tool-error text can embed signed URLs/emails from the provider.
+    console.error(`[mcp-action ERROR] requestId=${requestId} operation=${input.operation} code=${code} message=${scrubValue(String((error as Error)?.message ?? "").slice(0, 500))} stack=${scrubValue(String((error as Error)?.stack ?? "").slice(0, 300))}`);
     void logMcpJobError(ctx.config.storage.generatedDir, { requestId, provider: "runway" }, error);
     finishJob(requestId, { status: "error", errorCode: code });
     publishJobEvent(requestId, "error", { code, message: "media action failed" });

@@ -50,11 +50,6 @@ export async function executeMediaPlan(
   if (!adapter.executable) throw new Error(`MCP_EXECUTION_LOCKED:${adapter.provider}`);
   const deadline = Date.now() + (options.timeoutMs ?? 12 * 60_000);
   const submitResult = await manager.callTool(adapter.provider, plan.toolName, plan.args, { signal: options.signal });
-  // wp5b2 shape research: dump the raw submit response for edit_video so the
-  // stage-1 (keyframe) contract is visible in server logs.
-  if (plan.toolName === "edit_video") {
-    console.error(`[edit_video RAW SUBMIT] ${JSON.stringify(submitResult).slice(0, 3000)}`);
-  }
   const taskId = adapter.parseTaskId(submitResult);
   if (!taskId) throw new Error(`MCP_TASK_ID_MISSING:${adapter.provider}:${plan.toolName}`);
   options.onPhase?.("provider-queued");

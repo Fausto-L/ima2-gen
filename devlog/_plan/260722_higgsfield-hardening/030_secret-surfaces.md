@@ -25,6 +25,13 @@ diff 계획:
 - import 추가: `import { scrubValue } from "../lib/mcp/sanitizer.js";`
 
 ## 030-C: 시크릿 회귀 테스트
+
+## 030-D: jobLog nested-cause scrub (audit R2 blocker 수용)
+`lib/mcp/jobLog.ts`의 `causeMessage()`가 cause.message를 scrub 없이 jobs.log에 영속 —
+mcpMedia/mcpMultishot/mcpRecover 모두 `logMcpJobError` 경유이므로 중첩 cause의 서명 URL이
+디스크에 남을 수 있었다. `scrubValue`를 causeMessage와 code 경로에 적용하고,
+중첩-cause 시크릿 회귀 테스트를 030-C 파일에 추가한다.
+
 신규 `tests/mcp-log-secrecy.test.ts` (node:test):
 - `scrubValue`가 대표 서명 URL(`...?sig=abc...`, 40+ 토큰, 이메일)을 [REDACTED] 처리하는지 계약 고정.
 - `executeMediaJob.ts` 소스 텍스트에 `RAW SUBMIT` 문자열이 없음을 파일 read로 단정
