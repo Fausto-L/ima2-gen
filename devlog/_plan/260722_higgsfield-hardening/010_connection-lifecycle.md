@@ -41,7 +41,7 @@ diff 계획 (connectionManager.ts):
   - **자동 재연결(refresh) 성공은 budget을 리셋하지 않는다.** refresh()의 bumpGeneration으로
     identity가 바뀌어도 Map은 provider 키라서 카운터가 이어진다 — 연속 drop 4회면
     3회까지만 재연결, 4회째 offline 잔류 (테스트 시나리오와 정확히 일치).
-  - budget 리셋(0으로)은 다음 두 경우만:
+  - budget 리셋(0으로)은 다음 세 경우만:
     (1) **성공한 callTool/listTools** — 연결이 실제로 일을 했다는 증거 (010-A의
     clearDegraded와 같은 호출 지점에서 함께 리셋),
     (2) **명시적 사용자 경로** — `connect()` / `handleOAuthCallback` 진입 시
