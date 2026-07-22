@@ -154,10 +154,11 @@ describe("MCP provider UI contract", () => {
     assert.match(kit, /triggerRef\.current\?\.focus\(\)/);
   });
 
-  it("unlocks higgsfield model browsing while generation stays locked (040)", () => {
+  it("derives the execution lock from the server record, never a provider-id hardcode (260723)", () => {
     const select = readSource("ui/src/components/GenProviderModelSelect.tsx");
     const settings = readSource("ui/src/store/storeSettingsImpl.ts");
     const controls = readSource("ui/src/components/settings/McpGenerationControls.tsx");
+    const connections = readSource("ui/src/components/settings/McpProviderConnections.tsx");
     const adapter = readSource("lib/mcp/adapters/higgsfield.ts");
     const catalog = readSource("lib/mcp/modelsCatalog.ts");
     const api = readSource("ui/src/lib/mcpProviders.ts");
@@ -167,9 +168,18 @@ describe("MCP provider UI contract", () => {
     assert.doesNotMatch(select, /record\.id === "higgsfield" \|\|/);
     assert.doesNotMatch(select, /higgsfield-locked/);
     assert.match(select, /lockedNotice/);
-    // Generation unlocked: adapter executable + billing denylist intact.
-    assert.match(settings, /state\.mcpProvider === "higgsfield"/);
+    // Server-derived lock: executable flag drives every surface, no id hardcode.
+    assert.match(settings, /getCachedMcpProviders/);
+    assert.match(settings, /mcpRecord\?\.executable === false/);
+    assert.doesNotMatch(settings, /state\.mcpProvider === "higgsfield"/);
     assert.match(settings, /higgsfieldLocked/);
+    assert.match(controls, /record\?\.executable === false/);
+    assert.doesNotMatch(controls, /mcpProvider === "higgsfield"/);
+    assert.match(connections, /provider\.executable === false/);
+    assert.doesNotMatch(connections, /provider\.id === "higgsfield"/);
+    assert.match(api, /executable\?: boolean/);
+    assert.match(api, /lockReason\?: string/);
+    // Adapter stays executable with the billing denylist intact.
     assert.match(adapter, /executable: true/);
     assert.match(adapter, /confirm_billing_purchase/);
     // Catalog resolver: single read-only tool constant; UI fallback endpoint.
@@ -182,12 +192,13 @@ describe("MCP provider UI contract", () => {
     assert.doesNotMatch(controls, /mcp-generation-controls__models/);
   });
 
-  it("shows connected MCP providers only, preserves unknown selection, and locks Higgsfield", () => {
+  it("shows connected MCP providers only, preserves unknown selection, and surfaces lock notices", () => {
     const select = readSource("ui/src/components/GenProviderModelSelect.tsx");
 
     assert.match(select, /status\.state === "connected"/);
     assert.match(select, /mcpProvider && !connectedMcpProviders\.some/);
-    assert.match(select, /entry\.id === "higgsfield"/);
+    assert.match(select, /selectedMcpRecord\?\.executable === false/);
+    assert.doesNotMatch(select, /selectedMcpRecord\?\.id === "higgsfield"/);
     assert.match(select, /disabled=\{Boolean\(unavailableReason\)\}/);
     assert.match(select, /REASONING_EFFORT_OPTIONS/);
     assert.match(select, /getImageModelOptionsForProvider/);

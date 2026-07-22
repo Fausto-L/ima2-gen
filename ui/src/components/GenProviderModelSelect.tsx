@@ -134,9 +134,10 @@ export function GenProviderModelSelect({ compact = false }: { compact?: boolean 
     ),
   );
 
-  // Browse is unlocked for Higgsfield (040); generation stays locked and the
-  // notice renders in the status line without disabling the model select.
-  const lockedNotice = selectedMcpRecord?.id === "higgsfield" ? t("mcp.higgsfieldLocked") : null;
+  // Execution lock comes from the server record, not a provider-id hardcode (260723).
+  const lockedNotice = selectedMcpRecord?.executable === false
+    ? (selectedMcpRecord.lockReason ?? t("mcp.higgsfieldLocked"))
+    : null;
   const unavailableReason = !mcpProvider
     ? null
     : !selectedMcpRecord
@@ -195,7 +196,7 @@ export function GenProviderModelSelect({ compact = false }: { compact?: boolean 
       items: connectedMcpProviders.map((entry) => ({
         value: `${MCP_PREFIX}${entry.id}`,
         label: displayProviderId(entry.id),
-        sub: entry.id === "higgsfield" ? t("mcp.locked") : undefined,
+        sub: entry.executable === false ? t("mcp.locked") : undefined,
       })),
     });
   }

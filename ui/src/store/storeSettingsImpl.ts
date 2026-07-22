@@ -15,7 +15,7 @@ import {
   normalizeCount,
 } from "./storePersistence";
 import type { StoreSet, StoreGet } from "./storeTypes";
-import { startMcpGeneration, type McpModelCapabilities, type McpPresetValue } from "../lib/mcpProviders";
+import { getCachedMcpProviders, startMcpGeneration, type McpModelCapabilities, type McpPresetValue } from "../lib/mcpProviders";
 import { jsonFetch } from "../lib/api-core";
 import { isVideoItem } from "../lib/videoMedia";
 import {
@@ -115,9 +115,13 @@ async function submitMcpGeneration(input: NonNullable<ReturnType<typeof buildMcp
 
 async function runMcpGenerate(get: StoreGet): Promise<void> {
   const state = get();
-  // Higgsfield generation stays locked on the free plan (040): pre-block in the
-  // client so no request is sent; the server adapter also rejects (double guard).
-  if (state.mcpProvider === "higgsfield") {
+  // Execution lock comes from the server record, not a provider-id hardcode
+  // (260723). When the cache has no record, skip the pre-block and let the
+  // server adapter reject with the authoritative code (double guard).
+  const mcpRecord = state.mcpProvider
+    ? getCachedMcpProviders().find((entry) => entry.id === state.mcpProvider)
+    : undefined;
+  if (mcpRecord?.executable === false) {
     get().showToast(t("mcp.higgsfieldLocked"), true);
     return;
   }

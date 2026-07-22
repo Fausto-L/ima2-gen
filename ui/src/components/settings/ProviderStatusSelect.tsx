@@ -43,7 +43,8 @@ function Dot({ tone }: { tone: DotTone }) {
 
 function mcpTone(record: McpProviderRecord): DotTone {
   if (!record.enabled) return "bad";
-  if (record.status.state === "connected") return record.id === "higgsfield" ? "warn" : "ok";
+  // Execution lock comes from the server record, not a provider-id hardcode (260723).
+  if (record.status.state === "connected") return record.executable === false ? "warn" : "ok";
   if (record.status.state === "connecting" || record.status.state === "auth_required") return "warn";
   return "bad";
 }
@@ -64,7 +65,7 @@ export function ProviderStatusSelect({ mcpProviders }: { mcpProviders: McpProvid
   const mcpStatusText = (record: McpProviderRecord): string => {
     if (!record.enabled) return t("mcp.disabledProvider");
     if (record.status.state === "connected") {
-      return record.id === "higgsfield" ? `${t("provider.statusConnected")} · ${t("mcp.locked")}` : t("provider.statusConnected");
+      return record.executable === false ? `${t("provider.statusConnected")} · ${t("mcp.locked")}` : t("provider.statusConnected");
     }
     if (record.status.state === "connecting") return t("mcp.connecting");
     if (record.status.state === "auth_required") return t("provider.statusAuthRequired");

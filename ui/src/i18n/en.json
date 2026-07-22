@@ -744,7 +744,7 @@
     "disconnectedSelection": "The saved provider is disconnected. Reconnect it in Settings.",
     "disabledProvider": "This provider is disabled in the current server configuration.",
     "selectionUnavailable": "The selected MCP provider is unavailable. Check its connection in Settings.",
-    "higgsfieldLocked": "Higgsfield is catalog-only for now; generation is locked.",
+    "higgsfieldLocked": "Generation is locked for this provider.",
     "toolCount": "{count} tools",
     "toolCountUnknown": "Tool count unknown",
     "snapshotChanges": "{count} schema changes",

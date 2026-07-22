@@ -38,7 +38,8 @@ export function McpGenerationControls({ record }: { record: McpProviderRecord | 
   const [catalogState, setCatalogState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [catalogRetryToken, setCatalogRetryToken] = useState(0);
 
-  const locked = mcpProvider === "higgsfield";
+  // Execution lock comes from the server record, not a provider-id hardcode (260723).
+  const locked = record?.executable === false;
   const connected = record?.status.state === "connected";
 
   useEffect(() => {

@@ -81,7 +81,9 @@ export function McpProviderConnections() {
 
       {providers.map((provider) => {
         const state = provider.status.state;
-        const locked = provider.id === "higgsfield" || !provider.enabled;
+        // Lock state comes from the server record (executable/lockReason), not
+        // a provider-id hardcode (260723).
+        const locked = !provider.enabled || provider.executable === false;
         const activeAction = busyAction?.provider === provider.id ? busyAction.action : null;
         const busy = activeAction !== null;
         const changes = diffCount(provider);
@@ -104,7 +106,9 @@ export function McpProviderConnections() {
               </p>
               {locked ? (
                 <p className="settings-row__microcopy">
-                  {provider.id === "higgsfield" ? t("mcp.higgsfieldLocked") : t("mcp.disabledProvider")}
+                  {provider.enabled
+                    ? (provider.lockReason ?? t("mcp.higgsfieldLocked"))
+                    : t("mcp.disabledProvider")}
                 </p>
               ) : provider.status.detail ? (
                 <p className="settings-row__microcopy">{provider.status.detail}</p>

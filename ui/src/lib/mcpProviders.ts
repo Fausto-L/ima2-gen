@@ -30,6 +30,10 @@ export type McpProviderRecord = {
   id: string;
   endpoint: string;
   enabled: boolean;
+  /** Server-side execution capability (false = catalog-only/locked). */
+  executable?: boolean;
+  /** Server-supplied reason when execution is locked. */
+  lockReason?: string;
   status: McpProviderStatus;
 };
 

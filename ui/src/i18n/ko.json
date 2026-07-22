@@ -744,7 +744,7 @@
     "disconnectedSelection": "저장된 프로바이더 연결이 끊겼습니다. 설정에서 다시 연결해주세요.",
     "disabledProvider": "이 프로바이더는 현재 서버 설정에서 비활성화되어 있습니다.",
     "selectionUnavailable": "선택한 MCP 프로바이더를 사용할 수 없습니다. 설정에서 연결 상태를 확인해주세요.",
-    "higgsfieldLocked": "Higgsfield는 현재 카탈로그 조회만 지원하며 생성은 잠겨 있습니다.",
+    "higgsfieldLocked": "이 제공자는 현재 생성이 잠겨 있습니다.",
     "toolCount": "도구 {count}개",
     "toolCountUnknown": "도구 수 미확인",
     "snapshotChanges": "스키마 변경 {count}건",
