@@ -19,7 +19,9 @@ diff 계획:
 - `lib/mcp/sanitizer.ts`의 `scrubValue`를 재사용:
   두 콜사이트에서 `message=${(error as Error)?.message?.slice(0,500)}` →
   `message=${scrubValue(String((error as Error)?.message ?? "").slice(0, 500))}` 로 교체
-  (mcpMultishot은 300자 유지). stack은 경로/행번호만 담기므로 유지하되 동일 scrub 적용.
+  (mcpMultishot은 300자 유지). stack도 동일하게 scrubValue 적용 — stack 첫 줄에는
+  error.message가 포함되므로 "경로/행번호만"이라는 전제는 성립하지 않는다(audit R1 수용).
+  scrub된 stack 출력도 030-C 테스트에서 단정한다.
 - import 추가: `import { scrubValue } from "../lib/mcp/sanitizer.js";`
 
 ## 030-C: 시크릿 회귀 테스트

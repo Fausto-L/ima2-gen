@@ -29,27 +29,36 @@ diff 계획 (connectionManager.ts):
 문제: `markOffline`이 `reconnectUsed` 단일 플래그로 identity당 1회만 자동 재연결.
 장시간(24h) 세션에서 두 번째 drop이면 offline 영구 잔류.
 
-diff 계획:
-- `ProviderSession.reconnectUsed?: boolean` → `reconnectAttempts?: number` 로 교체
-  (connectionRuntime.ts interface + connectionManager.ts 사용처 2곳).
-- `markOffline`: `const attempts = session.reconnectAttempts ?? 0;`
-  `if (attempts >= MAX_AUTO_RECONNECTS || this.shuttingDown) return;`
-  `session.reconnectAttempts = attempts + 1;`
-  딜레이 = `(this.options.reconnectDelayMs ?? 250) * 2 ** attempts` (250/500/1000ms).
+구현 계약 (audit R1 blocker 반영 — 단일 계약, provider-keyed budget):
+- `ProviderSession.reconnectUsed`는 제거하지 않고 **무시하지도 않는다 — 삭제한다**
+  (connectionRuntime.ts interface에서 필드 제거, connectionManager.ts 사용처 제거).
+  카운터는 오직 manager-level `private readonly reconnectBudget = new Map<string, number>()`.
+- **semantics: "성공한 실사용 RPC 없이 연속된 drop"의 상한.**
+  - `markOffline`(자동 경로): `const used = this.reconnectBudget.get(provider) ?? 0;`
+    `if (used >= MAX_AUTO_RECONNECTS || this.shuttingDown) return;`
+    `this.reconnectBudget.set(provider, used + 1);`
+    딜레이 = `(this.options.reconnectDelayMs ?? 250) * 2 ** used` (250/500/1000ms).
+  - **자동 재연결(refresh) 성공은 budget을 리셋하지 않는다.** refresh()의 bumpGeneration으로
+    identity가 바뀌어도 Map은 provider 키라서 카운터가 이어진다 — 연속 drop 4회면
+    3회까지만 재연결, 4회째 offline 잔류 (테스트 시나리오와 정확히 일치).
+  - budget 리셋(0으로)은 다음 두 경우만:
+    (1) **성공한 callTool/listTools** — 연결이 실제로 일을 했다는 증거 (010-A의
+    clearDegraded와 같은 호출 지점에서 함께 리셋),
+    (2) **명시적 사용자 경로** — `connect()` / `handleOAuthCallback` 진입 시
+    (사용자가 직접 다시 연결을 명령한 경우 새 예산).
+  - `disconnect()`/`reset()`은 budget을 리셋한다 (의도된 세션 종료 후 재연결은 새 맥락).
 - `MAX_AUTO_RECONNECTS = 3` 상수 (connectionManager.ts 최상단).
-- 성공 connect 시(performConnect connected Object.assign)에 `reconnectUsed: false` →
-  `reconnectAttempts: 0` 으로 교체 — 새 identity마다 예산 리셋.
-- refresh()가 bumpGeneration을 하므로 재연결 타이머 콜백의 sameConnection 가드는 그대로 유효.
-  주의: 재연결은 refresh() 경유이므로 새 identity가 되고 attempts는 새 세션 0에서 시작 —
-  카운터는 **offline을 유발한 직전 세션들에 걸쳐** 이어져야 무한 핑퐁을 막는다.
-  → 카운터를 session이 아니라 manager-level `reconnectBudget = new Map<string, number>()`에 두고,
-  성공적으로 connected 상태가 되면 0으로 리셋, markOffline마다 +1, 상한 3.
-  (session 필드 대신 Map 사용으로 확정; interface 변경 불필요)
+- 타이머 중복 등록 방지: `markOffline`에서 `this.reconnectTimers.has(provider)`면 신규 등록 생략
+  (리뷰어 비블로킹 제안 수용).
 
 테스트:
-- reconnectDelayMs:0 harness에서 연속 drop 4회 시나리오: 3회까지는 refresh 재시도 발생,
-  4회째는 offline 잔류 + 타이머 미등록 확인.
-- 성공 연결 후 budget 리셋 확인: drop→재연결 성공→drop 시 다시 재연결 시도.
+- reconnectDelayMs:0 harness에서 **성공 RPC 없이** 연속 drop 4회: 3회까지는 refresh 재시도 발생,
+  4회째는 offline 잔류 + 타이머 미등록 확인 (자동 재연결 성공이 budget을 되돌리지 않음 증명).
+- 성공 RPC 후 budget 리셋 확인: drop→재연결→**성공 callTool**→drop 시 다시 재연결 시도.
+- 명시적 connect() 재진입 후 budget 리셋 확인.
+
+## 010-A 추가 (리뷰어 비블로킹 수용)
+- degraded 해제 테스트는 callTool 성공뿐 아니라 listTools 성공 경로도 커버한다.
 
 ## 검증
 `npm run typecheck`, `node --import tsx --test tests/mcp-connection-manager.test.ts`, 이후 C에서 전량.
