@@ -359,9 +359,9 @@ test("guards: unknown provider 400, locked provider 409, disconnected 409", asyn
   await withApp(makeDeps(), async (base) => {
     const bad = await fetch(`${base}/api/mcp/generate`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider: "nope", kind: "image", prompt: "x" }) });
     assert.equal(bad.status, 400);
-    const locked = await fetch(`${base}/api/mcp/generate`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider: "higgsfield", kind: "image", prompt: "x" }) });
-    assert.equal(locked.status, 409);
-    assert.equal((await locked.json() as { error: { code: string } }).error.code, "MCP_EXECUTION_LOCKED");
+    // higgsfield is now executable — a valid request reaches the execution path (202 accepted)
+    const higgs = await fetch(`${base}/api/mcp/generate`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider: "higgsfield", kind: "image", prompt: "x" }) });
+    assert.equal(higgs.status, 202);
     const malformed = await fetch(`${base}/api/mcp/generate`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider: "runway", kind: "image", prompt: "x", parameters: ["bad"] }) });
     assert.equal(malformed.status, 400);
     assert.equal((await malformed.json() as { error: { code: string } }).error.code, "INVALID_MCP_PARAMETERS");

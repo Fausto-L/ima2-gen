@@ -74,15 +74,14 @@ test("recover: 409 when provider not connected", async () => {
   });
 });
 
-test("recover: 409 MCP_EXECUTION_LOCKED for catalog-only provider even when connected", async () => {
+test("recover: higgsfield is now executable and accepts recover requests", async () => {
   const manager = { status: () => ({ provider: "higgsfield", state: "connected" }) };
   await withServer(makeApp(manager), async (base) => {
     const res = await fetch(`${base}/api/mcp/tasks/${TASK}/recover`, {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ provider: "higgsfield" }),
     });
-    assert.equal(res.status, 409);
-    assert.equal((await res.json()).error.code, "MCP_EXECUTION_LOCKED");
+    assert.equal(res.status, 202);
   });
 });
 

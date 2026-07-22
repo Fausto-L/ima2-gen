@@ -23,9 +23,8 @@ const REGISTRY: Record<string, Omit<McpProviderDescriptor, "id" | "enabled">> = 
   higgsfield: {
     endpoint: "https://mcp.higgsfield.ai/mcp",
     executable: higgsfieldAdapter.executable,
-    lockReason: "catalog-only until paid plan",
     catalogAccess: "connected",
-    defaults: {},
+    defaults: { image: "soul_2", video: "cinematic_studio_3_0" },
   },
 };
 

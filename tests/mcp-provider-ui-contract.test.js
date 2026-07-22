@@ -167,10 +167,10 @@ describe("MCP provider UI contract", () => {
     assert.doesNotMatch(select, /record\.id === "higgsfield" \|\|/);
     assert.doesNotMatch(select, /higgsfield-locked/);
     assert.match(select, /lockedNotice/);
-    // Generation stays locked: client pre-block + adapter lock + billing denylist intact.
+    // Generation unlocked: adapter executable + billing denylist intact.
     assert.match(settings, /state\.mcpProvider === "higgsfield"/);
     assert.match(settings, /higgsfieldLocked/);
-    assert.match(adapter, /executable: false/);
+    assert.match(adapter, /executable: true/);
     assert.match(adapter, /confirm_billing_purchase/);
     // Catalog resolver: single read-only tool constant; UI fallback endpoint.
     assert.match(catalog, /READONLY_CATALOG_TOOL = "models_explore"/);

@@ -156,9 +156,16 @@ test("poll parsing distinguishes succeeded/failed/running and extracts media url
   assert.equal(runwayAdapter.parsePoll({ content: [{ type: "text", text: "RUNNING 42%" }] }).status, "running");
 });
 
-test("higgsfield adapter is catalog-only: execution locked, billing tools denylisted", () => {
-  assert.equal(higgsfieldAdapter.executable, false);
-  assert.throws(() => higgsfieldAdapter.buildGenerateCall({ kind: "image", prompt: "x" }), /MCP_EXECUTION_LOCKED/);
+test("higgsfield adapter is executable: billing tools denylisted, generate/poll wired", () => {
+  assert.equal(higgsfieldAdapter.executable, true);
   assert.deepEqual([...HIGGSFIELD_BILLING_DENYLIST], ["confirm_billing_purchase", "cancel_trial_auto_renewal", "confirm_trial_cancel"]);
-  assert.deepEqual(higgsfieldAdapter.models, { image: [], video: [] });
+  assert.ok(higgsfieldAdapter.models.image.length > 0);
+  assert.ok(higgsfieldAdapter.models.video.length > 0);
+  const call = higgsfieldAdapter.buildGenerateCall({ kind: "image", prompt: "a cat", model: "soul_2" });
+  assert.equal(call.toolName, "generate_image");
+  const callParams = call.args.params as Record<string, unknown>; // justified: ToolCallPlan.args is Record<string, unknown>
+  assert.equal(callParams.model, "soul_2");
+  const poll = higgsfieldAdapter.buildPollCall("abc-123");
+  assert.equal(poll.toolName, "job_status");
+  assert.equal(poll.args.jobId, "abc-123");
 });

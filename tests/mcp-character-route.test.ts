@@ -160,12 +160,11 @@ test("400 INVALID_MCP_REFERENCES when request refs + binding refs exceed the sha
   });
 });
 
-test("409 MCP_EXECUTION_LOCKED for higgsfield fires before binding resolution", async () => {
+test("higgsfield is now executable: missing binding returns 400 instead of 409 lock", async () => {
   const element = createCharacter(makeRefs(["c8a.png"])); // no binding at all
   await withServer(makeApp({}), async (base) => {
     const res = await post(base, { provider: "higgsfield", kind: "image", prompt: "hero", characterElementId: element.id });
-    assert.equal(res.status, 409);
-    assert.equal((await res.json()).error.code, "MCP_EXECUTION_LOCKED");
+    assert.equal(res.status, 400);
   });
 });
 

@@ -116,8 +116,8 @@ test("GET /api/models returns every canonical lane with deterministic statuses a
     assert.equal(body.lanes.agy.reason, "binary installed; login cannot be probed");
     assert.equal(body.lanes["gemini-api"].status, "ready");
     assert.equal(body.lanes.runway.status, "disconnected");
-    assert.equal(body.lanes.higgsfield.status, "locked");
-    assert.equal(body.lanes.higgsfield.reason, "catalog-only until paid plan");
+    assert.equal(body.lanes.higgsfield.status, "disconnected");
+    assert.match(body.lanes.higgsfield.reason ?? "", /MCP connection disconnected/);
 
     assert.equal(body.lanes.oauth.defaults.image, "gpt-5.6-luna");
     assert.equal(body.lanes.api.defaults.image, "gpt-5.6-sol");
@@ -143,7 +143,7 @@ test("GET /api/models returns every canonical lane with deterministic statuses a
   });
 });
 
-test("catalog failures degrade per lane and provider listings expose registry-owned locks", async () => {
+test("catalog failures degrade per lane and provider listings expose registry state", async () => {
   const manager = new FakeMcpManager();
   manager.states.set("higgsfield", "connected");
   manager.failCatalog = true;
@@ -152,8 +152,8 @@ test("catalog failures degrade per lane and provider listings expose registry-ow
     assert.equal(modelsResponse.status, 200);
     const models = await modelsResponse.json() as ModelsBody;
     assert.equal(models.ok, true);
-    assert.equal(models.lanes.higgsfield.status, "locked");
-    assert.equal(models.lanes.higgsfield.reason, "catalog-only until paid plan");
+    // higgsfield is now executable: catalog failure (MCP_NOT_CONNECTED) degrades to disconnected
+    assert.equal(models.lanes.higgsfield.status, "disconnected");
     assert.deepEqual(models.lanes.higgsfield.models, { image: [], video: [] });
 
     const providers = await (await fetch(`${base}/api/mcp/providers`)).json() as ProviderBody;
@@ -161,19 +161,19 @@ test("catalog failures degrade per lane and provider listings expose registry-ow
     const higgsfield = providers.providers.find((provider) => provider.id === "higgsfield");
     assert.equal(runway?.executable, true);
     assert.equal(runway?.lockReason, undefined);
-    assert.equal(higgsfield?.executable, false);
-    assert.equal(higgsfield?.lockReason, "catalog-only until paid plan");
+    assert.equal(higgsfield?.executable, true);
+    assert.equal(higgsfield?.lockReason, undefined);
   });
 });
 
-test("connected MCP lanes add only read-only dynamic models and preserve locked precedence", async () => {
+test("connected MCP lanes add only read-only dynamic models", async () => {
   const manager = new FakeMcpManager();
   manager.states.set("runway", "connected");
   manager.states.set("higgsfield", "connected");
   await withApp({ manager }, async (base) => {
     const body = await (await fetch(`${base}/api/models`)).json() as ModelsBody;
     assert.equal(body.lanes.runway.status, "ready");
-    assert.equal(body.lanes.higgsfield.status, "locked");
+    assert.equal(body.lanes.higgsfield.status, "ready");
     assert.deepEqual(body.lanes.higgsfield.models.image.map((model) => model.id), ["soul_2"]);
     assert.deepEqual(body.lanes.higgsfield.models.video.map((model) => model.id), ["kling_3"]);
     assert.deepEqual(body.lanes.higgsfield.models.image[0].capabilities.inputRoles, ["image"]);
