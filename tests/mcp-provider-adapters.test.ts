@@ -165,6 +165,15 @@ test("higgsfield adapter is executable: billing tools denylisted, generate/poll 
   assert.equal(call.toolName, "generate_image");
   const callParams = call.args.params as Record<string, unknown>; // justified: ToolCallPlan.args is Record<string, unknown>
   assert.equal(callParams.model, "soul_2");
+  // 260723: use_unlim defaults on (web-app contract); whitelisted knobs forward.
+  assert.equal(callParams.use_unlim, true);
+  const lowRes = higgsfieldAdapter.buildGenerateCall({ kind: "image", prompt: "a cat", model: "nano_banana_2", parameters: { resolution: "1k", duration: 5, bogus: "x" } });
+  const lowResParams = lowRes.args.params as Record<string, unknown>; // justified: ToolCallPlan.args is Record<string, unknown>
+  assert.equal(lowResParams.resolution, "1k");
+  assert.equal(lowResParams.duration, undefined); // image kind never gets duration
+  assert.equal(lowResParams.bogus, undefined); // non-whitelisted keys are dropped
+  const override = higgsfieldAdapter.buildGenerateCall({ kind: "image", prompt: "a cat", parameters: { use_unlim: false } });
+  assert.equal((override.args.params as Record<string, unknown>).use_unlim, false); // justified: ToolCallPlan.args is Record<string, unknown>
   const poll = higgsfieldAdapter.buildPollCall("abc-123");
   assert.equal(poll.toolName, "job_status");
   assert.equal(poll.args.jobId, "abc-123");

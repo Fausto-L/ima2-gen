@@ -73,12 +73,22 @@ const TASK_ID_PATTERN = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
 
 function buildGenerateCall(request: MediaJobRequest): ToolCallPlan {
   const model = request.model ?? DEFAULT_MODEL[request.kind];
-  const params: Record<string, unknown> = { model };
+  // 260723: the web app sends `use_unlim: true` on every generation (captured
+  // via CDP from POST fnf-api-gw.higgsfield.ai/fnf/jobs/*). Forward it by
+  // default so unlimited-trial accounts take the unlimited path once the
+  // provider-side MCP submit works; callers can override via parameters.
+  const params: Record<string, unknown> = { model, use_unlim: true };
   if (request.prompt) params.prompt = request.prompt;
   if (request.ratio) params.aspect_ratio = request.ratio;
   // Duration only applies to video generation.
   if (request.kind === "video" && request.parameters?.duration !== undefined) {
     params.duration = request.parameters.duration;
+  }
+  // Provider-declared scalar knobs (models catalog): resolution (nano_banana),
+  // quality (soul), count. Only whitelisted keys are forwarded.
+  const FORWARDED_PARAM_KEYS = new Set(["resolution", "quality", "count", "use_unlim"]);
+  for (const [key, value] of Object.entries(request.parameters ?? {})) {
+    if (FORWARDED_PARAM_KEYS.has(key)) params[key] = value;
   }
   // Reference images: Higgsfield requires media_id (from media_import_url),
   // not raw URLs. The MCP media pipeline handles upload before calling here,
