@@ -1,0 +1,17 @@
+.git
+.github
+.codexclaw
+.ima2
+node_modules
+ui/node_modules
+ui/dist
+generated
+devlog
+site
+tests
+scripts/*.log
+*.log
+.env
+.DS_Store
+Dockerfile
+docker-compose.yml

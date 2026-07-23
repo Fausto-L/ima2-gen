@@ -1,0 +1,19 @@
+services:
+  ima2:
+    build: .
+    image: ima2-gen:latest
+    ports:
+      - "3333:3333"
+    environment:
+      # REQUIRED: the server refuses to bind 0.0.0.0 without an access token.
+      # Clients must send it as an `x-ima2-token` header (or `?token=` query).
+      IMA2_LAN_TOKEN: ${IMA2_LAN_TOKEN:?set IMA2_LAN_TOKEN in your environment or .env}
+      # Optional provider API keys (or configure them in the web UI once running):
+      # OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # GEMINI_API_KEY: ${GEMINI_API_KEY}
+    volumes:
+      - ima2-data:/data
+    restart: unless-stopped
+
+volumes:
+  ima2-data:

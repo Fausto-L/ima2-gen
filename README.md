@@ -30,6 +30,15 @@ ima2 serve
 
 Then open `http://localhost:3333`.
 
+### Docker
+
+```bash
+docker build -t ima2-gen .
+docker run -d -p 3333:3333 -e IMA2_LAN_TOKEN=change-me -v ima2-data:/data ima2-gen
+```
+
+See [docs/DOCKER.md](docs/DOCKER.md) for compose usage, required environment, and limitations.
+
 To generate from the CLI, inspect the live lane catalog and choose explicit image/video defaults once:
 
 ```bash
