@@ -29,6 +29,7 @@ const CORE_PROVIDER_OPTIONS: ReadonlyArray<{ value: Provider; label: string }> =
   { value: "grok-api", label: "xAI API" },
   { value: "agy", label: "agy" },
   { value: "gemini-api", label: "Gem API" },
+  { value: "atlascloud", label: "Atlas" },
 ];
 
 const MCP_PREFIX = "mcp:";

@@ -2,6 +2,10 @@ import { spawn } from "node:child_process";
 import type { Express, Request, Response } from "express";
 import { buildAgyPathEnv, resolveAgyBin } from "../lib/agyCli.js";
 import {
+  ATLASCLOUD_EDIT_MODEL,
+  ATLASCLOUD_TEXT_TO_IMAGE_MODEL,
+} from "../lib/atlasCloudImageAdapter.js";
+import {
   GROK_VIDEO_MODEL_15,
   GROK_VIDEO_MODEL_BASE,
   MAX_VIDEO_DURATION,
@@ -30,7 +34,7 @@ import {
 export type ModelLaneStatus = "ready" | "locked" | "disconnected" | "key-missing";
 export type ModelLaneId =
   | "oauth" | "api" | "grok" | "grok-api" | "agy" | "gemini-api"
-  | "runway" | "higgsfield";
+  | "atlascloud" | "runway" | "higgsfield";
 
 export interface ModelLaneDto {
   status: ModelLaneStatus;
@@ -156,6 +160,15 @@ function geminiLane(ctx: RuntimeContext): ModelLaneDto {
   });
 }
 
+function atlasCloudLane(ctx: RuntimeContext): ModelLaneDto {
+  const state: LaneState = ctx.atlasCloudApiKey
+    ? { status: "ready" }
+    : { status: "key-missing", reason: "Atlas Cloud API key missing" };
+  return lane(state, { image: ATLASCLOUD_TEXT_TO_IMAGE_MODEL }, {
+    image: entries([ATLASCLOUD_TEXT_TO_IMAGE_MODEL, ATLASCLOUD_EDIT_MODEL]), video: [],
+  });
+}
+
 function buildCoreLanes(ctx: RuntimeContext, agyInstalled: boolean) {
   const gptModels = entries(ctx.config.imageModels.valid);
   return {
@@ -165,6 +178,7 @@ function buildCoreLanes(ctx: RuntimeContext, agyInstalled: boolean) {
     "grok-api": grokApiLane(ctx),
     agy: agyLane(agyInstalled),
     "gemini-api": geminiLane(ctx),
+    atlascloud: atlasCloudLane(ctx),
   };
 }
 

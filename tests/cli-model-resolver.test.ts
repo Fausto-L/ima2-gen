@@ -30,6 +30,10 @@ function makeCatalog(): ModelCatalog {
       "grok-api": ready(),
       agy: ready({ image: [{ id: "banana" }] }, { image: "banana" }),
       "gemini-api": ready({ image: [{ id: "gemini-image" }] }, { image: "gemini-image" }),
+      atlascloud: ready(
+        { image: [{ id: "openai/gpt-image-2/text-to-image" }] },
+        { image: "openai/gpt-image-2/text-to-image" },
+      ),
       runway: ready(
         { image: [{ id: "gen-4" }], video: [{ id: "veo-3.1" }] },
         { image: "gen-4", video: "veo-3.1" },
@@ -94,6 +98,9 @@ describe("resolveTarget", () => {
   });
 
   it("uses lane defaults for provider-only resolution and rejects absent defaults", () => {
+    assert.deepStrictEqual(resolveTarget("image", { provider: "atlascloud" }, makeCatalog(), {}), {
+      ok: true, lane: "atlascloud", model: "openai/gpt-image-2/text-to-image", transport: "core",
+    });
     assert.deepStrictEqual(resolveTarget("image", { provider: "runway" }, makeCatalog(), {}), {
       ok: true, lane: "runway", model: "gen-4", transport: "mcp",
     });

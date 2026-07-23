@@ -1,4 +1,5 @@
 import type { RuntimeContext } from "./runtimeContext.js";
+import { ATLASCLOUD_TEXT_TO_IMAGE_MODEL } from "./atlasCloudImageAdapter.js";
 import { FALLBACK_IMAGE_MODEL, normalizeImageModel, normalizeReasoningEffort, normalizeGrokImageModel, normalizeGeminiApiModel } from "./imageModels.js";
 
 export function resolveProviderOptions(ctx: RuntimeContext | null | undefined, {
@@ -25,6 +26,16 @@ export function resolveProviderOptions(ctx: RuntimeContext | null | undefined, {
     return {
       provider: "gemini-api" as const,
       model: geminiModelCheck.model,
+      reasoningEffort: "none",
+      size: rawSize || "1024x1024",
+      webSearchEnabled: false,
+    };
+  }
+
+  if (provider === "atlascloud") {
+    return {
+      provider: "atlascloud" as const,
+      model: rawModel || ATLASCLOUD_TEXT_TO_IMAGE_MODEL,
       reasoningEffort: "none",
       size: rawSize || "1024x1024",
       webSearchEnabled: false,

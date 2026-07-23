@@ -24,6 +24,7 @@ const CORE_ENTRIES: ReadonlyArray<CoreEntry> = [
   { value: "grok-api", provider: "Grok", method: "API" },
   { value: "agy", provider: "Gemini", method: "agy" },
   { value: "gemini-api", provider: "Gemini", method: "API" },
+  { value: "atlascloud", provider: "Atlas Cloud", method: "API" },
 ];
 
 function displayProviderId(id: string): string {

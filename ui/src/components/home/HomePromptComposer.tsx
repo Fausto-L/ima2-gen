@@ -14,6 +14,7 @@ const PROVIDER_LABELS: Record<Provider, string> = {
   "grok-api": "Grok API",
   agy: "Antigravity",
   "gemini-api": "Gemini API",
+  atlascloud: "Atlas Cloud",
 };
 
 function homeReferenceThumbnail(item: TrayItem): string | undefined {
