@@ -1,6 +1,6 @@
 import { mkdir, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
-import sharp from "sharp";
+import sharp, { type OverlayOptions } from "sharp";
 import { atomicWriteJson } from "./atomicWrite.js";
 import { readSpriteCuration, resolveSpriteStatePlan } from "./spriteCurationStore.js";
 import { parseSpriteGenManifest } from "./spriteAtlasManifest.js";
@@ -30,7 +30,7 @@ export async function composeSpriteAtlas(input: SpriteAtlasComposeInput): Promis
     const rows = Object.keys(source.frame_layout.rows);
     const plans = rows.map((state) => resolveSpriteStatePlan(curation, state, source.frame_layout.rows[state].length));
     const columns = Math.max(1, ...plans.map((plan) => plan.ordered.length));
-    const composites: sharp.OverlayOptions[] = [];
+    const composites: OverlayOptions[] = [];
     const layoutRows: Record<string, SpriteFrameRect[]> = {};
     for (let row = 0; row < rows.length; row++) {
       const state = rows[row]; layoutRows[state] = [];
