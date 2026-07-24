@@ -1460,6 +1460,8 @@
   },
   "nav": {
     "ariaLabel": "Main navigation",
+    "home": "Home",
+    "dashboard": "Dashboard",
     "create": "Create",
     "node": "Node graph",
     "agent": "Agent",
@@ -1505,5 +1507,36 @@
     "itemCount": "{count} items"
   },
   "assets.clearAll": "Clear all",
-  "assets.clearConfirm": "Delete all saved assets? This cannot be undone."
+  "assets.clearConfirm": "Delete all saved assets? This cannot be undone.",
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Usage statistics and cost analysis",
+    "rangeToday": "Today",
+    "range7d": "7 days",
+    "range30d": "30 days",
+    "rangeAll": "All time",
+    "loading": "Loading...",
+    "error": "Failed to load stats",
+    "retry": "Retry",
+    "noData": "No data yet. Generate some images to see statistics.",
+    "totalImages": "Total Images",
+    "totalVideos": "Videos",
+    "totalTokens": "Token Usage",
+    "totalCost": "Total Cost",
+    "avgElapsed": "Avg. Duration",
+    "seconds": "s",
+    "images": "",
+    "videos": "",
+    "costSummary": "Cost Summary",
+    "dailyTrend": "Daily Trend",
+    "dailyTrendCount": "Count",
+    "dailyTrendCost": "Cost",
+    "modelDist": "Model Distribution",
+    "providerDist": "Provider Distribution",
+    "sizeDist": "Size Distribution",
+    "qualityDist": "Quality Distribution",
+    "promptCloud": "Prompt Word Cloud",
+    "images.label": "Images",
+    "images.unit": ""
+  }
 }

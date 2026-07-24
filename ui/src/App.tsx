@@ -43,6 +43,9 @@ const LazyAssetsWorkspace = lazy(() =>
 const HomeWorkspace = lazy(() =>
   import("./components/home/HomeWorkspace").then((module) => ({ default: module.HomeWorkspace })),
 );
+const LazyDashboardPage = lazy(() =>
+  import("./components/dashboard/DashboardPage").then((module) => ({ default: module.DashboardPage })),
+);
 const LazyPromptLibraryPanel = lazy(() =>
   import("./components/PromptLibraryPanel").then((module) => ({ default: module.PromptLibraryPanel })),
 );
@@ -71,10 +74,12 @@ export default function App() {
       uiModeRaw === "node" && ENABLE_NODE_MODE ? "node" :
       uiModeRaw === "home" ? "home" :
       uiModeRaw === "assets" ? "assets" :
+      uiModeRaw === "dashboard" ? "dashboard" :
         "classic";
   const isAgentMode = uiMode === "agent";
   const isAssetsMode = uiMode === "assets";
   const isHomeMode = uiMode === "home";
+  const isDashboardMode = uiMode === "dashboard";
   const isMobile = useIsMobile();
   const workspaceSettings = resolveWorkspaceSettings(workspaceProfile);
   const promptStudioClassic =
@@ -82,7 +87,7 @@ export default function App() {
     uiMode === "classic" &&
     workspaceSettings.composerPlacement === "bottom" &&
     workspaceSettings.multimodeHistoryGrouping === "sequence";
-  const showHistoryStrip = !promptStudioClassic && !isAgentMode && !isAssetsMode && !isHomeMode;
+  const showHistoryStrip = !promptStudioClassic && !isAgentMode && !isAssetsMode && !isHomeMode && !isDashboardMode;
 
   useBrowserAttentionBadge(unseenGeneratedCount);
 
@@ -133,7 +138,7 @@ export default function App() {
         data-ui-mode={uiMode}
       >
         <NavRail />
-        {isHomeMode ? null : <Sidebar />}
+        {isHomeMode || isDashboardMode ? null : <Sidebar />}
         <MobileAppBar />
         {showHistoryStrip ? <HistoryStrip /> : null}
         <Suspense fallback={<WorkspaceFallback />}>
@@ -151,11 +156,13 @@ export default function App() {
             <LazyAssetsWorkspace />
           ) : uiMode === "home" ? (
             <HomeWorkspace />
+          ) : uiMode === "dashboard" ? (
+            <LazyDashboardPage />
           ) : (
             <Canvas />
           )}
         </Suspense>
-        {uiMode === "agent" ? null : uiMode === "card-news" ? null : uiMode === "assets" ? null : uiMode === "home" ? null : <RightPanel />}
+        {uiMode === "agent" ? null : uiMode === "card-news" ? null : uiMode === "assets" ? null : uiMode === "home" ? null : uiMode === "dashboard" ? null : <RightPanel />}
       </div>
       <CustomSizeConfirmModal />
       <TrashUndoToast />

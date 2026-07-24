@@ -1460,6 +1460,8 @@
   },
   "nav": {
     "ariaLabel": "主导航",
+    "home": "首页",
+    "dashboard": "仪表盘",
     "create": "创建",
     "node": "节点图谱",
     "agent": "Agent",
@@ -1505,5 +1507,36 @@
     "itemCount": "{count} 项"
   },
   "assets.clearAll": "清除全部",
-  "assets.clearConfirm": "删除所有已保存的资源？此操作不可撤销。"
+  "assets.clearConfirm": "删除所有已保存的资源？此操作不可撤销。",
+  "dashboard": {
+    "title": "仪表盘",
+    "subtitle": "使用统计与成本分析",
+    "rangeToday": "今天",
+    "range7d": "7天",
+    "range30d": "30天",
+    "rangeAll": "全部",
+    "loading": "加载中...",
+    "error": "加载统计数据失败",
+    "retry": "重试",
+    "noData": "暂无数据。生成一些图像后即可看到统计。",
+    "totalImages": "总生成数",
+    "totalVideos": "视频数",
+    "totalTokens": "Token 使用",
+    "totalCost": "总费用",
+    "avgElapsed": "平均耗时",
+    "seconds": "秒",
+    "images": "张",
+    "videos": "个",
+    "costSummary": "费用概览",
+    "dailyTrend": "每日趋势",
+    "dailyTrendCount": "生成量",
+    "dailyTrendCost": "费用",
+    "modelDist": "模型分布",
+    "providerDist": "来源分布",
+    "sizeDist": "尺寸分布",
+    "qualityDist": "质量分布",
+    "promptCloud": "提示词词云",
+    "images.label": "图像",
+    "images.unit": "张"
+  }
 }

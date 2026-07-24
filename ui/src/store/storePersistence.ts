@@ -120,6 +120,7 @@ export function loadUIMode(): UIMode {
     if (raw === "node") return ENABLE_NODE_MODE ? raw : "classic";
     if (raw === "assets") return raw;
     if (raw === "home") return raw;
+    if (raw === "dashboard") return raw;
     if (raw === "classic") return raw;
   } catch {}
   return "classic";

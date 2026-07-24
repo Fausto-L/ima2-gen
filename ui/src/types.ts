@@ -1,4 +1,4 @@
-export type UIMode = "classic" | "node" | "card-news" | "agent" | "assets" | "home";
+export type UIMode = "classic" | "node" | "card-news" | "agent" | "assets" | "home" | "dashboard";
 export type SettingsSection = "providers" | "workspace" | "general";
 export type HistoryStripLayout = "rail" | "horizontal" | "sidebar";
 export type Provider = "oauth" | "api" | "grok" | "grok-api" | "agy" | "gemini-api" | "dashscope";
