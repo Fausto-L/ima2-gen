@@ -139,7 +139,7 @@ curl -s https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generatio
     "customModels": "qwen-image-2.0-pro, qwen-image-max, z-image-turbo, wan2.7-image-pro",
     "defaultImageModel": "qwen-image-2.0-pro"
   },
-  "dashscopeApiKey": "sk-c3c54xxxxxxxxxxxxxxxxxx44d8"
+  "dashscopeApiKey": "sk-your-dashscope-api-key-here"
 }
 ```
 
