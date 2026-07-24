@@ -1,7 +1,7 @@
 # 测试结果汇总
 
 > **测试日期**: 2026-07-24  
-> **Key**: `sk-c3c54...44d8`  
+> **Key**: `sk-...44d8` (masked)  
 > **Base URL**: `https://dashscope.aliyuncs.com`
 
 ---

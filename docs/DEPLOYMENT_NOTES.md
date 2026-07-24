@@ -87,7 +87,7 @@ curl -s http://127.0.0.1:3333/api/dashscope/config | python3 -m json.tool
 
 // /api/keys/status
 {
-  "dashscope": { "configured": true, "valid": true, "maskedKey": "sk-c3c54...44d8" }
+  "dashscope": { "configured": true, "valid": true, "maskedKey": "sk-...44d8" }
 }
 ```
 
