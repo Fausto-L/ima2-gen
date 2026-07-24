@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "fs/promises";
 import { safeWriteSidecar, atomicWriteJson } from "./atomicWrite.js";
 import { join } from "path";
 import { randomBytes } from "crypto";
+import { buildFilename } from "./filename.js";
 import type { Request, Response } from "express";
 import { detectImageMimeFromB64, summarizeReferencePayload, validateAndNormalizeRefs } from "./refs.js";
 import { generateImageThumbnailFromBuffer } from "./imageThumb.js";
@@ -13,6 +14,7 @@ import { generateViaResponses } from "./responsesImageAdapter.js";
 import { generateViaGrok, planGrokImage } from "./grokImageAdapter.js";
 import { generateViaAgy } from "./agyImageAdapter.js";
 import { generateViaGeminiApi } from "./geminiApiImageAdapter.js";
+import { generateViaDashscope } from "./dashscopeImageAdapter.js";
 import { isNonRetryableGenerationError, normalizeGenerationFailure, type UpstreamErr } from "./generationErrors.js";
 import { startJob, finishJob, registerJobAbortController, isJobCanceled, isStartJobFailure, setJobPhase, INFLIGHT_RETRY_AFTER_SECONDS, } from "./inflight.js";
 import { isGenerationCanceledError, makeGenerationCanceledError, throwIfJobCanceled, } from "./generationCancel.js";
@@ -121,10 +123,10 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
       const providerRefCount = activeProvider === "grok" || activeProvider === "grok-api"
         ? grokRefs.length
         : refCheck.refs.length;
-      if ((activeProvider === "grok" || activeProvider === "agy" || activeProvider === "grok-api" || activeProvider === "gemini-api") && providerRefCount > 3) {
+      if ((activeProvider === "grok" || activeProvider === "agy" || activeProvider === "grok-api" || activeProvider === "gemini-api" || activeProvider === "dashscope") && providerRefCount > 3) {
         return fail(400, {
-          error: `${activeProvider === "agy" ? "Agy" : "Grok"} image editing supports up to 3 reference images`,
-          code: activeProvider === "agy" ? "AGY_REF_TOO_MANY" : "GROK_REF_TOO_MANY",
+          error: `${activeProvider === "agy" ? "Agy" : activeProvider === "gemini-api" ? "Gemini API" : activeProvider === "dashscope" ? "DashScope" : "Grok"} image editing supports up to 3 reference images`,
+          code: activeProvider === "agy" ? "AGY_REF_TOO_MANY" : activeProvider === "gemini-api" ? "GEMINI_API_REF_TOO_MANY" : activeProvider === "dashscope" ? "DASHSCOPE_REF_TOO_MANY" : "GROK_REF_TOO_MANY",
           requestId,
         });
       }
@@ -193,7 +195,7 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
       });
       const startTime = Date.now();
       const mimeMap: Record<string, string> = { png: "image/png", jpeg: "image/jpeg", webp: "image/webp" };
-      const effectiveFormat = activeProvider === "grok" || activeProvider === "agy" || activeProvider === "grok-api" || activeProvider === "gemini-api" ? "jpeg" : String(format);
+      const effectiveFormat = activeProvider === "grok" || activeProvider === "agy" || activeProvider === "grok-api" || activeProvider === "gemini-api" || activeProvider === "dashscope" ? "jpeg" : String(format);
       const mime = mimeMap[effectiveFormat] || "image/png";
       await mkdir(ctx.config.storage.generatedDir, { recursive: true });
       const grokDirectApiKey = activeProvider === "grok-api" ? ctx.xaiApiKey : undefined;
@@ -209,6 +211,17 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
         })
         : null;
       const generateOne = async () => {
+        if (activeProvider === "dashscope") {
+          const r = await generateViaDashscope(generationPrompt, requireRuntimeContext(ctx), {
+            model: imageModel,
+            size: effectiveSize,
+            signal: cancelController.signal,
+            requestId,
+            references: refCheck.refDetails,
+          });
+          throwIfJobCanceled(requestId);
+          return r;
+        }
         if (activeProvider === "gemini-api") {
           const r = await generateViaGeminiApi(generationPrompt, requireRuntimeContext(ctx), {
             model: imageModel,
@@ -300,10 +313,10 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
         if (r.status === "fulfilled" && r.value.b64) {
           throwIfJobCanceled(requestId);
           const valueWithMime = r.value as typeof r.value & { mime?: string };
-          const resultMime = activeProvider === "grok" || activeProvider === "agy" || activeProvider === "grok-api" || activeProvider === "gemini-api"
+          const resultMime = activeProvider === "grok" || activeProvider === "agy" || activeProvider === "grok-api" || activeProvider === "gemini-api" || activeProvider === "dashscope"
             ? (valueWithMime.mime || detectImageMimeFromB64(r.value.b64) || mime)
             : mime;
-          const resultFormat = activeProvider === "grok" || activeProvider === "agy" || activeProvider === "grok-api" || activeProvider === "gemini-api" ? imageFormatFromMime(resultMime) : effectiveFormat;
+          const resultFormat = activeProvider === "grok" || activeProvider === "agy" || activeProvider === "grok-api" || activeProvider === "gemini-api" || activeProvider === "dashscope" ? imageFormatFromMime(resultMime) : effectiveFormat;
           const retryValue = r.value as typeof r.value & {
             retryKind?: string;
             initialEventCount?: number;
@@ -324,8 +337,14 @@ export async function runGeneratePipeline(req: Request, res: Response, ctx: Runt
               webSearchDroppedOnRetry: retryValue.webSearchDroppedOnRetry ?? null,
             };
           }
-          const rand = randomBytes(ctx.config.ids.generatedHexBytes).toString("hex");
-          const filename = `${Date.now()}_${rand}_${images.length}.${resultFormat}`;
+          const filename = buildFilename({
+            model: (activeProvider === "grok" ? (quality === "high" ? "grok-imagine-image-quality" : imageModel) : imageModel) || activeProvider || "unknown",
+            size: effectiveSize || "",
+            createdAt: Date.now(),
+            prompt: prompt || "",
+            ext: resultFormat,
+            index: images.length,
+          });
           const createdAt = Date.now();
           const valueWithProviderUrl = r.value as typeof r.value & { providerUrl?: unknown };
           const providerUrl = typeof valueWithProviderUrl.providerUrl === "string"
