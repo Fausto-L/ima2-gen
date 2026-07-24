@@ -8,7 +8,7 @@ import type { AppConfig } from "./runtimeContext.js";
 type CapabilitySource = "local" | "server";
 
 const VALID_MODES = ["auto", "direct"] as const;
-const VALID_PROVIDERS = ["auto", "oauth", "api", "grok", "grok-api", "agy", "gemini-api"] as const;
+const VALID_PROVIDERS = ["auto", "oauth", "api", "grok", "grok-api", "agy", "gemini-api", "dashscope"] as const;
 const AGENT_COMMANDS = [
   "skill",
   "capabilities",
@@ -71,6 +71,9 @@ export function buildIma2Capabilities({
         unsupported: toArray(appConfig.imageModels.unsupported),
         grokSupported: ["grok-imagine-image", "grok-imagine-image-quality"],
         geminiSupported: ["nano-banana-2", "nano-banana-pro"],
+        dashscopeSupported: ["wanx2.1-t2i-turbo", "wanx2.1-t2i-plus", "wanx-v1.1-t2i-turbo", "wanx2.1-t2i-turbo-auto", "wanx2.1-imageedit", "wanx2.1-imageedit-plus", "qwen-image-2.0", "qwen-image-2.0-pro", "qwen-image-max", "z-image-turbo", "wan2.7-image-pro"],
+        dashscopeBaseUrl: appConfig.dashscopeProvider.baseUrl || "https://dashscope.aliyuncs.com",
+        dashscopeCustomModels: appConfig.dashscopeProvider.customModels || "",
       },
       videoModels: {
         supported: ["grok-imagine-video", "grok-imagine-video-1.5"],

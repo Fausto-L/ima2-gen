@@ -21,6 +21,7 @@ export const PERSISTED_KEYS = [
   "ima2.galleryDefaultScope",
   // i18n
   "ima2.locale",
+  "ima2.currency",
   // workspace
   "ima2.workspaceProfile",
   "ima2.workspaceOverrides",
@@ -47,10 +48,11 @@ export const GRAPH_TAB_ID_KEY = PERSISTED_KEYS[11];
 export const GALLERY_SCOPE_STORAGE_KEY = PERSISTED_KEYS[12];
 export const GALLERY_DEFAULT_SCOPE_STORAGE_KEY = PERSISTED_KEYS[13];
 export const LOCALE_STORAGE_KEY = PERSISTED_KEYS[14];
-export const WORKSPACE_PROFILE_STORAGE_KEY = PERSISTED_KEYS[15];
-export const WORKSPACE_OVERRIDES_STORAGE_KEY = PERSISTED_KEYS[16];
-export const VIDEO_DEFAULTS_STORAGE_KEY = PERSISTED_KEYS[17];
-export const AGENT_PANE_PREFERENCE_STORAGE_KEY = PERSISTED_KEYS[18];
+export const CURRENCY_STORAGE_KEY = PERSISTED_KEYS[15];
+export const WORKSPACE_PROFILE_STORAGE_KEY = PERSISTED_KEYS[16];
+export const WORKSPACE_OVERRIDES_STORAGE_KEY = PERSISTED_KEYS[17];
+export const VIDEO_DEFAULTS_STORAGE_KEY = PERSISTED_KEYS[18];
+export const AGENT_PANE_PREFERENCE_STORAGE_KEY = PERSISTED_KEYS[19];
 
 export const PERSISTED_REGISTRY: Record<
   PersistedKey,
@@ -76,6 +78,7 @@ export const PERSISTED_REGISTRY: Record<
   "ima2.galleryScope": { domain: "gallery", shape: "string", resetSafe: true },
   "ima2.galleryDefaultScope": { domain: "gallery", shape: "string", resetSafe: true },
   "ima2.locale": { domain: "i18n", shape: "string", resetSafe: true },
+  "ima2.currency": { domain: "i18n", shape: "string:CNY|USD", resetSafe: true },
   "ima2.workspaceProfile": { domain: "layout", shape: "string", resetSafe: true },
   "ima2.workspaceOverrides": { domain: "layout", shape: "json:WorkspaceOverrides", resetSafe: true },
   "ima2.videoDefaults": { domain: "generation", shape: "json:{model,duration,resolution,aspectRatio}", resetSafe: true },

@@ -1,5 +1,5 @@
 import type { RuntimeContext } from "./runtimeContext.js";
-import { normalizeImageModel, normalizeReasoningEffort, normalizeGrokImageModel, normalizeGeminiApiModel } from "./imageModels.js";
+import { normalizeImageModel, normalizeReasoningEffort, normalizeGrokImageModel, normalizeGeminiApiModel, normalizeDashscopeModel } from "./imageModels.js";
 
 export function resolveProviderOptions(ctx: RuntimeContext | null | undefined, {
   provider = "oauth",
@@ -25,6 +25,20 @@ export function resolveProviderOptions(ctx: RuntimeContext | null | undefined, {
     return {
       provider: "gemini-api" as const,
       model: geminiModelCheck.model,
+      reasoningEffort: "none",
+      size: rawSize || "1024x1024",
+      webSearchEnabled: false,
+    };
+  }
+
+  if (provider === "dashscope") {
+    const dashscopeCfg: { defaultImageModel?: string } = (ctx?.config as any)?.dashscopeProvider || {};
+    const modelInput = rawModel || dashscopeCfg.defaultImageModel || "wanx2.1-t2i-turbo";
+    const dashscopeModelCheck = normalizeDashscopeModel(modelInput, ctx as any);
+    if (dashscopeModelCheck.error) return { error: dashscopeModelCheck.error, code: dashscopeModelCheck.code, status: dashscopeModelCheck.status };
+    return {
+      provider: "dashscope" as const,
+      model: dashscopeModelCheck.model,
       reasoningEffort: "none",
       size: rawSize || "1024x1024",
       webSearchEnabled: false,

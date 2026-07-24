@@ -1,6 +1,6 @@
 import type { Provider, Quality, SizePreset, Format, Moderation, ImageModel, Count } from "../types";
 import type { ReasoningEffort } from "../lib/reasoning";
-import { DEFAULT_IMAGE_MODEL, isGrokImageModel, isGeminiImageModel, normalizeVideoModelValue } from "../lib/imageModels";
+import { DEFAULT_IMAGE_MODEL, isGrokImageModel, isGeminiImageModel, isDashscopeImageModel, normalizeVideoModelValue } from "../lib/imageModels";
 import { parseRequestedCustomSide } from "../lib/size";
 import { getEffectiveVideoSourceCount } from "../lib/videoSourceCount";
 import {
@@ -29,6 +29,10 @@ export function setProviderImpl(provider: Provider, set: StoreSet, get: StoreGet
     const geminiModel = provider === "gemini-api" ? "nano-banana-pro" : "nano-banana-2";
     saveImageModel(geminiModel);
     set({ provider, imageModel: geminiModel });
+  } else if (provider === "dashscope") {
+    const dashscopeModel = "wanx2.1-t2i-turbo";
+    saveImageModel(dashscopeModel);
+    set({ provider, imageModel: dashscopeModel });
   } else if (provider !== "grok" && provider !== "grok-api" && provider !== "agy" && provider !== "gemini-api" && (isGrokImageModel(currentModel) || isGeminiImageModel(currentModel))) {
     set({ provider, imageModel: DEFAULT_IMAGE_MODEL });
     saveImageModel(DEFAULT_IMAGE_MODEL);
@@ -93,7 +97,12 @@ export function setImageModelImpl(imageModel: ImageModel, set: StoreSet, get: St
     }
     return;
   }
-  if (get().provider === "grok" || get().provider === "agy" || get().provider === "gemini-api") {
+  if (isDashscopeImageModel(imageModel)) {
+    saveGenerationDefaultsPatch({ provider: "dashscope" });
+    set({ provider: "dashscope", imageModel });
+    return;
+  }
+  if (get().provider === "grok" || get().provider === "agy" || get().provider === "gemini-api" || get().provider === "dashscope") {
     saveGenerationDefaultsPatch({ provider: "oauth" });
     set({ provider: "oauth", imageModel });
     return;

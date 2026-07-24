@@ -1,4 +1,5 @@
 import { t } from "../i18n";
+import type { SizePreset } from "../types";
 
 export function snap16(n: number): number {
   return Math.round(n / 16) * 16;
@@ -267,6 +268,33 @@ export const SIZE_PRESETS_ROW4 = [
   { value: "3840x2160", label: "3840×2160", sub: "4K 16:9" },
   { value: "2160x3840", label: "2160×3840", sub: "4K 9:16" },
 ] as const;
+
+// DashScope sync models (qwen-image-2.0 series, z-image-turbo, wan2.7-image-pro)
+// only accept these exact sizes. UI must show only these when a sync model is selected.
+export const DASHSCOPE_SYNC_SIZE_PRESETS: ReadonlyArray<{
+  value: SizePreset;
+  label: string;
+  sub: string;
+}> = [
+  { value: "2048x2048", label: "2048×2048", sub: "1:1" },
+  { value: "2688x1536", label: "2688×1536", sub: "16:9" },
+  { value: "1536x2688", label: "1536×2688", sub: "9:16" },
+  { value: "2368x1728", label: "2368×1728", sub: "4:3" },
+  { value: "1728x2368", label: "1728×2368", sub: "3:4" },
+] as const;
+
+// DashScope sync models that use the multimodal-generation endpoint
+export const DASHSCOPE_SYNC_MODELS = new Set([
+  "qwen-image-2.0",
+  "qwen-image-2.0-pro",
+  "qwen-image-max",
+  "z-image-turbo",
+  "wan2.7-image-pro",
+]);
+
+export function isDashscopeSyncModel(model: unknown): boolean {
+  return typeof model === "string" && DASHSCOPE_SYNC_MODELS.has(model);
+}
 
 export function getSizePresetsRow5(): ReadonlyArray<{
   value: "auto" | "custom";

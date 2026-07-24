@@ -3,6 +3,7 @@ import { readFile, writeFile, rename } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import type { RuntimeContext } from "../lib/runtimeContext.js";
 import { initVertexAuth, clearVertexAuth } from "../lib/vertexAuth.js";
+import { logEvent } from "../lib/logger.js";
 
 // Atomic + 0600 config write: temp file then rename, so a crash or concurrent
 // save can't corrupt config.json (which may hold API keys). Rename also forces
@@ -33,28 +34,42 @@ async function updateConfigFile(
   });
 }
 
-type KeyProvider = "openai" | "xai" | "gemini";
+type KeyProvider = "openai" | "xai" | "gemini" | "dashscope";
 
 const KEY_PREFIX_MAP: Record<KeyProvider, string[]> = {
   openai: ["sk-"],
   xai: ["xai-"],
   gemini: ["AI"],
+  // DashScope 官方 key 以 sk- 开头，但 UAES 自建网关 key 格式不同（如 XXG...），
+  // 故不强制前缀，只要求非空即可（空串已在前面拦截）。
+  dashscope: [],
 };
 
-const VALIDATE_URL_MAP: Record<KeyProvider, string> = {
+// 不需要前缀校验的 provider（前缀列表为空 = 跳过前缀检查）
+
+const VALIDATE_URL_MAP: Record<Exclude<KeyProvider, "dashscope">, string> = {
   openai: "https://api.openai.com/v1/models",
   xai: "https://api.x.ai/v1/models",
   gemini: "https://generativelanguage.googleapis.com/v1beta/models",
 };
 
+function getDashscopeValidateUrl(ctx: RuntimeContext): string {
+  const baseUrl = (ctx as any).dashscopeBaseUrl as string | undefined;
+  const cleanBase = (baseUrl && baseUrl.trim())
+    ? baseUrl.trim().replace(/\/+$/, "")
+    : "https://dashscope.aliyuncs.com";
+  return `${cleanBase}/api/v1/models`;
+}
+
 const CONFIG_KEY_MAP: Record<KeyProvider, string> = {
   openai: "apiKey",
   xai: "xaiApiKey",
   gemini: "geminiApiKey",
+  dashscope: "dashscopeApiKey",
 };
 
 function isKeyProvider(v: string): v is KeyProvider {
-  return v === "openai" || v === "xai" || v === "gemini";
+  return v === "openai" || v === "xai" || v === "gemini" || v === "dashscope";
 }
 
 function maskKey(key: string): string {
@@ -66,13 +81,14 @@ function keySourceForProvider(ctx: RuntimeContext, provider: KeyProvider): { key
   if (provider === "openai") return { key: ctx.apiKey, source: ctx.apiKeySource || "none" };
   if (provider === "xai") return { key: ctx.xaiApiKey, source: ctx.xaiApiKeySource || "none" };
   if (provider === "gemini") return { key: ctx.geminiApiKey, source: ctx.geminiApiKeySource || "none" };
+  if (provider === "dashscope") return { key: ctx.dashscopeApiKey, source: ctx.dashscopeApiKeySource || "none" };
   return { key: undefined, source: "none" };
 }
 
 export function mountKeyRoutes(app: Express, ctx: RuntimeContext) {
   app.get("/api/keys/status", (_req: Request, res: Response) => {
     const status: Record<string, unknown> = {};
-    for (const provider of ["openai", "xai", "gemini"] as const) {
+    for (const provider of ["openai", "xai", "gemini", "dashscope"] as const) {
       const { key, source } = keySourceForProvider(ctx, provider);
       status[provider] = {
         configured: !!key,
@@ -94,6 +110,41 @@ export function mountKeyRoutes(app: Express, ctx: RuntimeContext) {
     status.geminiAuthMode = (ctx as any).geminiAuthMode
       || (vertexJson && !ctx.geminiApiKey ? "vertex" : "apikey");
     res.json(status);
+  });
+
+  app.get("/api/dashscope/config", (_req: Request, res: Response) => {
+    const baseUrl = (ctx as any).dashscopeBaseUrl as string | undefined;
+    const customModels = (ctx as any).dashscopeCustomModels as string | undefined;
+    res.json({
+      baseUrl: baseUrl || "https://dashscope.aliyuncs.com",
+      customModels: customModels || "",
+    });
+  });
+
+  app.put("/api/dashscope/config", async (req: Request, res: Response) => {
+    const { baseUrl, customModels } = req.body as { baseUrl?: string; customModels?: string };
+    const cfgPath = ctx.config.storage.configFile;
+    await updateConfigFile(cfgPath, (existing) => {
+      const dp = (existing.dashscopeProvider ?? {}) as Record<string, unknown>;
+      if (typeof baseUrl === "string") {
+        dp.baseUrl = baseUrl.trim();
+      }
+      if (typeof customModels === "string") {
+        dp.customModels = customModels.trim();
+      }
+      existing.dashscopeProvider = dp;
+    });
+    if (typeof baseUrl === "string") {
+      (ctx as any).dashscopeBaseUrl = baseUrl.trim();
+    }
+    if (typeof customModels === "string") {
+      (ctx as any).dashscopeCustomModels = customModels.trim();
+    }
+    return res.json({
+      ok: true,
+      baseUrl: (ctx as any).dashscopeBaseUrl || "https://dashscope.aliyuncs.com",
+      customModels: (ctx as any).dashscopeCustomModels || "",
+    });
   });
 
   // Persist the Gemini auth mode chosen in the settings dropdown, so reopening
@@ -190,35 +241,54 @@ export function mountKeyRoutes(app: Express, ctx: RuntimeContext) {
       return res.status(400).json({ ok: false, error: "API key too large", code: "KEY_TOO_LARGE" });
     }
 
-    // Format check
-    const validPrefix = KEY_PREFIX_MAP[provider].some((p) => trimmed.startsWith(p));
-    if (!validPrefix) {
-      return res.status(400).json({
-        ok: false,
-        error: `Invalid key format for ${provider}: expected prefix ${KEY_PREFIX_MAP[provider].join(" or ")}`,
-        code: "INVALID_KEY_FORMAT",
-      });
+    // Format check (前缀列表非空的 provider 才校验前缀)
+    const prefixes = KEY_PREFIX_MAP[provider];
+    if (prefixes.length > 0) {
+      const validPrefix = prefixes.some((p) => trimmed.startsWith(p));
+      if (!validPrefix) {
+        return res.status(400).json({
+          ok: false,
+          error: `Invalid key format for ${provider}: expected prefix ${prefixes.join(" or ")}`,
+          code: "INVALID_KEY_FORMAT",
+        });
+      }
     }
 
     // Validate against provider API
     try {
-      const url = VALIDATE_URL_MAP[provider];
-      const opts: RequestInit = { signal: AbortSignal.timeout(10_000) };
       if (provider === "gemini") {
+        const url = VALIDATE_URL_MAP.gemini;
+        const opts: RequestInit = { signal: AbortSignal.timeout(10_000) };
         opts.headers = { "x-goog-api-key": trimmed };
         const validateRes = await fetch(url, opts);
         if (!validateRes.ok) throw new Error(`HTTP ${validateRes.status}`);
+      } else if (provider === "dashscope") {
+        // DashScope 验证：阿里云官方 baseUrl 支持 /api/v1/models，但 UAES 自建网关
+        // 可能不提供该路径。验证失败时记录日志但仍允许保存，由后续生图请求真正检验。
+        const url = getDashscopeValidateUrl(ctx);
+        const opts: RequestInit = { signal: AbortSignal.timeout(10_000) };
+        opts.headers = { Authorization: `Bearer ${trimmed}` };
+        const validateRes = await fetch(url, opts);
+        if (!validateRes.ok) throw new Error(`HTTP ${validateRes.status}`);
       } else {
+        const url = VALIDATE_URL_MAP[provider as Exclude<KeyProvider, "dashscope">];
+        const opts: RequestInit = { signal: AbortSignal.timeout(10_000) };
         opts.headers = { Authorization: `Bearer ${trimmed}` };
         const validateRes = await fetch(url, opts);
         if (!validateRes.ok) throw new Error(`HTTP ${validateRes.status}`);
       }
     } catch (e: any) {
-      return res.status(400).json({
-        ok: false,
-        error: `API key validation failed: ${e.message || "unknown"}`,
-        code: "KEY_VALIDATION_FAILED",
-      });
+      if (provider === "dashscope") {
+        // UAES 自建网关可能不支持标准 /api/v1/models 验证路径；
+        // 验证失败不阻断保存，由后续真实生图请求检验 key 有效性。
+        logEvent("keys", "dashscope-validate-skipped", { error: e?.message || String(e) });
+      } else {
+        return res.status(400).json({
+          ok: false,
+          error: `API key validation failed: ${e.message || "unknown"}`,
+          code: "KEY_VALIDATION_FAILED",
+        });
+      }
     }
 
     // Save to config.json
@@ -246,6 +316,10 @@ export function mountKeyRoutes(app: Express, ctx: RuntimeContext) {
       (ctx as any).geminiApiKeySource = "config";
       (ctx as any).hasGeminiApiKey = true;
       (ctx as any).geminiAuthMode = "apikey";
+    } else if (provider === "dashscope") {
+      (ctx as any).dashscopeApiKey = trimmed;
+      (ctx as any).dashscopeApiKeySource = "config";
+      (ctx as any).hasDashscopeApiKey = true;
     }
 
     return res.json({ ok: true, provider, source: "config", valid: true });
@@ -279,6 +353,10 @@ export function mountKeyRoutes(app: Express, ctx: RuntimeContext) {
       (ctx as any).geminiApiKey = undefined;
       (ctx as any).geminiApiKeySource = "none";
       (ctx as any).hasGeminiApiKey = false;
+    } else if (provider === "dashscope") {
+      (ctx as any).dashscopeApiKey = undefined;
+      (ctx as any).dashscopeApiKeySource = "none";
+      (ctx as any).hasDashscopeApiKey = false;
     }
 
     return res.json({ ok: true, provider, removed: true });

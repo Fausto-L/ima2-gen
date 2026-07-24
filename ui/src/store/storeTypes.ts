@@ -26,6 +26,7 @@ import type { ReasoningEffort } from "../lib/reasoning";
 import type { GalleryShortcutAction } from "../lib/galleryShortcuts";
 import type { WorkspaceProfile } from "../lib/workspaceProfile";
 import type { Locale } from "../i18n";
+import type { Currency } from "../lib/currency";
 
 export type GalleryScope = "current-session" | "all";
 
@@ -326,6 +327,9 @@ export type AppState = PresetState & {
 
   locale: Locale;
   setLocale: (l: Locale) => void;
+
+  currency: Currency;
+  setCurrency: (c: Currency) => void;
 
   graphNodes: GraphNode[];
   graphEdges: GraphEdge[];

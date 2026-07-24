@@ -1,4 +1,4 @@
-import type { ImageModel, OpenAIImageModel, GeminiImageModel, Provider, UnsupportedImageModel, VideoModel } from "../types";
+import type { ImageModel, OpenAIImageModel, GeminiImageModel, DashscopeImageModel, Provider, UnsupportedImageModel, VideoModel } from "../types";
 
 export const DEFAULT_IMAGE_MODEL: ImageModel = "gpt-5.4-mini";
 export const IMAGE_MODEL_STORAGE_KEY = "ima2.imageModel";
@@ -23,6 +23,7 @@ export const IMAGE_MODEL_OPTIONS: Array<{
 ];
 
 const GEMINI_MODEL_VALUES = new Set<string>(["nano-banana-2", "nano-banana-pro"]);
+const DASHSCOPE_MODEL_VALUES = new Set<string>(["wanx2.1-t2i-turbo", "wanx2.1-t2i-plus", "wanx2.1-imageedit", "wanx2.1-imageedit-plus", "qwen-image-2.0-pro", "qwen-image-max", "z-image-turbo", "wan2.7-image-pro"]);
 
 export const OPENAI_IMAGE_MODEL_OPTIONS = IMAGE_MODEL_OPTIONS.filter(
   (option): option is { value: OpenAIImageModel; shortLabel: string; fullLabelKey: string } =>
@@ -38,6 +39,21 @@ export const GEMINI_IMAGE_MODEL_OPTIONS = IMAGE_MODEL_OPTIONS.filter(
     GEMINI_MODEL_VALUES.has(option.value),
 );
 
+export const DASHSCOPE_IMAGE_MODEL_OPTIONS: Array<{
+  value: DashscopeImageModel;
+  shortLabel: string;
+  fullLabelKey: string;
+}> = [
+  { value: "qwen-image-2.0-pro", shortLabel: "qwen2.0-pro", fullLabelKey: "settings.imageModel.qwenImage20Pro" },
+  { value: "qwen-image-max", shortLabel: "qwen-max", fullLabelKey: "settings.imageModel.qwenImageMax" },
+  { value: "z-image-turbo", shortLabel: "z-turbo", fullLabelKey: "settings.imageModel.zImageTurbo" },
+  { value: "wan2.7-image-pro", shortLabel: "wan2.7-pro", fullLabelKey: "settings.imageModel.wan27ImagePro" },
+  { value: "wanx2.1-t2i-turbo", shortLabel: "wanx-turbo", fullLabelKey: "settings.imageModel.wanxTurbo" },
+  { value: "wanx2.1-t2i-plus", shortLabel: "wanx-plus", fullLabelKey: "settings.imageModel.wanxPlus" },
+  { value: "wanx2.1-imageedit", shortLabel: "wanx-edit", fullLabelKey: "settings.imageModel.wanxEdit" },
+  { value: "wanx2.1-imageedit-plus", shortLabel: "wanx-edit+", fullLabelKey: "settings.imageModel.wanxEditPlus" },
+];
+
 export const UNSUPPORTED_IMAGE_MODELS: Array<{
   value: UnsupportedImageModel;
   fullLabelKey: string;
@@ -46,7 +62,7 @@ export const UNSUPPORTED_IMAGE_MODELS: Array<{
 ];
 
 export function isImageModel(value: unknown): value is ImageModel {
-  return IMAGE_MODEL_OPTIONS.some((option) => option.value === value);
+  return IMAGE_MODEL_OPTIONS.some((option) => option.value === value) || DASHSCOPE_MODEL_VALUES.has(value as string);
 }
 
 export function isGrokImageModel(value: unknown): boolean {
@@ -57,9 +73,17 @@ export function isGeminiImageModel(value: unknown): boolean {
   return typeof value === "string" && GEMINI_MODEL_VALUES.has(value);
 }
 
+export function isDashscopeImageModel(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  if (DASHSCOPE_MODEL_VALUES.has(value)) return true;
+  // Accept any non-empty string as a potential custom DashScope model
+  return value.length > 0;
+}
+
 export function getImageModelOptionsForProvider(provider: Provider) {
   if (provider === "grok" || provider === "grok-api") return GROK_IMAGE_MODEL_OPTIONS;
   if (provider === "agy" || provider === "gemini-api") return GEMINI_IMAGE_MODEL_OPTIONS;
+  if (provider === "dashscope") return DASHSCOPE_IMAGE_MODEL_OPTIONS;
   return OPENAI_IMAGE_MODEL_OPTIONS;
 }
 

@@ -652,8 +652,8 @@
   },
   "cost": {
     "free": "무료",
-    "approx": "약 ${amount}",
-    "multimodeApprox": "최대 약 ${amount} ({count}장)",
+    "approx": "약 {amount}",
+    "multimodeApprox": "최대 약 {amount} ({count}장)",
     "label": "예상 비용"
   },
   "result": {
@@ -1173,6 +1173,11 @@
     "language": {
       "title": "언어",
       "body": "생성 프롬프트와 무관하게 인터페이스 언어만 바꿉니다."
+    },
+    "currency": {
+      "title": "통화",
+      "body": "예상 비용 표시 통화를 선택합니다.",
+      "aria": "통화 선택"
     }
   },
   "nodeCanvas": {
@@ -1188,7 +1193,8 @@
   "language": {
     "label": "언어",
     "ko": "한국어",
-    "en": "English"
+    "en": "English",
+    "zh": "中文"
   },
   "errorCard": {
     "close": "닫기",

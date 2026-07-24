@@ -23,6 +23,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   "grok-api": "Grok API key",
   agy: "Antigravity Gemini CLI",
   "gemini-api": "Gemini API / Vertex",
+  dashscope: "DashScope (阿里云百炼)",
 };
 
 function present(value: unknown): value is string | number | boolean {

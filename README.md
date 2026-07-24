@@ -1,4 +1,4 @@
-# ima2-gen
+# ima2-gen (中文定制版)
 
 <p align="center">
   <img src="assets/logo.png" alt="ima2-gen logo" width="240">
@@ -8,15 +8,45 @@
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> 🌐 **Live site**: [lidge-jun.github.io/ima2-gen](https://lidge-jun.github.io/ima2-gen/) · [한국어](https://lidge-jun.github.io/ima2-gen/ko/)
+> 🇨🇳 **本 Fork** 由 [@Fausto-L](https://github.com/Fausto-L) 维护，基于 [lidge-jun/ima2-gen](https://github.com/lidge-jun/ima2-gen) 针对中国用户需求进行了定制。
 >
-> 📖 **Developer docs**: [Documentation site](https://lidge-jun.github.io/ima2-gen/docs) · [한국어](https://lidge-jun.github.io/ima2-gen/ko/docs)
+> **上游仓库**: [lidge-jun/ima2-gen](https://github.com/lidge-jun/ima2-gen) · [upstream PR #116](https://github.com/lidge-jun/ima2-gen/pull/116)
 >
 > **Read in other languages**: [한국어](docs/README.ko.md) · [日本語](docs/README.ja.md) · [简体中文](docs/README.zh-CN.md)
 
-`ima2-gen` is a local image generation studio for people who want the ChatGPT/Codex image workflow in a small desktop-like web app.
+`ima2-gen` 是一个本地图片生成工作室，让你在桌面级 Web 应用中使用 ChatGPT/Codex 的图片工作流。
 
-Install globally, sign in with ChatGPT OAuth or Grok OAuth, and start generating images and videos. Iterate with history, references, node branches, multimode batches, Canvas Mode cleanup, and Grok Video generation. Default OAuth paths need no API key; optional API-key providers (`api`, `grok-api`, `gemini-api`, `agy`) are also supported.
+全局安装后，用 ChatGPT OAuth 或 Grok OAuth 登录，即可开始生成图片和视频。支持历史记录、参考图、节点分支、多模态批量、Canvas 模式清理和 Grok 视频生成。默认 OAuth 路径无需 API Key；也支持 API Key 模式（`api`、`grok-api`、`gemini-api`、`dashscope`、`agy`）。
+
+## 🇨🇳 中文版定制内容
+
+本 Fork 在原版基础上增加了以下面向中国用户的定制：
+
+### 1. DashScope (阿里通义万相) 原生支持
+- 新增 `provider: "dashscope"` 路径，直接调用 DashScope Multimodal Generation API
+- 支持模型：`wanx2.1-t2i-turbo`、`wanx2.1-t2i-plus`、`qwen-image-2.0`、`qwen-image-2.0-pro`、`qwen-image-max`、`z-image-turbo`、`wan2.7-image-pro`、`wanx-v1.1-t2i-turbo`、`wanx2.1-imageedit`、`wanx2.1-imageedit-plus`
+- DashScope 同步模型（qwen-image-2.0 系列、z-image-turbo、wan2.7-image-pro）自动限制为 5 个固定尺寸，UI 按钮自动适配
+- API Key 通过 `~/.ima2/config.json` 或 Web UI 配置，也支持 `DASHSCOPE_API_KEY` 环境变量
+
+### 2. 人民币 (CNY) 费用显示
+- 内置多模型定价表（OpenAI gpt-image-2、Grok、Gemini、DashScope），所有价格按 USD 存储
+- 显示时实时换算为 CNY（默认）或 USD，右下角费用预估更准确
+- 设置中可切换 `¥ CNY` / `$ USD`
+- 汇率可配置，默认 1 USD = 7.2 CNY
+
+### 3. 默认 16:9 比例
+- 生成图片默认比例为 16:9（横向），而非原版的 1:1
+
+### 4. 尺寸按钮自适应布局
+- 根据当前选中的主模型，右侧尺寸按钮自动适配：
+  - DashScope 同步模型：显示 5 个固定尺寸按钮（2048×2048、2688×1536、1536×2688、2368×1728、1728×2368）
+  - 其他模型：保留全部尺寸预设
+- 按钮 4 列平铺换行，不再拥挤
+
+### 5. 结构化文件命名
+- 生成的图片/视频文件名格式从 `{timestamp}_{randomHex}.{ext}` 改为 `{model}_{aspect}_{date}_{slug}.{ext}`
+- 示例：`wanx2.1-t2i-turbo_16x9_20260724_a-cute-cat-sitting-o.png`
+- 包含模型名、比例、日期、Prompt 简写（前 20 字符，CJK 保留）
 
 ![ima2-gen video playback with gallery sidebar showing generated images and videos.](assets/screenshots/classic-generate-light.png)
 
@@ -363,7 +393,7 @@ For more beginner-friendly answers, see the [FAQ](docs/FAQ.md).
 ## Development
 
 ```bash
-git clone https://github.com/lidge-jun/ima2-gen.git
+git clone https://github.com/Fausto-L/ima2-gen.git
 cd ima2-gen
 npm install
 npm run dev
@@ -376,12 +406,13 @@ npm run build
 
 ## Contributors
 
-- [@lidge-jun](https://github.com/lidge-jun) — maintainer
+- [@lidge-jun](https://github.com/lidge-jun) — original maintainer
 - [@ree9622](https://github.com/ree9622) — moderation controls, Windows fixes, structured logging
 - [@Charley-Peng](https://github.com/Charley-Peng) — API cache fix (#74)
 - [@philiptaron](https://github.com/philiptaron) — Nix flake (#81)
 - [@aorying](https://github.com/aorying) — upstream validation error surfacing (informed TS migration direction)
 - [@PARKJONGMlN](https://github.com/PARKJONGMlN) — batch comparison matrix design (#80)
+- [@Fausto-L](https://github.com/Fausto-L) — Chinese-user customizations (DashScope, CNY currency, 16:9 default, structured filenames, Chinese i18n)
 
 ## License
 

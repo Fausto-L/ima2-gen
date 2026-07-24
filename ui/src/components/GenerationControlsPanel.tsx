@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAppStore } from "../store/useAppStore";
 import { useI18n } from "../i18n";
 import { OptionGroup } from "./OptionGroup";
@@ -9,7 +9,7 @@ import { ProviderSelect } from "./ProviderSelect";
 import { GrokSizePicker } from "./GrokSizePicker";
 import { GrokModelPicker } from "./GrokModelPicker";
 import { VideoControlsPanel } from "./VideoControlsPanel";
-import type { Format, GeminiImageModel, Moderation, Quality } from "../types";
+import type { Format, GeminiImageModel, ImageModel, Moderation, Quality } from "../types";
 
 const FORMAT_ITEMS = [
   { value: "png" as const, label: "PNG" },
@@ -103,8 +103,9 @@ export function GenerationControlsPanel() {
   const isGrok = provider === "grok" || provider === "grok-api";
   const isAgyOnly = provider === "agy";
   const isGeminiApi = provider === "gemini-api";
+  const isDashscope = provider === "dashscope";
   const isAnyGemini = isAgyOnly || isGeminiApi;
-  const hideFormatControls = isGrok || isAnyGemini;
+  const hideFormatControls = isGrok || isAnyGemini || isDashscope;
 
   const currentSize = sizePreset === "custom" ? `${customW}x${customH}` : "1024x1024";
   const isGeminiAuto = isGeminiApi && sizePreset === "auto";
@@ -116,6 +117,22 @@ export function GenerationControlsPanel() {
   const [geminiCustomOpen, setGeminiCustomOpen] = useState(false);
   const [geminiDraftW, setGeminiDraftW] = useState(String(customW));
   const [geminiDraftH, setGeminiDraftH] = useState(String(customH));
+  const [dashscopeCustomModels, setDashscopeCustomModels] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!isDashscope) return;
+    let cancelled = false;
+    fetch("/api/dashscope/config")
+      .then((r) => r.json())
+      .then((json) => {
+        if (cancelled) return;
+        const raw = json.customModels || "";
+        const models = raw.split(/[\s,]+/).map((s: string) => s.trim()).filter((s: string) => s.length > 0);
+        setDashscopeCustomModels(models);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isDashscope]);
 
   const setGeminiSize = (ratio: string, res: string) => {
     const sizeStr = GEMINI_RATIO_TO_SIZE[ratio || "1:1"]?.[res || "1K"] || "1024x1024";
@@ -152,13 +169,28 @@ export function GenerationControlsPanel() {
     { value: "nano-banana-2" as const, label: "Nano", sub: "Banana 2" },
     { value: "nano-banana-pro" as const, label: "Nano", sub: "Banana Pro" },
   ];
+  const dashscopeModelItems = useMemo(() => {
+    const builtins = [
+      { value: "wanx2.1-t2i-turbo", label: "WanX 2.1", sub: "Turbo" },
+      { value: "wanx2.1-t2i-plus", label: "WanX 2.1", sub: "Plus" },
+      { value: "wanx2.1-imageedit", label: "WanX 2.1", sub: "ImageEdit" },
+      { value: "wanx2.1-imageedit-plus", label: "WanX 2.1", sub: "Edit Plus" },
+    ];
+    const builtinValues = new Set(builtins.map((m) => m.value));
+    const customs = dashscopeCustomModels
+      .filter((m) => !builtinValues.has(m))
+      .map((m) => ({ value: m, label: m, sub: "Custom" }));
+    return [...builtins, ...customs];
+  }, [dashscopeCustomModels]);
   const providerCompat = isGrok
     ? { title: t("provider.grokCompatTitle"), body: t("provider.grokCompatBody") }
     : isAgyOnly
       ? { title: t("provider.agyCompatTitle"), body: t("provider.agyCompatBody") }
       : isGeminiApi
         ? { title: t("provider.geminiApiCompatTitle"), body: t("provider.geminiApiCompatBody") }
-        : { title: t("provider.gptCompatTitle"), body: t("provider.gptCompatBody") };
+        : isDashscope
+          ? { title: "DashScope (阿里云百炼)", body: "Text-to-image and image editing via Alibaba Cloud DashScope WanX models. Supports reference image editing and mask-based local edits." }
+          : { title: t("provider.gptCompatTitle"), body: t("provider.gptCompatBody") };
 
   const handleModeSwitch = (mode: "image" | "video") => {
     if (mode === "video") {
@@ -203,6 +235,16 @@ export function GenerationControlsPanel() {
         <>
         <GrokModelPicker />
         <GrokSizePicker />
+        </>
+      ) : isDashscope ? (
+        <>
+        <OptionGroup<string>
+          title="DashScope Model"
+          items={dashscopeModelItems}
+          value={(imageModel as string) || "wanx2.1-t2i-turbo"}
+          onChange={(v) => setImageModel(v as ImageModel)}
+        />
+        <SizePicker />
         </>
       ) : isGeminiApi ? (
         <>
@@ -341,7 +383,7 @@ export function GenerationControlsPanel() {
           </p>
         </>
       )}
-      {showMultimodeControls && !isAnyGemini && (
+      {showMultimodeControls && !isAnyGemini && !isDashscope && (
         <div className="option-group multimode-toggle">
           <button
             type="button"
@@ -355,7 +397,7 @@ export function GenerationControlsPanel() {
           </button>
         </div>
       )}
-      {isAnyGemini ? null : <CountPicker />}
+      {isAnyGemini || isDashscope ? null : <CountPicker />}
       <CostEstimate />
       </>
       )}

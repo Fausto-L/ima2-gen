@@ -1,5 +1,6 @@
 import { useAppStore } from "../store/useAppStore";
 import { estimateCost } from "../lib/cost";
+import { formatPrice } from "../lib/currency";
 import { useI18n } from "../i18n";
 
 export function CostEstimate() {
@@ -10,15 +11,17 @@ export function CostEstimate() {
   const multimodeMaxImages = useAppStore((s) => s.multimodeMaxImages);
   const getResolvedSize = useAppStore((s) => s.getResolvedSize);
   const size = getResolvedSize();
+  const currency = useAppStore((s) => s.currency);
 
   const imageModel = useAppStore((s) => s.imageModel);
   const free = provider === "oauth" || provider === "grok" || provider === "agy";
   const cost = estimateCost(quality, size, provider, imageModel);
+  const priceStr = formatPrice(cost, currency);
   const label = free
     ? t("cost.free")
     : multimode
-      ? t("cost.multimodeApprox", { amount: (cost * multimodeMaxImages).toFixed(3), count: multimodeMaxImages })
-      : t("cost.approx", { amount: cost.toFixed(3) });
+      ? t("cost.multimodeApprox", { amount: formatPrice(cost * multimodeMaxImages, currency), count: multimodeMaxImages })
+      : t("cost.approx", { amount: priceStr });
   const color = free ? "var(--green)" : undefined;
 
   return (

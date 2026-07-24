@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useBilling } from "../hooks/useBilling";
 import { useGrokStatus } from "../hooks/useGrokStatus";
 import { useOAuthStatus } from "../hooks/useOAuthStatus";
@@ -47,6 +47,88 @@ function statusTone(status?: string): "ok" | "warn" | "err" {
   if (status === "ready") return "ok";
   if (status === "error" || status === "offline") return "err";
   return "warn";
+}
+
+function DashScopeConfigSection() {
+  const [baseUrl, setBaseUrl] = useState("");
+  const [customModels, setCustomModels] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const fetchConfig = useCallback(async () => {
+    try {
+      const res = await fetch("/api/dashscope/config");
+      const json = await res.json();
+      setBaseUrl(json.baseUrl || "https://dashscope.aliyuncs.com");
+      setCustomModels(json.customModels || "");
+    } catch {}
+  }, []);
+
+  useEffect(() => { void fetchConfig(); }, [fetchConfig]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/dashscope/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baseUrl, customModels }),
+      });
+      const json = await res.json();
+      if (json.ok || json.baseUrl) {
+        setBaseUrl(json.baseUrl || baseUrl);
+        setCustomModels(json.customModels || customModels);
+        setMsg("✓ Saved");
+      } else {
+        setMsg(`✗ ${json.error || "Save failed"}`);
+      }
+    } catch (e: any) {
+      setMsg(`✗ ${e.message || "Network error"}`);
+    } finally {
+      setSaving(false);
+      setTimeout(() => setMsg(null), 3000);
+    }
+  };
+
+  return (
+    <div className="dashscope-config" style={{ marginTop: "12px", padding: "12px", border: "1px solid var(--border-color, #333)", borderRadius: "8px" }}>
+      <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px" }}>DashScope Endpoint & Models</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        <label style={{ fontSize: "12px", color: "var(--text-dim, #888)" }}>
+          API Base URL
+          <input
+            type="text"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder="https://dashscope.aliyuncs.com"
+            style={{ display: "block", width: "100%", marginTop: "4px", padding: "6px 8px", background: "var(--input-bg, #1a1a1a)", border: "1px solid var(--border-color, #444)", borderRadius: "4px", color: "var(--text-color, #fff)", fontSize: "13px" }}
+          />
+        </label>
+        <label style={{ fontSize: "12px", color: "var(--text-dim, #888)" }}>
+          Custom Models (comma or space separated)
+          <input
+            type="text"
+            value={customModels}
+            onChange={(e) => setCustomModels(e.target.value)}
+            placeholder="e.g. wanx2.1-t2i-turbo, my-custom-model"
+            style={{ display: "block", width: "100%", marginTop: "4px", padding: "6px 8px", background: "var(--input-bg, #1a1a1a)", border: "1px solid var(--border-color, #444)", borderRadius: "4px", color: "var(--text-color, #fff)", fontSize: "13px" }}
+          />
+        </label>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            style={{ padding: "6px 16px", background: "var(--accent-bg, #4a9eff)", border: "none", borderRadius: "4px", color: "#fff", fontSize: "13px", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.6 : 1 }}
+          >
+            {saving ? "Saving..." : "Save"}
+          </button>
+          {msg && <span style={{ fontSize: "12px" }}>{msg}</span>}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function AccountSettings() {
@@ -184,6 +266,16 @@ export function AccountSettings() {
                 keyStatus={keyStatus}
                 onSaved={mutateKeys}
               />
+              <ApiKeyInput
+                provider="dashscope"
+                label="DashScope (阿里云百炼) API Key"
+                placeholder="sk-..."
+                maskedKey={keyStatus.dashscope?.maskedKey ?? null}
+                source={keyStatus.dashscope?.source ?? "none"}
+                configured={keyStatus.dashscope?.configured ?? false}
+                onSaved={mutateKeys}
+              />
+              <DashScopeConfigSection />
             </div>
           )}
         </article>
