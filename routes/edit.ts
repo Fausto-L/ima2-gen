@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "fs/promises";
 import { safeWriteSidecar } from "../lib/atomicWrite.js";
 import { join } from "path";
-import { randomBytes } from "crypto";
+import { buildFilename } from "../lib/filename.js";
 import type { Express, Request, Response } from "express";
 import { detectImageMimeFromB64 } from "../lib/refs.js";
 import { generateImageThumbnailFromBuffer } from "../lib/imageThumb.js";
@@ -12,6 +12,7 @@ import { editViaResponses } from "../lib/responsesImageAdapter.js";
 import { editViaGrok } from "../lib/grokImageAdapter.js";
 import { generateViaAgy } from "../lib/agyImageAdapter.js";
 import { generateViaGeminiApi } from "../lib/geminiApiImageAdapter.js";
+import { generateViaDashscope } from "../lib/dashscopeImageAdapter.js";
 import { startJob, finishJob, registerJobAbortController, isJobCanceled, isStartJobFailure, INFLIGHT_RETRY_AFTER_SECONDS } from "../lib/inflight.js";
 import {
   isGenerationCanceledError,
@@ -221,7 +222,21 @@ export function registerEditRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
       let resultMimeFromProvider: string | undefined;
       let providerUrl: string | null = null;
 
-      if (activeProvider === "gemini-api") {
+      if (activeProvider === "dashscope") {
+        const r = await generateViaDashscope(`Edit this image: ${prompt}`, requireRuntimeContext(ctx), {
+          model: imageModel,
+          size: effectiveSize,
+          signal: cancelController.signal,
+          requestId,
+          references: [{ b64: imageB64, declaredMime: null, detectedMime: detectImageMimeFromB64(imageB64) || null }],
+          mask: maskCheck.mask,
+        });
+        resultB64 = r.b64;
+        usage = r.usage;
+        revisedPrompt = r.revisedPrompt;
+        webSearchCalls = r.webSearchCalls;
+        resultMimeFromProvider = r.mime;
+      } else if (activeProvider === "gemini-api") {
         const r = await generateViaGeminiApi(`Edit this image: ${prompt}`, requireRuntimeContext(ctx), {
           model: imageModel,
           size: effectiveSize,
@@ -290,11 +305,17 @@ export function registerEditRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
       const elapsed = +((Date.now() - startTime) / 1000).toFixed(1);
       await mkdir(ctx.config.storage.generatedDir, { recursive: true });
       throwIfJobCanceled(requestId);
-      const editMime = activeProvider === "grok" || activeProvider === "agy" || activeProvider === "grok-api" || activeProvider === "gemini-api"
+      const editMime = activeProvider === "grok" || activeProvider === "agy" || activeProvider === "grok-api" || activeProvider === "gemini-api" || activeProvider === "dashscope"
         ? (resultMimeFromProvider || detectImageMimeFromB64(resultB64) || "image/png")
         : "image/png";
-      const editExt = activeProvider === "grok" || activeProvider === "agy" || activeProvider === "grok-api" || activeProvider === "gemini-api" ? imageFormatFromMime(editMime) : "png";
-      const filename = `${Date.now()}_${randomBytes(ctx.config.ids.generatedHexBytes).toString("hex")}.${editExt}`;
+      const editExt = activeProvider === "grok" || activeProvider === "agy" || activeProvider === "grok-api" || activeProvider === "gemini-api" || activeProvider === "dashscope" ? imageFormatFromMime(editMime) : "png";
+      const filename = buildFilename({
+        model: imageModel || activeProvider || "unknown",
+        size: effectiveSize || "",
+        createdAt: Date.now(),
+        prompt: prompt || "",
+        ext: editExt,
+      });
       const editBuffer = Buffer.from(resultB64, "base64");
       const editFilePath = join(ctx.config.storage.generatedDir, filename);
       await writeFile(editFilePath, editBuffer);

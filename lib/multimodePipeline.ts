@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "fs/promises";
 import { safeWriteSidecar } from "./atomicWrite.js";
 import { join } from "path";
 import { randomBytes } from "crypto";
+import { buildFilename } from "./filename.js";
 import type { Request, Response } from "express";
 import { detectImageMimeFromB64, summarizeReferencePayload, validateAndNormalizeRefs } from "./refs.js";
 import { generateImageThumbnailFromBuffer } from "./imageThumb.js";
@@ -12,6 +13,7 @@ import { generateMultimodeViaResponses } from "./responsesImageAdapter.js";
 import { generateMultimodeViaGrok } from "./grokMultimodeAdapter.js";
 import { generateViaAgy } from "./agyImageAdapter.js";
 import { generateViaGeminiApi } from "./geminiApiImageAdapter.js";
+import { generateViaDashscope } from "./dashscopeImageAdapter.js";
 import { startJob, finishJob, registerJobAbortController, isJobCanceled, isStartJobFailure, INFLIGHT_RETRY_AFTER_SECONDS } from "./inflight.js";
 import { isGenerationCanceledError, makeGenerationCanceledError, throwIfJobCanceled, } from "./generationCancel.js";
 import { logEvent, logError } from "./logger.js";
@@ -199,7 +201,7 @@ export async function runMultimodePipeline(req: Request, res: Response, ctx: Run
       logEvent("multimode", "request", { requestId, quality, model: imageModel, size: effectiveSize, moderation, maxImages, refs: refCheck.refs.length, referenceBytes: referencePayload.referenceBytes, promptChars: typeof prompt === "string" ? prompt.length : 0, webSearchEnabled, });
       const startTime = Date.now();
       const mimeMap: Record<string, string> = { png: "image/png", jpeg: "image/jpeg", webp: "image/webp" };
-      const mmFormat = activeProvider === "grok" || activeProvider === "agy" || activeProvider === "grok-api" || activeProvider === "gemini-api" ? "jpeg" : String(format);
+      const mmFormat = activeProvider === "grok" || activeProvider === "agy" || activeProvider === "grok-api" || activeProvider === "gemini-api" || activeProvider === "dashscope" ? "jpeg" : String(format);
       const mime = mimeMap[mmFormat] || "image/png";
       const sequenceId = `seq_${Date.now().toString(36)}_${randomBytes(4).toString("hex")}`;
       routeMaxImages = maxImages;
@@ -219,12 +221,18 @@ export async function runMultimodePipeline(req: Request, res: Response, ctx: Run
       const persistAndSendImage = async ( image: MultimodeImage, index: number, totalReturned: number, status: ReturnType<typeof sequenceStatus>, ) => {
         if (persistedIndexes.has(index)) return;
         throwIfJobCanceled(requestId);
-        const resultMime = activeProvider === "grok" || activeProvider === "agy" || activeProvider === "grok-api" || activeProvider === "gemini-api"
+        const resultMime = activeProvider === "grok" || activeProvider === "agy" || activeProvider === "grok-api" || activeProvider === "gemini-api" || activeProvider === "dashscope"
           ? (image.mime || detectImageMimeFromB64(image.b64) || mime)
           : mime;
-        const resultFormat = activeProvider === "grok" || activeProvider === "agy" || activeProvider === "grok-api" || activeProvider === "gemini-api" ? imageFormatFromMime(resultMime) : mmFormat;
-        const rand = randomBytes(ctx.config.ids.generatedHexBytes).toString("hex");
-        const filename = `${Date.now()}_${rand}_multimode_${index}.${resultFormat}`;
+        const resultFormat = activeProvider === "grok" || activeProvider === "agy" || activeProvider === "grok-api" || activeProvider === "gemini-api" || activeProvider === "dashscope" ? imageFormatFromMime(resultMime) : mmFormat;
+        const filename = buildFilename({
+          model: (activeProvider === "grok" ? (quality === "high" ? "grok-imagine-image-quality" : imageModel) : imageModel) || activeProvider || "unknown",
+          size: effectiveSize || "",
+          createdAt: Date.now(),
+          prompt: prompt || "",
+          ext: resultFormat,
+          index,
+        });
         const createdAt = Date.now();
         const meta = {
           kind: "multimode-image",
@@ -282,7 +290,20 @@ export async function runMultimodePipeline(req: Request, res: Response, ctx: Run
       };
       dualEmitMultimode(res, requestId, "phase", { phase: "streaming", requestId, sequenceId, maxImages });
       let generated: { images: Array<{ b64: string; revisedPrompt?: string | null }>; usage: Record<string, number> | null; webSearchCalls?: number; extraIgnored?: number };
-      if (activeProvider === "gemini-api") {
+      if (activeProvider === "dashscope") {
+        const r = await generateViaDashscope(prompt, requireRuntimeContext(ctx), {
+          model: imageModel,
+          size: effectiveSize,
+          signal: cancelController.signal,
+          requestId,
+          references: refCheck.refDetails,
+        });
+        generated = {
+          images: [{ b64: r.b64, revisedPrompt: r.revisedPrompt }],
+          usage: r.usage,
+          webSearchCalls: r.webSearchCalls,
+        };
+      } else if (activeProvider === "gemini-api") {
         const r = await generateViaGeminiApi(prompt, requireRuntimeContext(ctx), {
           model: imageModel,
           size: effectiveSize,

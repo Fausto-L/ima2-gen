@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { buildFilename } from "./filename.js";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { atomicWriteJson } from "./atomicWrite.js";
 import { join } from "node:path";
@@ -172,8 +173,13 @@ async function persistAgentImage(
   generation: { provider: string; model: string },
 ) {
   await mkdir(ctx.config.storage.generatedDir, { recursive: true });
-  const rand = randomBytes(ctx.config.ids.generatedHexBytes).toString("hex");
-  const filename = `${Date.now()}_${rand}_agent.${format}`;
+  const filename = buildFilename({
+    model: generation.model,
+    size: "",
+    createdAt: Date.now(),
+    prompt,
+    ext: format,
+  });
   const meta = {
     kind: "agent",
     requestId,
