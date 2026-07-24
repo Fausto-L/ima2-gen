@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { slugifyPrompt } from "../lib/filename.ts";
+import { slugifyPrompt, deriveAspect } from "../lib/filename.ts";
 
 describe("slugifyPrompt", () => {
   it("returns the prompt trimmed and slugified", () => {
@@ -46,5 +46,35 @@ describe("slugifyPrompt", () => {
   it("truncates CJK at 20 chars", () => {
     const long = "一二三四五六七八九十一二三四五六七八九十";
     assert.ok(slugifyPrompt(long).length <= 20);
+  });
+});
+
+describe("deriveAspect", () => {
+  it("reduces 2368x1728 to 37x27 (GCD=64)", () => {
+    assert.equal(deriveAspect("2368x1728"), "37x27");
+  });
+
+  it("reduces 1024x1024 to 1x1", () => {
+    assert.equal(deriveAspect("1024x1024"), "1x1");
+  });
+
+  it("reduces 1920x1080 to 16x9", () => {
+    assert.equal(deriveAspect("1920x1080"), "16x9");
+  });
+
+  it("reduces 1024x1024 with star separator to 1x1", () => {
+    assert.equal(deriveAspect("1024*1024"), "1x1");
+  });
+
+  it("returns 1x1 for empty string", () => {
+    assert.equal(deriveAspect(""), "1x1");
+  });
+
+  it("returns 1x1 for unparseable string", () => {
+    assert.equal(deriveAspect("auto"), "1x1");
+  });
+
+  it("returns 1x1 for 1334x750 (GCD=2 → 667x375)", () => {
+    assert.equal(deriveAspect("1334x750"), "667x375");
   });
 });
