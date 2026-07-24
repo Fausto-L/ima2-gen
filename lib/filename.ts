@@ -29,3 +29,25 @@ export function deriveAspect(size: string): string {
   const d = gcd(w, h);
   return `${w / d}x${h / d}`;
 }
+
+export interface FilenameOptions {
+  model: string;
+  size: string;
+  createdAt: number;
+  prompt: string;
+  ext: string;
+  index?: number;
+}
+
+/**
+ * Build a structured filename from generation metadata.
+ * Format: {model}_{aspect}_{date}_{slug}_{index?}.{ext}
+ */
+export function buildFilename(opts: FilenameOptions): string {
+  const { model, size, createdAt, prompt, ext, index } = opts;
+  const aspect = deriveAspect(size);
+  const date = new Date(createdAt).toISOString().slice(0, 10).replace(/-/g, "");
+  const slug = slugifyPrompt(prompt);
+  const indexSuffix = index !== undefined ? `_${index}` : "";
+  return `${model}_${aspect}_${date}_${slug}${indexSuffix}.${ext}`;
+}
