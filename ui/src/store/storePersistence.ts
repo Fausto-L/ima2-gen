@@ -121,6 +121,7 @@ export function loadUIMode(): UIMode {
     if (raw === "assets") return raw;
     if (raw === "asset-gen") return raw;
     if (raw === "home") return raw;
+    if (raw === "dashboard") return raw;
     if (raw === "classic") return raw;
   } catch {}
   return "classic";

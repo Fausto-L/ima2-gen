@@ -41,6 +41,7 @@ import { registerMcpMultishotRoutes } from "./mcpMultishot.js";
 import { registerContractRoutes } from "./contracts.js";
 import { mountKeyRoutes } from "./keys.js";
 import { registerGenerationRequestLogRoutes } from "./generationRequestLog.js";
+import { registerStatsRoutes } from "./stats.js";
 import { type RouteRuntimeContext, requireRuntimeContext } from "../lib/runtimeContext.js";
 
 export function configureRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
@@ -87,4 +88,5 @@ export function configureRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
   registerContractRoutes(app, ctx);
   mountKeyRoutes(app, ctx);
   registerGenerationRequestLogRoutes(app, ctx);
+  registerStatsRoutes(app, ctx);
 }

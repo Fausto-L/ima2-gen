@@ -1,4 +1,4 @@
-export type UIMode = "classic" | "node" | "card-news" | "agent" | "assets" | "asset-gen" | "home";
+export type UIMode = "classic" | "node" | "card-news" | "agent" | "assets" | "asset-gen" | "home" | "dashboard";
 export type AssetGenBackgroundPreset = "chroma-green" | "white" | "black";
 export type SettingsSection = "providers" | "workspace" | "general";
 export type HistoryStripLayout = "rail" | "horizontal" | "sidebar";

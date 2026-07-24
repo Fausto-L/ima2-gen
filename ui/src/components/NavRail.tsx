@@ -9,6 +9,7 @@ import type { UIMode } from "../types";
 
 const HASH_TO_MODE: Record<string, UIMode | "settings"> = {
   "#home": "home",
+  "#dashboard": "dashboard",
   "#create": "classic",
   "#canvas": "classic", // canvas-mode is a sub-state of classic for now
   "#node": "node",
@@ -19,6 +20,7 @@ const HASH_TO_MODE: Record<string, UIMode | "settings"> = {
 
 const MODE_TO_HASH: Record<string, string> = {
   home: "#home",
+  dashboard: "#dashboard",
   classic: "#create",
   node: "#node",
   agent: "#agent",
@@ -51,6 +53,17 @@ function IconHome() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
       <polyline points="9 22 9 12 15 12 15 22" />
+    </svg>
+  );
+}
+
+function IconDashboard() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="7" height="9" rx="1" />
+      <rect x="14" y="3" width="7" height="5" rx="1" />
+      <rect x="14" y="12" width="7" height="9" rx="1" />
+      <rect x="3" y="16" width="7" height="5" rx="1" />
     </svg>
   );
 }
@@ -119,6 +132,7 @@ type RailItem = {
 
 const RAIL_ITEMS: RailItem[] = [
   { id: "home", mode: "home", icon: IconHome, labelKey: "nav.home", enabled: true },
+  { id: "dashboard", mode: "dashboard", icon: IconDashboard, labelKey: "nav.dashboard", enabled: true },
   { id: "create", mode: "classic", icon: IconCreate, labelKey: "nav.create", enabled: true },
   { id: "node", mode: "node", icon: IconNode, labelKey: "nav.node", enabled: ENABLE_NODE_MODE },
   { id: "agent", mode: "agent", icon: IconAgent, labelKey: "nav.agent", enabled: ENABLE_AGENT_MODE },
