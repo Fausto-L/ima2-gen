@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { basename, join } from "node:path";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
+import { buildFilename } from "../lib/filename.js";
 import type { RouteRuntimeContext, RuntimeContext } from "../lib/runtimeContext.js";
 import { requireRuntimeContext } from "../lib/runtimeContext.js";
 import { getGrokProxyUrl } from "../lib/grokRuntime.js";
@@ -73,8 +74,13 @@ async function saveVideoResult(
 ): Promise<{ filename: string; url: string; sourceUrl: string }> {
   const { buffer, contentType } = await downloadVideo(ctx, options.videoUrl, options.signal);
   await mkdir(ctx.config.storage.generatedDir, { recursive: true });
-  const rand = randomBytes(ctx.config.ids.generatedHexBytes).toString("hex");
-  const filename = `${Date.now()}_${rand}.mp4`;
+  const filename = buildFilename({
+    model: options.model,
+    size: "",
+    createdAt: Date.now(),
+    prompt: options.prompt,
+    ext: "mp4",
+  });
   const filePath = join(ctx.config.storage.generatedDir, filename);
   const sourceFilename = /^https?:\/\//i.test(options.source) || options.source.startsWith("data:") || /^file[-_]/.test(options.source)
     ? null

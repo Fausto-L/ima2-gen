@@ -1,7 +1,7 @@
 import { mkdir, readFile, unlink, writeFile } from "fs/promises";
 import { atomicWriteJson } from "../lib/atomicWrite.js";
+import { buildFilename } from "../lib/filename.js";
 import { join } from "path";
-import { randomBytes } from "crypto";
 import { execFile } from "child_process";
 import { tmpdir } from "os";
 import { promisify } from "util";
@@ -339,8 +339,13 @@ export function registerVideoRoutes(app: Express, ctxRaw: RouteRuntimeContext) {
         storyboardActive,
       });
 
-      const rand = randomBytes(ctx.config.ids.generatedHexBytes).toString("hex");
-      const filename = `${Date.now()}_${rand}.mp4`;
+      const filename = buildFilename({
+        model: modelCheck.model,
+        size: "",
+        createdAt: Date.now(),
+        prompt: activePrompt,
+        ext: "mp4",
+      });
       const elapsed = +((Date.now() - startTime) / 1000).toFixed(1);
       const videoContinuity = appendVideoContinuityEntry(parentLineage, {
         filename,

@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { buildFilename } from "./filename.js";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { atomicWriteJson } from "./atomicWrite.js";
@@ -332,8 +331,13 @@ async function persistAgentVideo(
   >,
 ) {
   await mkdir(ctx.config.storage.generatedDir, { recursive: true });
-  const rand = randomBytes(ctx.config.ids.generatedHexBytes).toString("hex");
-  const filename = `${Date.now()}_${rand}_agent.mp4`;
+  const filename = buildFilename({
+    model: result.requestedModel || result.effectiveModel || "grok",
+    size: "",
+    createdAt: Date.now(),
+    prompt,
+    ext: "mp4",
+  });
   const meta = {
     kind: "agent",
     mediaType: "video",
