@@ -5,6 +5,7 @@ import { ImageModelSelect } from "./ImageModelSelect";
 import { ReasoningEffortSelect } from "./ReasoningEffortSelect";
 import { WebSearchToggle } from "./WebSearchToggle";
 import { LanguageToggle } from "./LanguageToggle";
+import { CurrencyToggle } from "./CurrencyToggle";
 import { HistoryStripLayoutToggle } from "./HistoryStripLayoutToggle";
 import { WorkspaceProfileSettings } from "./settings/WorkspaceProfileSettings";
 import { GrokPlannerSelect } from "./settings/GrokPlannerSelect";
@@ -225,6 +226,13 @@ export function SettingsWorkspace() {
                     <p>{provider === "gemini-api" ? t("provider.geminiApiCompatBodyLong") : t("provider.agyCompatBodyLong")}</p>
                   </div>
                 </article>
+              ) : provider === "dashscope" ? (
+                <article className="settings-row">
+                  <div className="settings-row__copy">
+                    <h4>DashScope (阿里云百炼)</h4>
+                    <p>Text-to-image and image editing via Alibaba Cloud DashScope WanX models. Configure your API key in Account settings. Supports reference image editing and mask-based local edits.</p>
+                  </div>
+                </article>
               ) : (
                 <>
                   <article className="settings-row">
@@ -295,6 +303,15 @@ export function SettingsWorkspace() {
                 </div>
                 <div className="settings-row__control">
                   <LanguageToggle />
+                </div>
+              </article>
+              <article className="settings-row">
+                <div className="settings-row__copy">
+                  <h4>{t("settings.currency.title")}</h4>
+                  <p>{t("settings.currency.body")}</p>
+                </div>
+                <div className="settings-row__control">
+                  <CurrencyToggle />
                 </div>
               </article>
             </SettingsSectionBlock>

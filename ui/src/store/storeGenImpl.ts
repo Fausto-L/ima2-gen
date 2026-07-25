@@ -40,6 +40,7 @@ function selectedElementIds(state: AppState): string[] {
 function toPresetProvider(provider: AppState["provider"]): PresetProvider {
   if (provider === "grok" || provider === "grok-api") return "grok";
   if (provider === "gemini-api") return "gemini";
+  if (provider === "dashscope") return "gpt"; // DashScope uses GPT-style presets
   return "gpt";
 }
 

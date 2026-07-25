@@ -17,6 +17,27 @@ const VALID_ATLASCLOUD_IMAGE_MODELS = new Set([
   "openai/gpt-image-2/edit",
 ]);
 
+const DASHSCOPE_FALLBACK_IMAGE_MODEL = "wanx2.1-t2i-turbo";
+const VALID_DASHSCOPE_MODELS = new Set([
+  "wanx2.1-t2i-turbo",
+  "wanx2.1-t2i-plus",
+  "wanx-v1.1-t2i-turbo",
+  "wanx2.1-t2i-turbo-auto",
+  "wanx2.1-imageedit",
+  "wanx2.1-imageedit-plus",
+  "qwen-image-2.0",
+  "qwen-image-2.0-pro",
+  "qwen-image-max",
+  "z-image-turbo",
+  "wan2.7-image-pro",
+]);
+
+function getDashscopeCustomModels(ctx?: { dashscopeCustomModels?: string } | null): string[] {
+  const raw = ctx?.dashscopeCustomModels;
+  if (!raw || typeof raw !== "string") return [];
+  return raw.split(/[\s,]+/).map((s) => s.trim()).filter((s) => s.length > 0);
+}
+
 export function normalizeReasoningEffort(ctx: RouteRuntimeContext | null | undefined, rawEffort: unknown) {
   const configured = (ctx?.config as { imageModels?: { reasoningEffort?: string; validReasoningEfforts?: Set<string> } } | undefined)?.imageModels;
   const fallback = configured?.reasoningEffort ?? FALLBACK_REASONING_EFFORT;
@@ -104,6 +125,21 @@ export function normalizeAtlasCloudImageModel(rawModel: unknown) {
     };
   }
   return { model: rawModel };
+}
+
+export function normalizeDashscopeModel(rawModel: unknown, ctx?: { dashscopeCustomModels?: string } | null) {
+  const customModels = getDashscopeCustomModels(ctx);
+  if (typeof rawModel !== "string" || rawModel.length === 0) {
+    return { model: DASHSCOPE_FALLBACK_IMAGE_MODEL };
+  }
+  if (VALID_DASHSCOPE_MODELS.has(rawModel) || customModels.includes(rawModel)) {
+    return { model: rawModel };
+  }
+  return {
+    error: `DashScope image model must be one of: ${[...VALID_DASHSCOPE_MODELS, ...customModels].join(", ")}`,
+    code: "INVALID_DASHSCOPE_IMAGE_MODEL" as const,
+    status: 400 as const,
+  };
 }
 
 // ── Grok video (T2V/I2V) ─────────────────────────────────────────────────

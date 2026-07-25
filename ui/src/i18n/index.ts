@@ -1,10 +1,11 @@
 import ko from "./ko.json";
 import en from "./en.json";
+import zh from "./zh.json";
 import { useAppStore } from "../store/useAppStore";
 
-export type Locale = "ko" | "en";
+export type Locale = "ko" | "en" | "zh";
 
-const dictionaries = { ko, en } as const;
+const dictionaries = { ko, en, zh } as const;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRec = Record<string, any>;
@@ -57,12 +58,12 @@ export function useI18n() {
   };
 }
 
-export const SUPPORTED_LOCALES: readonly Locale[] = ["ko", "en"];
+export const SUPPORTED_LOCALES: readonly Locale[] = ["ko", "en", "zh"];
 
 export function loadLocale(): Locale {
   try {
     const raw = localStorage.getItem("ima2.locale");
-    if (raw === "ko" || raw === "en") return raw;
+    if (raw === "ko" || raw === "en" || raw === "zh") return raw;
   } catch {
     /* storage disabled */
   }
@@ -70,6 +71,7 @@ export function loadLocale(): Locale {
   if (typeof navigator !== "undefined") {
     const nav = navigator.language || "";
     if (nav.toLowerCase().startsWith("ko")) return "ko";
+    if (nav.toLowerCase().startsWith("zh")) return "zh";
   }
   return "en";
 }

@@ -330,6 +330,28 @@ export const config = {
     enabled: pickBool(env.IMA2_AGENT_PLANNER_ENABLED, fileCfg.agentPlanner?.enabled, true),
     timeoutMs: pickInt(env.IMA2_AGENT_PLANNER_TIMEOUT_MS, fileCfg.agentPlanner?.timeoutMs, 30_000),
   },
+  dashscopeProvider: {
+    defaultImageModel: pickStr(
+      env.IMA2_DASHSCOPE_IMAGE_MODEL_DEFAULT,
+      fileCfg.dashscopeProvider?.defaultImageModel,
+      "wanx2.1-t2i-turbo",
+    ),
+    generationTimeoutMs: pickInt(
+      env.IMA2_DASHSCOPE_GENERATION_TIMEOUT_MS,
+      fileCfg.dashscopeProvider?.generationTimeoutMs,
+      180_000,
+    ),
+    baseUrl: pickStr(
+      env.DASHSCOPE_BASE_URL,
+      fileCfg.dashscopeProvider?.baseUrl,
+      "https://dashscope.aliyuncs.com",
+    ),
+    customModels: pickStr(
+      env.DASHSCOPE_CUSTOM_MODELS,
+      fileCfg.dashscopeProvider?.customModels,
+      "",
+    ),
+  },
   comfy: {
     defaultUrl: pickStr(env.IMA2_COMFY_URL, fileCfg.comfy?.defaultUrl, "http://127.0.0.1:8188"),
     uploadTimeoutMs: pickPositiveInt(

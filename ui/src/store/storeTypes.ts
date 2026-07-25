@@ -31,6 +31,7 @@ import type { McpReferenceSelection } from "../lib/mcpSelection";
 import type { Locale } from "../i18n";
 import type { SpriteRecipeDraft, SpriteRecipeRecord, SpriteRecipeSummary } from "../types/spriteRecipe";
 import type { ReferenceTraySlice, TrayItem } from "../lib/referenceTray";
+import type { Currency } from "../lib/currency";
 export type AssetGenWorkflow = "generate" | "sprite";
 
 export type GalleryScope = "current-session" | "all";
@@ -401,6 +402,9 @@ export type AppState = PresetState & ReferenceTraySlice & {
 
   locale: Locale;
   setLocale: (l: Locale) => void;
+
+  currency: Currency;
+  setCurrency: (c: Currency) => void;
 
   graphNodes: GraphNode[];
   graphEdges: GraphEdge[];

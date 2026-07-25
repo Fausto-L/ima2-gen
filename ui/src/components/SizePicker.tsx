@@ -10,6 +10,8 @@ import {
   SIZE_PRESETS_ROW2,
   SIZE_PRESETS_ROW3,
   SIZE_PRESETS_ROW4,
+  DASHSCOPE_SYNC_SIZE_PRESETS,
+  isDashscopeSyncModel,
   formatSize,
   getSizePresetsRow5,
   normalizeCustomSizePairDetailed,
@@ -41,7 +43,12 @@ export function SizePicker() {
   const customW = useAppStore((s) => s.customW);
   const customH = useAppStore((s) => s.customH);
   const setCustomSize = useAppStore((s) => s.setCustomSize);
+  const imageModel = useAppStore((s) => s.imageModel);
   const { t } = useI18n();
+
+  // When a DashScope sync model is selected, only its 5 fixed sizes are valid.
+  const isDashscopeSync = isDashscopeSyncModel(imageModel);
+
   const [draftW, setDraftW] = useState(String(customW));
   const [draftH, setDraftH] = useState(String(customH));
   const [editorOpen, setEditorOpen] = useState(sizePreset === "custom");
@@ -145,127 +152,133 @@ export function SizePicker() {
   return (
     <div className="option-group size-picker">
       <div className="section-title">{t("size.title")}</div>
-      <OptionGroup<SizePreset> title="" items={toItems(SIZE_PRESETS_ROW1)} value={sizePreset} onChange={selectPreset} />
-      <OptionGroup<SizePreset> title="" items={toItems(SIZE_PRESETS_ROW2)} value={sizePreset} onChange={selectPreset} />
-      <OptionGroup<SizePreset> title="" items={toItems(SIZE_PRESETS_ROW3)} value={sizePreset} onChange={selectPreset} />
-      <OptionGroup<SizePreset> title="" items={toItems(SIZE_PRESETS_ROW4)} value={sizePreset} onChange={selectPreset} />
-      <div className="option-row size-picker__quick-row">
-        {toItems(customRow).map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            className={`option-btn${sizePreset === item.value ? " active" : ""}`}
-            onClick={() => selectPreset(item.value)}
-          >
-            {item.label}
-            {item.sub ? (
-              <>
-                <br />
-                <span className="option-sub">{item.sub}</span>
-              </>
-            ) : null}
-          </button>
-        ))}
-        <button
-          type="button"
-          className={`option-btn${isCustom ? " active" : ""}`}
-          onClick={openEditor}
-        >
-          {t("size.customPlus")}
-          <br />
-          <span className="option-sub">{t("size.customSub")}</span>
-        </button>
-      </div>
-      {slots.length > 0 ? (
-        <div className="option-row size-picker__slot-row">
-          {slots.map((slot) => (
+      {isDashscopeSync ? (
+        <OptionGroup<SizePreset> title="" items={toItems(DASHSCOPE_SYNC_SIZE_PRESETS)} value={sizePreset} onChange={selectPreset} />
+      ) : (
+        <>
+        <OptionGroup<SizePreset> title="" items={toItems(SIZE_PRESETS_ROW1)} value={sizePreset} onChange={selectPreset} />
+        <OptionGroup<SizePreset> title="" items={toItems(SIZE_PRESETS_ROW2)} value={sizePreset} onChange={selectPreset} />
+        <OptionGroup<SizePreset> title="" items={toItems(SIZE_PRESETS_ROW3)} value={sizePreset} onChange={selectPreset} />
+        <OptionGroup<SizePreset> title="" items={toItems(SIZE_PRESETS_ROW4)} value={sizePreset} onChange={selectPreset} />
+        <div className="option-row size-picker__quick-row">
+          {toItems(customRow).map((item) => (
             <button
-              key={slot.id}
+              key={item.value}
               type="button"
-              className={`option-btn size-picker__slot${isCustom && customW === slot.w && customH === slot.h ? " active" : ""}`}
-              onClick={() => selectSlot(slot)}
+              className={`option-btn${sizePreset === item.value ? " active" : ""}`}
+              onClick={() => selectPreset(item.value)}
             >
-              {slot.w}×{slot.h}
-              <br />
-              <span className="option-sub">{slot.ratio || t("size.customSlot")}</span>
+              {item.label}
+              {item.sub ? (
+                <>
+                  <br />
+                  <span className="option-sub">{item.sub}</span>
+                </>
+              ) : null}
             </button>
           ))}
+          <button
+            type="button"
+            className={`option-btn${isCustom ? " active" : ""}`}
+            onClick={openEditor}
+          >
+            {t("size.customPlus")}
+            <br />
+            <span className="option-sub">{t("size.customSub")}</span>
+          </button>
         </div>
-      ) : null}
-      {editorOpen ? (
-        <>
-          <div className="size-picker__ratio-row">
-            {CUSTOM_RATIO_PRESETS.map((ratio) => (
+        {slots.length > 0 ? (
+          <div className="option-row size-picker__slot-row">
+            {slots.map((slot) => (
               <button
-                key={ratio.id}
+                key={slot.id}
                 type="button"
-                className={`size-picker__ratio${activeRatio === ratio.id ? " active" : ""}`}
-                onClick={() => applyRatio(ratio)}
+                className={`option-btn size-picker__slot${isCustom && customW === slot.w && customH === slot.h ? " active" : ""}`}
+                onClick={() => selectSlot(slot)}
               >
-                {ratio.id === "free" ? t("size.ratioFree") : ratio.label}
+                {slot.w}×{slot.h}
+                <br />
+                <span className="option-sub">{slot.ratio || t("size.customSlot")}</span>
               </button>
             ))}
           </div>
-          <div className="option-row size-picker__custom-row">
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              className="custom-size-input"
-              value={draftW}
-              onChange={(e) => setDraftW(e.target.value.replace(/\D/g, ""))}
-              onBlur={commitCustomSize}
-              onKeyDown={commitOnEnter}
-              placeholder={t("size.width")}
-            />
-            <span className="size-picker__dimension-separator" aria-hidden="true">×</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              className="custom-size-input"
-              value={draftH}
-              onChange={(e) => setDraftH(e.target.value.replace(/\D/g, ""))}
-              onBlur={commitCustomSize}
-              onKeyDown={commitOnEnter}
-              placeholder={t("size.height")}
-            />
-          </div>
-          <div className="size-picker__preview">
-            <span>{t("size.normalizedPreview")}</span>
-            <strong>{formatSize(preview.w, preview.h)}</strong>
-          </div>
-          <div className="size-picker__preview size-picker__preview--reason">
-            {reasonText}
-          </div>
-          {squareMaxHint ? (
-            <div className="size-picker__preview size-picker__preview--detail">
-              {squareMaxHint}
-            </div>
-          ) : null}
-          {slots.length >= MAX_CUSTOM_SIZE_SLOTS ? (
-            <div className="size-picker__replace-row">
-              <span>{t("size.replaceCustomSlot")}</span>
-              {slots.map((slot) => (
+        ) : null}
+        {editorOpen ? (
+          <>
+            <div className="size-picker__ratio-row">
+              {CUSTOM_RATIO_PRESETS.map((ratio) => (
                 <button
-                  key={slot.id}
+                  key={ratio.id}
                   type="button"
-                  className={`size-picker__replace${replaceSlotId === slot.id ? " active" : ""}`}
-                  onClick={() => setReplaceSlotId(slot.id)}
+                  className={`size-picker__ratio${activeRatio === ratio.id ? " active" : ""}`}
+                  onClick={() => applyRatio(ratio)}
                 >
-                  {slot.w}×{slot.h}
+                  {ratio.id === "free" ? t("size.ratioFree") : ratio.label}
                 </button>
               ))}
             </div>
-          ) : null}
-          <button type="button" className="size-picker__save" onClick={saveSlot}>
-            {slots.length >= MAX_CUSTOM_SIZE_SLOTS ? t("size.replaceCustomSlot") : t("size.saveCustomSlot")}
-          </button>
-          <div className="size-hint">
-            {t("size.hint")}
-          </div>
+            <div className="option-row size-picker__custom-row">
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                className="custom-size-input"
+                value={draftW}
+                onChange={(e) => setDraftW(e.target.value.replace(/\D/g, ""))}
+                onBlur={commitCustomSize}
+                onKeyDown={commitOnEnter}
+                placeholder={t("size.width")}
+              />
+              <span className="size-picker__dimension-separator" aria-hidden="true">×</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                className="custom-size-input"
+                value={draftH}
+                onChange={(e) => setDraftH(e.target.value.replace(/\D/g, ""))}
+                onBlur={commitCustomSize}
+                onKeyDown={commitOnEnter}
+                placeholder={t("size.height")}
+              />
+            </div>
+            <div className="size-picker__preview">
+              <span>{t("size.normalizedPreview")}</span>
+              <strong>{formatSize(preview.w, preview.h)}</strong>
+            </div>
+            <div className="size-picker__preview size-picker__preview--reason">
+              {reasonText}
+            </div>
+            {squareMaxHint ? (
+              <div className="size-picker__preview size-picker__preview--detail">
+                {squareMaxHint}
+              </div>
+            ) : null}
+            {slots.length >= MAX_CUSTOM_SIZE_SLOTS ? (
+              <div className="size-picker__replace-row">
+                <span>{t("size.replaceCustomSlot")}</span>
+                {slots.map((slot) => (
+                  <button
+                    key={slot.id}
+                    type="button"
+                    className={`size-picker__replace${replaceSlotId === slot.id ? " active" : ""}`}
+                    onClick={() => setReplaceSlotId(slot.id)}
+                  >
+                    {slot.w}×{slot.h}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <button type="button" className="size-picker__save" onClick={saveSlot}>
+              {slots.length >= MAX_CUSTOM_SIZE_SLOTS ? t("size.replaceCustomSlot") : t("size.saveCustomSlot")}
+            </button>
+            <div className="size-hint">
+              {t("size.hint")}
+            </div>
+          </>
+        ) : null}
         </>
-      ) : null}
+      )}
     </div>
   );
 }

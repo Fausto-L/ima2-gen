@@ -342,7 +342,7 @@ export function getCustomSizeConfirmation(
   state: AppState,
   continuation: NonNullable<CustomSizeConfirmState>["continuation"],
 ): CustomSizeConfirmState {
-  if (state.provider === "grok" || state.provider === "grok-api" || state.provider === "agy" || state.provider === "gemini-api" || state.provider === "atlascloud") return null;
+  if (state.provider === "grok" || state.provider === "grok-api" || state.provider === "agy" || state.provider === "gemini-api" || state.provider === "atlascloud" || state.provider === "dashscope") return null;
   if (state.sizePreset !== "custom") return null;
   const result = normalizeCustomSizePairDetailed(
     state.customW,

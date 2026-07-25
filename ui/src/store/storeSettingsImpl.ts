@@ -1,6 +1,6 @@
 import type { Provider, Quality, SizePreset, Format, Moderation, ImageModel, Count } from "../types";
 import type { ReasoningEffort } from "../lib/reasoning";
-import { DEFAULT_IMAGE_MODEL, GROK_VIDEO_MODEL_15, isGrokImageModel, isGeminiImageModel, isAtlasCloudImageModel, normalizeVideoModelValue } from "../lib/imageModels";
+import { DEFAULT_IMAGE_MODEL, GROK_VIDEO_MODEL_15, isGrokImageModel, isGeminiImageModel, isAtlasCloudImageModel, isDashscopeImageModel, normalizeVideoModelValue } from "../lib/imageModels";
 import { parseRequestedCustomSide } from "../lib/size";
 import { getEffectiveVideoSourceCount } from "../lib/videoSourceCount";
 import {
@@ -376,7 +376,11 @@ export function setProviderImpl(provider: Provider, set: StoreSet, get: StoreGet
     const atlasModel = "openai/gpt-image-2/text-to-image";
     saveImageModel(atlasModel);
     set({ provider, imageModel: atlasModel });
-  } else if (provider !== "grok" && provider !== "grok-api" && provider !== "agy" && provider !== "gemini-api" && provider !== "atlascloud" && (isGrokImageModel(currentModel) || isGeminiImageModel(currentModel) || isAtlasCloudImageModel(currentModel))) {
+  } else if (provider === "dashscope" && !isDashscopeImageModel(currentModel)) {
+    const dashscopeModel = "wanx2.1-t2i-turbo";
+    saveImageModel(dashscopeModel);
+    set({ provider, imageModel: dashscopeModel });
+  } else if (provider !== "grok" && provider !== "grok-api" && provider !== "agy" && provider !== "gemini-api" && provider !== "atlascloud" && provider !== "dashscope" && (isGrokImageModel(currentModel) || isGeminiImageModel(currentModel) || isAtlasCloudImageModel(currentModel) || isDashscopeImageModel(currentModel))) {
     set({ provider, imageModel: DEFAULT_IMAGE_MODEL });
     saveImageModel(DEFAULT_IMAGE_MODEL);
   } else {
@@ -446,7 +450,12 @@ export function setImageModelImpl(imageModel: ImageModel, set: StoreSet, get: St
     set({ provider: "atlascloud", imageModel });
     return;
   }
-  if (get().provider === "grok" || get().provider === "agy" || get().provider === "gemini-api" || get().provider === "atlascloud") {
+  if (isDashscopeImageModel(imageModel)) {
+    saveGenerationDefaultsPatch({ provider: "dashscope" });
+    set({ provider: "dashscope", imageModel });
+    return;
+  }
+  if (get().provider === "grok" || get().provider === "agy" || get().provider === "gemini-api" || get().provider === "atlascloud" || get().provider === "dashscope") {
     saveGenerationDefaultsPatch({ provider: "oauth" });
     set({ provider: "oauth", imageModel });
     return;

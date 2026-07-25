@@ -39,12 +39,12 @@
 }
 
 .option-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
   gap: 4px;
 }
 
 .option-btn {
-  flex: 1;
   min-width: 0;
   padding: 6px 4px;
   background: var(--control-bg);

@@ -14,6 +14,7 @@ import {
 } from "./persistenceRegistry";
 import { applySelectedNodeIds } from "../lib/nodeSelection";
 import { loadLocale, saveLocale } from "../i18n";
+import { loadCurrency, saveCurrency } from "../lib/currency";
 import {
   loadRightPanelOpen,
   loadUIMode,
@@ -397,6 +398,12 @@ trashPending: null,
   setLocale: (l) => {
     saveLocale(l);
     set({ locale: l });
+  },
+
+  currency: loadCurrency(),
+  setCurrency: (c) => {
+    saveCurrency(c);
+    set({ currency: c });
   },
 
   graphNodes: [],

@@ -15,6 +15,7 @@ const PROVIDER_LABELS: Record<Provider, string> = {
   agy: "Antigravity",
   "gemini-api": "Gemini API",
   atlascloud: "Atlas Cloud",
+  dashscope: "DashScope",
 };
 
 function homeReferenceThumbnail(item: TrayItem): string | undefined {

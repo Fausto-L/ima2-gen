@@ -49,6 +49,7 @@ export function useProviderAvailability(): Record<Provider, ProviderAvailability
   const xaiKeyOk = keyStatus?.xai?.valid === true;
   const geminiKeyOk = keyStatus?.gemini?.valid === true || keyStatus?.vertex?.valid === true;
   const atlasCloudKeyOk = keyStatus?.atlascloud?.valid === true;
+  const dashscopeKeyOk = keyStatus?.dashscope?.valid === true;
 
   return {
     oauth: { ok: oauthReady, reason: oauthReason, hint: oauthHint },
@@ -76,6 +77,10 @@ export function useProviderAvailability(): Record<Provider, ProviderAvailability
     atlascloud: {
       ok: atlasCloudKeyOk,
       reason: atlasCloudKeyOk ? "" : t("provider.atlasCloudApiKeyRequired"),
+    },
+    dashscope: {
+      ok: dashscopeKeyOk,
+      reason: dashscopeKeyOk ? "" : "DashScope API key required",
     },
   };
 }

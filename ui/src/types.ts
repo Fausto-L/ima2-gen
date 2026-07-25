@@ -2,7 +2,7 @@ export type UIMode = "classic" | "node" | "card-news" | "agent" | "assets" | "as
 export type AssetGenBackgroundPreset = "chroma-green" | "white" | "black";
 export type SettingsSection = "providers" | "workspace" | "general";
 export type HistoryStripLayout = "rail" | "horizontal" | "sidebar";
-export type Provider = "oauth" | "api" | "grok" | "grok-api" | "agy" | "gemini-api" | "atlascloud";
+export type Provider = "oauth" | "api" | "grok" | "grok-api" | "agy" | "gemini-api" | "atlascloud" | "dashscope";
 export type Quality = "low" | "medium" | "high";
 export type Format = "png" | "jpeg" | "webp";
 export type Moderation = "low" | "auto";
@@ -10,7 +10,8 @@ export type OpenAIImageModel = "gpt-5.5" | "gpt-5.4" | "gpt-5.4-mini" | "gpt-5.6
 export type GrokImageModel = "grok-imagine-image" | "grok-imagine-image-quality";
 export type GeminiImageModel = "nano-banana-2" | "nano-banana-pro";
 export type AtlasCloudImageModel = "openai/gpt-image-2/text-to-image" | "openai/gpt-image-2/edit";
-export type ImageModel = OpenAIImageModel | GrokImageModel | GeminiImageModel | AtlasCloudImageModel;
+export type DashscopeImageModel = "wanx2.1-t2i-turbo" | "wanx2.1-t2i-plus" | "wanx2.1-imageedit" | "wanx2.1-imageedit-plus" | (string & {});
+export type ImageModel = OpenAIImageModel | GrokImageModel | GeminiImageModel | AtlasCloudImageModel | DashscopeImageModel;
 export type VideoModel = "grok-imagine-video" | "grok-imagine-video-1.5" | "grok-imagine-video-1.5-preview";
 export type VideoResolutionUI = "480p" | "720p" | "1080p";
 export type UnsupportedImageModel = "gpt-5.3-codex-spark";
@@ -63,6 +64,10 @@ export type SizePreset =
   | "1152x2048"
   | "3840x2160"
   | "2160x3840"
+  | "2688x1536"
+  | "1536x2688"
+  | "2368x1728"
+  | "1728x2368"
   | "auto"
   | "custom";
 

@@ -41,6 +41,12 @@ export interface RuntimeContext {
   geminiAuthMode?: string;
   /** Lazily attached by routes/mcpConnections.ts (030 WP3); undefined until MCP routes register. */
   mcpConnectionManager?: McpConnectionManager;
+
+  dashscopeApiKey: string | undefined;
+  dashscopeApiKeySource: ApiKeySource;
+  hasDashscopeApiKey: boolean;
+  dashscopeBaseUrl: string | undefined;
+  dashscopeCustomModels: string | undefined;
 }
 
 /** A partial used during boot when only some fields are known, or by callers
@@ -118,6 +124,11 @@ export function requireRuntimeContext(ctx: RouteRuntimeContext | undefined): Run
   if (target.vertexServiceAccountJson === undefined && !Object.prototype.hasOwnProperty.call(target, 'vertexServiceAccountJson')) target.vertexServiceAccountJson = undefined;
   if (target.vertexProjectId === undefined) target.vertexProjectId = undefined;
   if (target.hasVertexKey === undefined) target.hasVertexKey = false;
+  if (target.dashscopeApiKey === undefined && !Object.prototype.hasOwnProperty.call(target, 'dashscopeApiKey')) target.dashscopeApiKey = undefined;
+  if (target.hasDashscopeApiKey === undefined) target.hasDashscopeApiKey = false;
+  if (target.dashscopeApiKeySource === undefined) target.dashscopeApiKeySource = undefined;
+  if (target.dashscopeBaseUrl === undefined) target.dashscopeBaseUrl = undefined;
+  if (target.dashscopeCustomModels === undefined) target.dashscopeCustomModels = undefined;
   return target as unknown as RuntimeContext;
 }
 
@@ -181,6 +192,11 @@ export function createTestRuntimeContext(over: RuntimeContextOverrides = {}): Ru
     vertexServiceAccountJson: undefined,
     vertexProjectId: undefined,
     hasVertexKey: false,
+    dashscopeApiKey: undefined,
+    dashscopeApiKeySource: undefined,
+    hasDashscopeApiKey: false,
+    dashscopeBaseUrl: undefined,
+    dashscopeCustomModels: undefined,
   };
   return { ...base, ...over };
 }

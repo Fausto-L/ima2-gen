@@ -120,6 +120,24 @@ async function loadAtlasCloudApiKey(): Promise<ApiKeyLoadResult> {
   return { apiKey: null, apiKeySource: "none" };
 }
 
+async function loadDashscopeApiKey(): Promise<ApiKeyLoadResult> {
+  if (process.env.DASHSCOPE_API_KEY) {
+    return { apiKey: process.env.DASHSCOPE_API_KEY, apiKeySource: "env" };
+  }
+  const candidates = [
+    config.storage.configFile,
+    join(rootDir, ".ima2", "config.json"),
+  ];
+  for (const cfgPath of candidates) {
+    if (!existsSync(cfgPath)) continue;
+    try {
+      const cfg = JSON.parse(await readFile(cfgPath, "utf-8")) as { dashscopeApiKey?: string };
+      if (cfg.dashscopeApiKey) return { apiKey: cfg.dashscopeApiKey, apiKeySource: "config" };
+    } catch {}
+  }
+  return { apiKey: null, apiKeySource: "none" };
+}
+
 type VertexKeyLoadResult = { json: string | null; projectId: string | null; source: ApiKeySource };
 
 async function loadVertexKey(): Promise<VertexKeyLoadResult> {
@@ -336,6 +354,7 @@ export async function createRuntimeContext(overrides: StartServerOverrides = {})
   const loadedGeminiKey = await loadGeminiApiKey();
   const loadedAtlasCloudKey = await loadAtlasCloudApiKey();
   const loadedVertexKey = await loadVertexKey();
+  const loadedDashscopeKey = await loadDashscopeApiKey();
   const geminiAuthMode = await loadGeminiAuthMode();
   const apiKey = loadedKey.apiKey;
   const openai = overrides.openai ?? await createOpenAI(apiKey);
@@ -377,6 +396,11 @@ export async function createRuntimeContext(overrides: StartServerOverrides = {})
     vertexProjectId: loadedVertexKey.projectId ?? undefined,
     hasVertexKey: !!loadedVertexKey.json,
     geminiAuthMode,
+    dashscopeApiKey: loadedDashscopeKey.apiKey ?? undefined,
+    dashscopeApiKeySource: loadedDashscopeKey.apiKeySource as ApiKeySource,
+    hasDashscopeApiKey: !!loadedDashscopeKey.apiKey,
+    dashscopeBaseUrl: config.dashscopeProvider.baseUrl,
+    dashscopeCustomModels: config.dashscopeProvider.customModels,
     oauthReadyPromise: oauthReadyPromise as unknown as Promise<void>,
     markGrokProxyPort: ({ url, port }: { url?: string; port?: number } = {}) => {
       if (port) ctx.grokActualPort = port;
